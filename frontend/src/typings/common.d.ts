@@ -16,19 +16,6 @@ declare namespace Common {
         id?:number
     }
 
-    // 请求-带有弹窗验证数据结构
-    interface VerificationRequest{
-        codeId?:string
-        vCode?:string
-    }
-
-    // 响应-带有弹窗验证数据结构
-    interface VerificationResponse{
-        codeId?:string
-        result?:boolean
-        message?:string
-    }
-
     interface SortItemRequest{
         id:number
         sort:number

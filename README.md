@@ -108,7 +108,9 @@ A server, NAS navigation panel, Homepage, Browser homepage.
 
 1. 进入 Cloudflare Dashboard → **Workers & Pages → Create → Import a repository**，
    选择本仓库（Worker 名称需与 `wrangler.toml` 中的 `name = "sun-panel"` 一致）
-2. **Build command**: `npm install && npm run build`
+2. **Build command**: `npm run build`
+   > 不要写成 `npm install && npm run build`：平台在执行构建命令前已经跑过 `npm clean-install`，
+   > 再装一遍依赖会让构建白白多花几分钟（实测 install 阶段约 8 分钟）。
 3. **Deploy command**: 
    ```bash
    npx wrangler deploy && npx wrangler d1 migrations apply sun-panel --remote
@@ -120,6 +122,12 @@ A server, NAS navigation panel, Homepage, Browser homepage.
    Worker → Settings → Variables and Secrets → 添加 `JWT_SECRET`（或本地执行 `npx wrangler secret put JWT_SECRET`）
 
 之后每次 `git push` 都会自动构建、部署并应用新增的 D1 迁移。
+
+> **环境变量无需入库**：`frontend/.env` 已被 `.gitignore` 排除，构建脚本
+> `frontend/add-frontend-version.js` 在发现 `.env` 不存在时会用 `frontend/.env.example`
+> 自动生成一份并写入 `VITE_APP_VERSION`，因此 Workers Build 不会因缺少 `.env` 而失败。
+> 生产运行时只用到 `VITE_GLOB_API_URL=/api`，`VITE_APP_API_BASE_URL` 仅供本地 dev proxy，
+> 默认配置可直接用于线上部署；如需覆盖，请在构建环境中配置对应的环境变量。
 
 ### 方式二: 本地 wrangler 部署
 
@@ -172,7 +180,7 @@ npm run deploy
 # 1. 安装依赖 (单次安装, 含 frontend workspace)
 npm install
 
-# 2. 复制前端环境变量 (仅需一次)
+# 2. 复制前端环境变量 (仅需一次; CI 构建时会自动由 .env.example 生成)
 copy frontend\.env.example frontend\.env
 
 # 3. 应用本地数据库迁移 (首次)
@@ -196,6 +204,30 @@ npm run build   # 构建前端 (输出到 dist/)
 > (`frontend/.env` 中 `VITE_APP_API_BASE_URL=http://127.0.0.1:8787/`)。
 > 若只想测试 Worker + 构建产物，可先执行 `npm run build`，然后直接访问 `http://127.0.0.1:8787`。
 > 本地开发密钥在 `.dev.vars` 中 (`JWT_SECRET`)，生产环境请使用 `npx wrangler secret put JWT_SECRET`。
+
+### 常见问题
+
+**构建失败：`Error: ENOENT: no such file or directory, open '.env'`**
+
+```
+> sun-panel-frontend@1.3.0 add-version
+> node ./add-frontend-version.js
+Error: ENOENT: no such file or directory, open '.env'
+```
+
+原因：构建脚本 `frontend/add-frontend-version.js` 需要读写 `frontend/.env`，但 `.env` 被
+`.gitignore` 排除，CI 克隆下来的仓库里只有 `.env.example`，脚本直接 `readFileSync` 即崩溃，
+`run-p` 会连带中断 `type-check` 与 `vite build`。
+
+解决：当前代码已修复——脚本检测到 `.env` 缺失时会先用 `frontend/.env.example` 生成一份，
+再写入 `VITE_APP_VERSION`；同时 `build` 脚本改为先串行执行 `add-version`，避免 vite 读到
+尚未更新版本号的 `.env`。升级到最新代码即可。
+
+**构建耗时过长（install 阶段出现两次、共十余分钟）**
+
+Workers Build 在执行构建命令前已经跑过 `npm clean-install`，Build command 再写一次
+`npm install` 会重复装依赖。把 Build command 从 `npm install && npm run build` 改为
+`npm run build` 即可。
 
 ### 与上游 (Sun-Panel v1.3.0) 的差异
 

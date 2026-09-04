@@ -16,9 +16,6 @@ const ms = useMessage()
 const loading = ref(false)
 const languageValue = ref<Language>(appStore.language)
 
-// const isShowCaptcha = ref<boolean>(false)
-// const isShowRegister = ref<boolean>(false)
-
 const form = ref<Login.LoginReqest>({
   username: '',
   password: '',
@@ -40,7 +37,6 @@ const loginPost = async () => {
     }
     else {
       loading.value = false
-      // captchaRef.value.refresh()
     }
   }
   catch (error) {
@@ -95,26 +91,11 @@ function handleChangeLanuage(value: Language) {
           </NInput>
         </NFormItem>
 
-        <!-- <NFormItem v-if="isShowCaptcha">
-          <div class="w-[120px] h-[34px] mr-[20px] rounded border flex cursor-pointer">
-            <Captcha ref="captchaRef" src="/api/captcha/getImage" />
-          </div>
-          <NInput v-model:value="form.vcode" type="text" placeholder="请输入图像验证码" />
-        </NFormItem> -->
         <NFormItem style="margin-top: 10px">
           <NButton type="primary" block :loading="loading" @click="handleSubmit">
             {{ $t('login.loginButton') }}
           </NButton>
         </NFormItem>
-
-        <!-- <div class="flex justify-end">
-          <NButton v-if="isShowRegister" quaternary type="info" class="flex" @click="$router.push({ path: '/register' })">
-            注册
-          </NButton>
-          <NButton quaternary type="info" class="flex" @click="$router.push({ path: '/resetPassword' })">
-            忘记密码?
-          </NButton>
-        </div> -->
 
         <div class="flex justify-center text-slate-300">
           Powered By <a href="https://github.com/hslr-s/sun-panel" target="_blank" class="ml-[5px] text-slate-500">Sun-Panel</a>

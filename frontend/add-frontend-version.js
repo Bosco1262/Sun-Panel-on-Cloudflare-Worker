@@ -10,8 +10,22 @@ const packDate = moment().utc().format('YYYYMMDD')
 
 // 要追加的内容
 const contentToAppend = `\nVITE_APP_VERSION=${packDate}`
-// 读取文件原始内容
 const envFilePath = '.env'
+const exampleFilePath = '.env.example'
+
+// CI / Workers Build 环境里 .env 被 .gitignore 排除，此时用 .env.example 兜底生成
+if (!fs.existsSync(envFilePath)) {
+  if (fs.existsSync(exampleFilePath)) {
+    fs.copyFileSync(exampleFilePath, envFilePath)
+    console.log('.env not found, created from .env.example.')
+  }
+  else {
+    fs.writeFileSync(envFilePath, '', 'utf-8')
+    console.log('.env and .env.example not found, created an empty .env.')
+  }
+}
+
+// 读取文件原始内容
 let envContent = fs.readFileSync(envFilePath, 'utf-8')
 
 const versionRegex = /^VITE_APP_VERSION=.*$/m

@@ -34,12 +34,6 @@ const routes: RouteRecordRaw[] = [
     redirect: '/404',
   },
 
-  {
-    path: '/test',
-    name: 'test',
-    component: () => import('@/views/exception/test/index.vue'),
-  },
-
   // adminRouter,
 ]
 

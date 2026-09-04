@@ -10,7 +10,4 @@ declare namespace Login{
 		token :string
 	}
 
-    interface ResetPasswordByVCodeReqest extends System.Register.SendRegisterVcodeRquest{
-    }
-
 }

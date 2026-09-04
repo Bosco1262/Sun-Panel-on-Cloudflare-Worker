@@ -21,7 +21,4 @@ declare namespace HomePage.quest{
 		token :string
 	}
 
-    interface ResetPasswordByVCodeReqest extends System.Register.SendRegisterVcodeRquest{
-    }
-
 }
