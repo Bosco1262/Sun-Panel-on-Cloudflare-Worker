@@ -1,0 +1,24 @@
+name = "sun-panel"
+main = "src/index.ts"
+compatibility_date = "2025-12-01"
+
+# 前端静态资源 (Vite 构建产物, `npm run build` 后位于仓库根目录 dist/)
+[assets]
+directory = "dist"
+binding = "ASSETS"
+
+# D1 数据库: 不写 database_id, 部署时由 wrangler (>=4.45) 自动创建并关联
+# (自动资源供应, Open Beta: https://developers.cloudflare.com/changelog/post/2025-10-24-automatic-resource-provisioning/)
+[[d1_databases]]
+binding = "DB"
+database_name = "sun-panel"
+migrations_dir = "migrations"
+
+# KV 命名空间: 登录失败限流计数 (部署时自动创建)
+[[kv_namespaces]]
+binding = "LOGIN_RATE"
+
+# R2 存储 (部署时自动创建)
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "sun-panel-files"

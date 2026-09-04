@@ -1,0 +1,40 @@
+{
+  "name": "sun-panel-worker",
+  "version": "1.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Sun-Panel on Cloudflare Workers (Hono + D1 + KV + R2, Vue 3 frontend)",
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "wrangler dev",
+    "dev:web": "npm run dev -w frontend",
+    "build": "npm run build -w frontend",
+    "typecheck": "tsc --noEmit",
+    "typecheck:web": "npm run type-check -w frontend",
+    "lint": "npm run lint -w frontend",
+    "check": "npm run typecheck && npm run typecheck:web && npm run lint",
+    "migrations:apply": "wrangler d1 migrations apply DB --remote",
+    "migrations:apply:local": "wrangler d1 migrations apply DB --local",
+    "deploy": "wrangler deploy",
+    "deploy:all": "npm run build && wrangler deploy"
+  },
+  "dependencies": {
+    "blueimp-md5": "^2.19.0",
+    "hono": "^4.6.0",
+    "jose": "^5.9.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260801.1",
+    "@types/blueimp-md5": "^2.18.2",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.45.0"
+  },
+  "allowScripts": {
+    "esbuild@0.18.20": true,
+    "esbuild@0.28.1": true,
+    "workerd@1.20260815.1": true,
+    "vue-demi@0.14.10": true
+  }
+}
