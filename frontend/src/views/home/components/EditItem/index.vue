@@ -172,7 +172,7 @@ function getGroupListOptions() {
       <NForm ref="formRef" :model="model" :rules="rules" label-placement="top">
         <!-- 图标（预览 + 风格 + 地址） -->
         <NFormItem path="icon" :show-label="false">
-          <IconEditor v-model:item-icon="model.icon" class="w-full" />
+          <IconEditor v-model:item-icon="model.icon" :title="model.title" :description="model.description" class="w-full" />
         </NFormItem>
 
         <!-- 标题 / 描述信息 -->

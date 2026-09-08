@@ -2,18 +2,23 @@
 import { NButton, NCheckbox, NColorPicker, NInput, NTooltip, NUpload } from 'naive-ui'
 import type { UploadFileInfo } from 'naive-ui'
 import { computed, defineProps, ref } from 'vue'
-import { ItemIcon, SvgIcon } from '@/components/common'
-import { useAuthStore } from '@/store'
+import { SvgIcon } from '@/components/common'
+import AppIcon from '@/views/home/components/AppIcon/index.vue'
+import { PanelPanelConfigStyleEnum } from '@/enums'
+import { useAuthStore, usePanelState } from '@/store'
 import { apiRespErrMsg } from '@/utils/request/apiMessage'
 import { t } from '@/locales'
 
 const props = defineProps<{
   itemIcon: Panel.ItemIcon | null
+  title?: string
+  description?: string
 }>()
 const emit = defineEmits<{
   (e: 'update:itemIcon', visible: Panel.ItemIcon): void // 定义修改父组件（prop内）的值的事件
 }>()
 const authStore = useAuthStore()
+const panelState = usePanelState()
 
 // 预览显示与画布透明
 const previewShow = ref(true)
@@ -56,6 +61,18 @@ const itemIconInfo = computed({
     handleChange()
   },
 })
+
+// 预览用的完整项目信息（标题/描述实时跟随表单）
+const previewItemInfo = computed<Panel.ItemInfo>(() => ({
+  icon: itemIconInfo.value,
+  title: props.title || t('common.title'),
+  description: props.description,
+  url: '',
+  openMethod: 1,
+}))
+
+// 当前全局图标风格是否为长条形（详情图标）
+const isInfoStyle = computed(() => panelState.panelConfig.iconStyle === PanelPanelConfigStyleEnum.info)
 
 function handleIconTypeChange(type: number) {
   itemIconInfo.value.itemType = type
@@ -105,13 +122,39 @@ const handleUploadFinish = ({
       </NCheckbox>
     </div>
 
-    <!-- 效果预览 -->
+    <!-- 效果预览（两种卡片布局，纯展示，切换需到设置中修改） -->
     <div v-if="previewShow" class="mb-[10px]">
       <div
-        class="border rounded-2xl overflow-hidden w-full h-[100px] flex justify-center items-center"
+        class="border rounded-2xl overflow-hidden w-full h-[110px] flex justify-center items-center gap-[16px] p-[8px]"
         :class="canvasTransparent ? 'transparent-grid' : 'bg-slate-200 dark:bg-zinc-800'"
       >
-        <ItemIcon :item-icon="itemIconInfo" class="overflow-hidden rounded-2xl" />
+        <!-- 长条形（详情图标） -->
+        <div
+          class="w-[210px] h-[70px] flex justify-center items-center rounded-xl border transition-all duration-200"
+          :class="isInfoStyle ? 'border-[#2080f0] bg-[#e8f4ff] dark:bg-[#182848]' : 'border-transparent'"
+        >
+          <AppIcon
+            :item-info="previewItemInfo"
+            :icon-text-color="panelState.panelConfig.iconTextColor"
+            :icon-text-info-hide-description="panelState.panelConfig.iconTextInfoHideDescription || false"
+            :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
+            :style="PanelPanelConfigStyleEnum.info"
+          />
+        </div>
+
+        <!-- 正方形（小图标） -->
+        <div
+          class="w-[86px] flex justify-center items-center rounded-xl border transition-all duration-200"
+          :class="!isInfoStyle ? 'border-[#2080f0] bg-[#e8f4ff] dark:bg-[#182848]' : 'border-transparent'"
+        >
+          <AppIcon
+            :item-info="previewItemInfo"
+            :icon-text-color="panelState.panelConfig.iconTextColor"
+            :icon-text-info-hide-description="!panelState.panelConfig.iconTextInfoHideDescription"
+            :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
+            :style="PanelPanelConfigStyleEnum.icon"
+          />
+        </div>
       </div>
     </div>
 
