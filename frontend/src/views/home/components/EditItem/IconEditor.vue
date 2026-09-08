@@ -111,7 +111,7 @@ const handleUploadFinish = ({
         class="border rounded-2xl overflow-hidden w-full h-[100px] flex justify-center items-center"
         :class="canvasTransparent ? 'transparent-grid' : 'bg-slate-200 dark:bg-zinc-800'"
       >
-        <ItemIcon :item-icon="itemIconInfo" />
+        <ItemIcon :item-icon="itemIconInfo" class="overflow-hidden rounded-2xl" />
       </div>
     </div>
 
@@ -223,8 +223,14 @@ const handleUploadFinish = ({
 
 <style scoped>
 .transparent-grid {
-    background-image: linear-gradient(45deg, #fff 25%, transparent 25%, transparent 75%, #fff 75%),
-                      linear-gradient(45deg, #fff 25%, transparent 25%, transparent 75%, #fff 75%);
+    background-image: linear-gradient(45deg, rgba(0, 0, 0, 0.04) 25%, transparent 25%, transparent 75%, rgba(0, 0, 0, 0.04) 75%),
+                      linear-gradient(45deg, rgba(0, 0, 0, 0.04) 25%, transparent 25%, transparent 75%, rgba(0, 0, 0, 0.04) 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;
+}
+.dark .transparent-grid {
+    background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
+                      linear-gradient(45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.06) 75%);
     background-size: 16px 16px;
     background-position: 0 0, 8px 8px;
 }
