@@ -4,7 +4,6 @@ import type { UploadFileInfo } from 'naive-ui'
 import { computed, defineProps, ref } from 'vue'
 import { SvgIcon } from '@/components/common'
 import AppIcon from '@/views/home/components/AppIcon/index.vue'
-import { PanelPanelConfigStyleEnum } from '@/enums'
 import { useAuthStore, usePanelState } from '@/store'
 import { apiRespErrMsg } from '@/utils/request/apiMessage'
 import { t } from '@/locales'
@@ -20,9 +19,9 @@ const emit = defineEmits<{
 const authStore = useAuthStore()
 const panelState = usePanelState()
 
-// 预览显示与画布透明
+// 预览显示与画布透明（默认不透明，对齐上游）
 const previewShow = ref(true)
-const canvasTransparent = ref(true)
+const canvasTransparent = ref(false)
 
 // 图标风格选项
 const iconStyleOptions = [
@@ -62,17 +61,14 @@ const itemIconInfo = computed({
   },
 })
 
-// 预览用的完整项目信息（标题/描述实时跟随表单）
+// 预览用的完整项目信息（标题/描述实时跟随表单，留空则与上游一致显示为空）
 const previewItemInfo = computed<Panel.ItemInfo>(() => ({
   icon: itemIconInfo.value,
-  title: props.title || t('common.title'),
+  title: props.title,
   description: props.description,
   url: '',
   openMethod: 1,
 }))
-
-// 当前全局图标风格是否为长条形（详情图标）
-const isInfoStyle = computed(() => panelState.panelConfig.iconStyle === PanelPanelConfigStyleEnum.info)
 
 function handleIconTypeChange(type: number) {
   itemIconInfo.value.itemType = type
@@ -122,39 +118,35 @@ const handleUploadFinish = ({
       </NCheckbox>
     </div>
 
-    <!-- 效果预览（两种卡片布局，纯展示，切换需到设置中修改） -->
-    <div v-if="previewShow" class="mb-[10px]">
+    <!-- 效果预览（两种卡片布局，纯展示，切换需到设置中修改；结构对齐上游 preview-box） -->
+    <div v-if="previewShow" class="mb-2">
       <div
-        class="border rounded-2xl overflow-hidden w-full h-[110px] flex justify-center items-center gap-[16px] p-[8px]"
-        :class="canvasTransparent ? 'transparent-grid' : 'bg-slate-200 dark:bg-zinc-800'"
+        class="preview-box rounded-xl border w-full"
+        :class="canvasTransparent ? 'transparent-grid' : 'bg-[#f1f8ff]'"
       >
-        <!-- 长条形（详情图标） -->
-        <div
-          class="w-[210px] h-[70px] flex justify-center items-center rounded-xl border transition-all duration-200"
-          :class="isInfoStyle ? 'border-[#2080f0] bg-[#e8f4ff] dark:bg-[#182848]' : 'border-transparent'"
-        >
-          <!-- style 必须传字面量（0=长条形/1=正方形），动态表达式会被 Vue 编译为 _normalizeStyle() 导致数字变成 undefined -->
-          <AppIcon
-            :item-info="previewItemInfo"
-            :icon-text-color="panelState.panelConfig.iconTextColor"
-            :icon-text-info-hide-description="panelState.panelConfig.iconTextInfoHideDescription || false"
-            :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
-            :style="0"
-          />
-        </div>
+        <div class="flex justify-center p-2">
+          <!-- 长条形（详情图标） -->
+          <div class="w-[210px] mr-4 z-[-1]">
+            <!-- style 必须传字面量（0=长条形/1=正方形），动态表达式会被 Vue 编译为 _normalizeStyle() 导致数字变成 undefined -->
+            <AppIcon
+              :item-info="previewItemInfo"
+              :icon-text-color="panelState.panelConfig.iconTextColor"
+              :icon-text-info-hide-description="panelState.panelConfig.iconTextInfoHideDescription || false"
+              :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
+              :style="0"
+            />
+          </div>
 
-        <!-- 正方形（小图标） -->
-        <div
-          class="w-[86px] flex justify-center items-center rounded-xl border transition-all duration-200"
-          :class="!isInfoStyle ? 'border-[#2080f0] bg-[#e8f4ff] dark:bg-[#182848]' : 'border-transparent'"
-        >
-          <AppIcon
-            :item-info="previewItemInfo"
-            :icon-text-color="panelState.panelConfig.iconTextColor"
-            :icon-text-info-hide-description="!panelState.panelConfig.iconTextInfoHideDescription"
-            :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
-            :style="1"
-          />
+          <!-- 正方形（小图标） -->
+          <div class="z-[-1]">
+            <AppIcon
+              :item-info="previewItemInfo"
+              :icon-text-color="panelState.panelConfig.iconTextColor"
+              :icon-text-info-hide-description="!panelState.panelConfig.iconTextInfoHideDescription"
+              :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
+              :style="1"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -266,6 +258,13 @@ const handleUploadFinish = ({
 </template>
 
 <style scoped>
+.preview-box {
+    position: relative;
+    z-index: 1;
+}
+.dark .preview-box {
+    filter: brightness(80%);
+}
 .transparent-grid {
     background-image: linear-gradient(45deg, rgba(0, 0, 0, 0.04) 25%, transparent 25%, transparent 75%, rgba(0, 0, 0, 0.04) 75%),
                       linear-gradient(45deg, rgba(0, 0, 0, 0.04) 25%, transparent 25%, transparent 75%, rgba(0, 0, 0, 0.04) 75%);

@@ -39,8 +39,8 @@ const textColor = computed(() => {
     <!-- 详情图标 -->
     <div
       v-if="style === PanelPanelConfigStyleEnum.info"
-      class="app-icon-info w-full rounded-2xl  transition-all duration-200 hover:shadow-[0_0_20px_10px_rgba(0,0,0,0.2)] flex"
-      :style="{ background: itemInfo?.icon?.backgroundColor || defaultBackground }"
+      class="app-icon-info w-full rounded-2xl flex"
+      :style="{ background: itemInfo?.icon?.backgroundColor || defaultBackground, '--custom-box-shadow-color': itemInfo?.icon?.backgroundColor || defaultBackground }"
     >
       <!-- 图标 -->
       <div class="app-icon-info-icon w-[70px] h-[70px]">
@@ -70,7 +70,8 @@ const textColor = computed(() => {
     <!-- 极简(小)图标（APP） -->
     <div v-if="style === PanelPanelConfigStyleEnum.icon" class="app-icon-small">
       <div
-        class="app-icon-small-icon overflow-hidden rounded-2xl sunpanel w-[70px] h-[70px] mx-auto rounded-2xl transition-all duration-200 hover:shadow-[0_0_20px_10px_rgba(0,0,0,0.2)]"
+        class="app-icon-small-icon overflow-hidden rounded-2xl sunpanel w-[70px] h-[70px] mx-auto"
+        :style="{ '--custom-box-shadow-color': itemInfo?.icon?.backgroundColor || defaultBackground }"
         :title="itemInfo?.description"
       >
         <ItemIcon :item-icon="itemInfo?.icon" />
@@ -85,3 +86,22 @@ const textColor = computed(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* 对齐上游: 悬浮阴影颜色跟随卡片背景色 + 毛玻璃 + 0.3s 过渡 */
+.app-icon-info,
+.app-icon-small-icon {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 0.3s;
+}
+
+.app-icon-info:hover,
+.app-icon-small-icon:hover {
+  box-shadow:
+    0 0 20px var(--custom-box-shadow-color, #2a2a2a6b),
+    0 0 1px 1px #ffffff1a,
+    0 0 20px 5px #0000001a;
+  backdrop-filter: blur(10px);
+}
+</style>
