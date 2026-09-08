@@ -133,12 +133,13 @@ const handleUploadFinish = ({
           class="w-[210px] h-[70px] flex justify-center items-center rounded-xl border transition-all duration-200"
           :class="isInfoStyle ? 'border-[#2080f0] bg-[#e8f4ff] dark:bg-[#182848]' : 'border-transparent'"
         >
+          <!-- style 必须传字面量（0=长条形/1=正方形），动态表达式会被 Vue 编译为 _normalizeStyle() 导致数字变成 undefined -->
           <AppIcon
             :item-info="previewItemInfo"
             :icon-text-color="panelState.panelConfig.iconTextColor"
             :icon-text-info-hide-description="panelState.panelConfig.iconTextInfoHideDescription || false"
             :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
-            :style="PanelPanelConfigStyleEnum.info"
+            :style="0"
           />
         </div>
 
@@ -152,7 +153,7 @@ const handleUploadFinish = ({
             :icon-text-color="panelState.panelConfig.iconTextColor"
             :icon-text-info-hide-description="!panelState.panelConfig.iconTextInfoHideDescription"
             :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
-            :style="PanelPanelConfigStyleEnum.icon"
+            :style="1"
           />
         </div>
       </div>
