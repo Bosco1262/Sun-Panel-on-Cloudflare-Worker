@@ -1,5 +1,14 @@
 # Sun-Panel → Cloudflare Worker 迁移计划
 
+> [!NOTE]
+> **历史文档**：本文是迁移开始前编写的设计文档，记录当时的选型与分阶段计划，**不代表当前实现状态**。
+> 已知与实现不一致的部分：
+> - 计划使用 Drizzle ORM + `src/db/schema.ts`，实际直接用 D1 原生 `prepare/bind`（无 ORM 依赖）
+> - 计划前端产物输出到 `frontend/dist/`，实际输出到仓库根目录 `dist/`（由 `wrangler.toml` 的 `[assets]` 托管）
+> - 计划保留多用户 / 注册 / 公开访客模式，实际简化为单用户模式
+>
+> 当前结构与部署方式以 [README](../README.md) 和 [deployment.md](./deployment.md) 为准。
+
 ## 项目现状分析
 
 Sun-Panel 是一个 **Go (Gin) + Vue 3** 的服务器导航面板应用，当前架构：

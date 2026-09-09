@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
-import type { Env } from '../types'
-import { successData } from '../utils/response'
+import type { Env } from '../../types'
+import { successData } from '../../utils/response'
 
 const app = new Hono<{ Bindings: Env }>()
 

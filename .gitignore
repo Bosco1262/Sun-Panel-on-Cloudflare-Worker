@@ -35,5 +35,4 @@ coverage
 !.env.example
 
 # 本地对照参考 (不参与部署)
-/原项目/
-/移植后混合版本/
+/reference/

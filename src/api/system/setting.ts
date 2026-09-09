@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
-import type { Env } from '../types'
-import { errorByCode, success, successData } from '../utils/response'
-import { authMiddleware } from '../middleware/auth'
-import { getSetting, setSetting } from '../utils/settings'
+import type { Env } from '../../types'
+import { errorByCode, success, successData } from '../../utils/response'
+import { authMiddleware } from '../../middleware/auth'
+import { getSetting, setSetting } from '../../utils/settings'
 
 const app = new Hono<{ Bindings: Env }>()
 

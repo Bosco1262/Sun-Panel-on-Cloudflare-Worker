@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
-import type { Env } from '../types'
-import { passwordEncryption } from '../utils/password'
-import { errorByCode, success, successData } from '../utils/response'
+import type { Env } from '../../types'
+import { passwordEncryption } from '../../utils/password'
+import { errorByCode, success, successData } from '../../utils/response'
 import {
   SETTING_ADMIN_HEAD_IMAGE,
   SETTING_ADMIN_NAME,
@@ -10,8 +10,8 @@ import {
   getSetting,
   getUserProfile,
   setSetting,
-} from '../utils/settings'
-import { authMiddleware } from '../middleware/auth'
+} from '../../utils/settings'
+import { authMiddleware } from '../../middleware/auth'
 
 const app = new Hono<{ Bindings: Env }>()
 

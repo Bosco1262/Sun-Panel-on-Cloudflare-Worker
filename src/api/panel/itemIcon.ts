@@ -1,9 +1,9 @@
 import { Hono } from 'hono'
-import type { Env } from '../types'
-import { error, errorByCode, errorByCodeAndMsg, success, successData, successList } from '../utils/response'
-import { downloadFavicon, getSiteFaviconUrl } from '../utils/favicon'
-import { buildR2Key, contentTypeFromExt, extFromContentType, extFromUrl, isImageExt } from '../utils/file'
-import { authMiddleware } from '../middleware/auth'
+import type { Env } from '../../types'
+import { error, errorByCode, errorByCodeAndMsg, success, successData, successList } from '../../utils/response'
+import { downloadFavicon, getSiteFaviconUrl } from '../../utils/favicon'
+import { buildR2Key, contentTypeFromExt, extFromContentType, extFromUrl, isImageExt } from '../../utils/file'
+import { authMiddleware } from '../../middleware/auth'
 
 const app = new Hono<{ Bindings: Env }>()
 
