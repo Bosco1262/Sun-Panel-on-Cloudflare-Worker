@@ -40,7 +40,7 @@ const textColor = computed(() => {
     <div
       v-if="style === PanelPanelConfigStyleEnum.info"
       class="app-icon-info w-full rounded-2xl flex"
-      :style="{ background: itemInfo?.icon?.backgroundColor || defaultBackground, '--custom-box-shadow-color': itemInfo?.icon?.backgroundColor || defaultBackground }"
+      :style="{ 'background': itemInfo?.icon?.backgroundColor || defaultBackground, '--custom-box-shadow-color': itemInfo?.icon?.backgroundColor || defaultBackground }"
     >
       <!-- 图标 -->
       <div class="app-icon-info-icon w-[70px] h-[70px]">
@@ -50,8 +50,8 @@ const textColor = computed(() => {
       </div>
 
       <!-- 文字 -->
-      <!-- 如果为纯白色，将自动根据背景的明暗计算字体的黑白色 -->
-      <div class="text-white flex items-center" :style="{ color: (iconTextColor === '#ffffff') ? textColor : iconTextColor, maxWidth: 'calc(100% - 80px)' }">
+      <!-- 如果为纯白色或未传入颜色，将自动根据背景的明暗计算字体的黑白色 (对齐上游) -->
+      <div class="text-white flex items-center" :style="{ color: (!iconTextColor || iconTextColor === '#ffffff') ? textColor : iconTextColor, maxWidth: 'calc(100% - 80px)' }">
         <div class="app-icon-info-text-box w-full">
           <div class="app-icon-info-text-box-title font-semibold w-full">
             <NEllipsis>

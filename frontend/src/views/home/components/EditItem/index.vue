@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, defineEmits, defineProps, ref, watch } from 'vue'
 import type { FormInst, FormRules } from 'naive-ui'
-import { NAlert, NButton, NCheckbox, NColorPicker, NForm, NFormItem, NGrid, NGridItem, NInput, NInputGroup, NModal, NSelect, useMessage } from 'naive-ui'
+import { NAlert, NButton, NCheckbox, NColorPicker, NFlex, NForm, NFormItem, NGrid, NGridItem, NInput, NInputGroup, NModal, NSelect, NSpace, NTooltip, useMessage } from 'naive-ui'
 import IconEditor from './IconEditor.vue'
+import AppIcon from '@/views/home/components/AppIcon/index.vue'
+import { SvgIcon } from '@/components/common'
 import { edit, getSiteFavicon } from '@/api/panel/itemIcon'
 import { getList as getGroupList } from '@/api/panel/itemIconGroup'
 import { t } from '@/locales'
@@ -25,6 +27,10 @@ const itemIconGroupOptions = ref<{
 
 // 更多选项折叠区 (对齐上游: 卡片背景色 / 分组 / 唯一标识, 不含卡片类型)
 const showMoreOptions = ref(false)
+
+// 效果预览 (对齐上游: 预览区固定在表单上方, 不随表单滚动)
+const previewShow = ref(true)
+const canvasTransparent = ref(false)
 
 const restoreDefault: Panel.Info = {
   icon: null,
@@ -86,6 +92,15 @@ const show = computed({
     emit('update:visible', visible)
   },
 })
+
+// 预览用的完整项目信息 (标题/描述实时跟随表单)
+const previewItemInfo = computed<Panel.ItemInfo>(() => ({
+  icon: model.value.icon,
+  title: model.value.title,
+  description: model.value.description,
+  url: '',
+  openMethod: 1,
+}))
 
 // 卡片背景色 (对齐上游: 默认 #2a2a2a6b)
 const defaultBackground = '#2a2a2a6b'
@@ -185,7 +200,6 @@ watch(() => props.visible, (newValue) => {
     model.value = props.itemInfo ? { ...props.itemInfo } : { ...restoreDefault }
     if (props.itemGroupId)
       model.value.itemIconGroupId = props.itemGroupId
-    showMoreOptions.value = !!model.value.onlyName
   }
 
   getGroupListOptions()
@@ -217,30 +231,89 @@ function getGroupListOptions() {
 </script>
 
 <template>
-  <NModal v-model:show="show" preset="card" size="small" style="width: 600px;border-radius: 1rem;" :title="itemInfo ? t('iconItem.edit') : t('iconItem.add')">
-    <div class="max-h-[600px] overflow-auto p-[5px]">
-      <NForm ref="formRef" :model="model" :rules="rules" label-placement="top">
-        <!-- 图标（预览 + 风格 + 地址） -->
-        <NFormItem path="icon" :show-label="false">
-          <IconEditor v-model:item-icon="model.icon" :title="model.title" :description="model.description" class="w-full" />
+  <NModal v-model:show="show" preset="card" size="small" style="width: 600px;border-radius: 1rem;" :title="itemInfo?.id ? t('iconItem.edit') : t('iconItem.add')">
+    <!-- 效果预览 (对齐上游: 固定在表单上方; 小图标文字固定为黑色) -->
+    <div class="mb-2">
+      <span class="flex mb-1">
+        <NCheckbox v-model:checked="previewShow" size="small">
+          {{ $t('iconItem.preview') }}
+        </NCheckbox>
+        <NCheckbox v-if="previewShow" v-model:checked="canvasTransparent" size="small">
+          {{ $t('iconItem.previewTransparentCanvas') }}
+        </NCheckbox>
+      </span>
+      <div
+        v-if="previewShow"
+        class="preview-box rounded-xl border"
+        :class="canvasTransparent ? 'transparent-grid' : 'bg-[#f1f8ff]'"
+      >
+        <div class="flex justify-center p-2">
+          <div class="w-[210px] mr-4 z-[-1]">
+            <!-- style 必须传字面量（0=长条形/1=正方形），动态表达式会被 Vue 编译为 _normalizeStyle() 导致数字变成 undefined -->
+            <AppIcon
+              :item-info="previewItemInfo"
+              :icon-text-info-hide-description="false"
+              :icon-text-icon-hide-title="false"
+              :style="0"
+            />
+          </div>
+          <div class="z-[-1]">
+            <AppIcon
+              :item-info="previewItemInfo"
+              icon-text-color="#000"
+              :icon-text-info-hide-description="false"
+              :icon-text-icon-hide-title="false"
+              :style="1"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="h-[500px] overflow-auto p-[5px]">
+      <NForm ref="formRef" :model="model" :rules="rules" size="small" label-placement="top">
+        <!-- 图标（图标风格 + 预览开关在 label, 编辑器为主体） -->
+        <NFormItem path="icon">
+          <template #label>
+            <NFlex align="center">
+              <span class="font-bold">{{ $t('iconItem.icon.iconStyle') }}</span>
+              <NTooltip trigger="hover" placement="top">
+                <template #trigger>
+                  <SvgIcon icon="fa-solid--info-circle" class="cursor-pointer" />
+                </template>
+                <p>{{ $t('iconItem.icon.iconSizeTip') }}</p>
+                <p>{{ $t('iconItem.icon.iconOnlineTip') }}</p>
+              </NTooltip>
+            </NFlex>
+          </template>
+          <IconEditor v-model:item-icon="model.icon" class="w-full" />
         </NFormItem>
 
         <!-- 标题 / 描述信息 -->
         <NGrid cols="2" :x-gap="10" item-responsive>
           <NGridItem span="2 500:1">
-            <NFormItem path="title" :label="$t('common.title')">
-              <NInput v-model:value="model.title" type="text" show-count :maxlength="20" :placeholder="$t('common.inputPlaceholder')" />
+            <NFormItem path="title">
+              <template #label>
+                <span class="font-bold">{{ $t('common.title') }}</span>
+              </template>
+              <NInput v-model:value="model.title" type="text" show-count :maxlength="20" clearable :placeholder="$t('common.inputPlaceholder')" />
             </NFormItem>
           </NGridItem>
           <NGridItem span="2 500:1">
-            <NFormItem path="description" :label="$t('common.description')">
-              <NInput v-model:value="model.description" type="text" show-count :maxlength="100" :placeholder="$t('common.inputPlaceholder')" />
+            <NFormItem path="description">
+              <template #label>
+                <span class="font-bold">{{ $t('common.description') }}</span>
+              </template>
+              <NInput v-model:value="model.description" type="text" show-count :maxlength="100" clearable :placeholder="$t('common.inputPlaceholder')" />
             </NFormItem>
           </NGridItem>
         </NGrid>
 
         <!-- 默认地址 -->
-        <NFormItem path="url" :label="$t('iconItem.defaultUrl')">
+        <NFormItem path="url">
+          <template #label>
+            <span class="font-bold">{{ $t('iconItem.defaultUrl') }}</span>
+          </template>
           <NInputGroup>
             <NInput v-model:value="model.url" type="text" :maxlength="1000" placeholder="http(s)://" />
             <NButton :disabled="!model.url" :loading="getIconLoading[0]" @click="getIconByUrl(model.url, 0)">
@@ -253,7 +326,10 @@ function getGroupListOptions() {
         </NAlert>
 
         <!-- 内网地址 -->
-        <NFormItem path="lanUrl" :label="$t('iconItem.lanUrl')">
+        <NFormItem path="lanUrl">
+          <template #label>
+            <span class="font-bold">{{ $t('iconItem.lanUrl') }}</span>
+          </template>
           <NInputGroup>
             <NInput v-model:value="model.lanUrl" type="text" :maxlength="1000" :placeholder="$t('iconItem.lanUrlInputPlaceholder')" />
             <NButton :disabled="!model.lanUrl" :loading="getIconLoading[1]" @click="getIconByUrl(model.lanUrl || '', 1)">
@@ -266,22 +342,22 @@ function getGroupListOptions() {
         </NAlert>
 
         <!-- 打开方式 -->
-        <NFormItem path="openMethod" :label="$t('iconItem.openMethod')">
+        <NFormItem path="openMethod">
+          <template #label>
+            <span class="font-bold">{{ $t('iconItem.openMethod') }}</span>
+          </template>
           <NSelect v-model:value="model.openMethod" :options="options" />
         </NFormItem>
 
         <!-- 更多选项 (卡片背景色 , 分组 , 唯一标识) -->
-        <NFormItem :show-label="false" class="mb-[10px]">
-          <NCheckbox v-model:checked="showMoreOptions">
-            {{ $t('iconItem.moreOptions') }} ({{ $t('iconItem.cardBackground') }} , {{ $t('iconItem.iconGroup') }} , {{ $t('iconItem.onlyName') }})
-          </NCheckbox>
-        </NFormItem>
-
         <div v-if="showMoreOptions">
           <!-- 卡片背景色 / 分组 各占一半 -->
           <NGrid cols="2" :x-gap="10" item-responsive>
             <NGridItem span="2 500:1">
-              <NFormItem path="cardBackground" :label="$t('iconItem.cardBackground')">
+              <NFormItem path="cardBackground">
+                <template #label>
+                  <span class="font-bold">{{ $t('iconItem.cardBackground') }}</span>
+                </template>
                 <NColorPicker
                   v-model:value="backgroundColorValue"
                   :show-alpha="false"
@@ -292,27 +368,54 @@ function getGroupListOptions() {
               </NFormItem>
             </NGridItem>
             <NGridItem span="2 500:1">
-              <NFormItem path="itemIconGroupId" :label="t('iconItem.iconGroup')">
+              <NFormItem path="itemIconGroupId">
+                <template #label>
+                  <span class="font-bold">{{ t('iconItem.iconGroup') }}</span>
+                </template>
                 <NSelect v-model:value="model.itemIconGroupId" :options="itemIconGroupOptions" />
               </NFormItem>
             </NGridItem>
           </NGrid>
 
           <!-- 唯一标识 -->
-          <NFormItem path="onlyName" :label="$t('iconItem.onlyName')" :show-feedback="false">
+          <NFormItem path="onlyName" :show-feedback="false">
+            <template #label>
+              <span class="font-bold">{{ $t('iconItem.onlyName') }}</span>
+            </template>
             <NInput v-model:value="model.onlyName" type="text" show-count :maxlength="20" :placeholder="$t('common.inputPlaceholder')" />
           </NFormItem>
           <div class="text-slate-400 text-xs mb-[10px]">
             {{ $t('iconItem.onlyNameTip') }}
           </div>
         </div>
+
+        <NCheckbox v-model:checked="showMoreOptions" size="small" class="mb-2">
+          {{ $t('iconItem.moreOptions') }}
+          <span class="text-xs text-gray-400">
+            ({{ $t('iconItem.cardBackground') }} , {{ $t('iconItem.iconGroup') }} , {{ $t('iconItem.onlyName') }})
+          </span>
+        </NCheckbox>
       </NForm>
     </div>
 
     <template #footer>
-      <NButton type="success" :loading="submitLoading" style="float: right;" @click="handleValidateButtonClick">
-        {{ $t('common.save') }}
-      </NButton>
+      <NSpace justify="end">
+        <NButton type="success" :loading="submitLoading" style="float: right;" @click="handleValidateButtonClick">
+          {{ $t('common.save') }}
+        </NButton>
+      </NSpace>
     </template>
   </NModal>
 </template>
+
+<style scoped>
+/* 对齐上游: 预览容器层级与暗色模式亮度 */
+.preview-box {
+  position: relative;
+  z-index: 1;
+}
+
+.dark .preview-box {
+  filter: brightness(80%);
+}
+</style>
