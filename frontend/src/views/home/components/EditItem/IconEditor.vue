@@ -64,7 +64,7 @@ const itemIconInfo = computed({
 // 预览用的完整项目信息（标题/描述实时跟随表单，留空则与上游一致显示为空）
 const previewItemInfo = computed<Panel.ItemInfo>(() => ({
   icon: itemIconInfo.value,
-  title: props.title,
+  title: props.title ?? '',
   description: props.description,
   url: '',
   openMethod: 1,
