@@ -50,7 +50,7 @@ const apps = ref<App[]>([
   {
     name: t('apps.globalSetting.appName'),
     componentName: 'GlobalSetting',
-    icon: 'tabler:settings-2',
+    icon: 'ic:outline-build-circle',
   },
   {
     name: t('apps.exportImport.appName'),

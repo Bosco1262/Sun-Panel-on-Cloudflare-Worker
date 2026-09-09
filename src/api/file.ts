@@ -98,6 +98,7 @@ app.post('/file/getList', authMiddleware(), async (c) => {
     createTime: row.created_at,
     updateTime: row.updated_at,
     path: row.src,
+    ext: row.ext,
   }))
 
   return successList(c, list, list.length)

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { NButton, NCard, NEllipsis, NEmpty, NFlex, NImage, NInput, NModal, NSpin } from 'naive-ui'
+import { NButton, NCard, NEllipsis, NEmpty, NFlex, NImage, NInput, NModal, NSpin, useMessage } from 'naive-ui'
 import { computed, ref, watch } from 'vue'
 import { getList } from '@/api/system/file'
+import { t } from '@/locales'
 
 interface Props {
   visible: boolean
@@ -18,6 +19,13 @@ interface Emit {
 const PAGE_SIZE = 30
 const ALLOW_IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico'])
 
+// 从 ext / src / 文件名推断扩展名 (兼容旧版接口未返回 ext 的情况)
+function getExt(item: File.Info): string {
+  const raw = item.ext || item.src || item.fileName || ''
+  const match = /\.([A-Za-z0-9]+)(?:\?.*)?$/.exec(raw)
+  return (match?.[1] || '').toLowerCase()
+}
+
 const show = computed({
   get: () => props.visible,
   set: (visible: boolean) => {
@@ -31,11 +39,11 @@ const keyword = ref('')
 const selectedFile = ref<File.Info | null>(null)
 const currentPage = ref(1)
 const paginationLoading = ref(false)
+const ms = useMessage()
 
 const filteredList = computed<File.Info[]>(() => {
   return imageList.value.filter((item) => {
-    const ext = (item.ext || '').replace(/^\./, '').toLowerCase()
-    if (!ALLOW_IMAGE_EXTS.has(ext))
+    if (!ALLOW_IMAGE_EXTS.has(getExt(item)))
       return false
     if (keyword.value.trim() !== '')
       return (item.fileName || '').toLowerCase().includes(keyword.value.trim().toLowerCase())
@@ -71,6 +79,7 @@ async function fetchList() {
   }
   catch (error) {
     imageList.value = []
+    ms.error(t('common.networkError'))
   }
   loading.value = false
 }
