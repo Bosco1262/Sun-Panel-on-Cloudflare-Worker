@@ -67,7 +67,11 @@ const updatePasswordModalFormRules: FormRules = {
 }
 
 async function logoutApi() {
-  await logout()
+  // 后端登出失败（如 token 已过期、网络异常）不应阻塞本地登出
+  try {
+    await logout()
+  }
+  catch {}
   userStore.resetUserInfo()
   authStore.removeToken()
   panelState.removeState()

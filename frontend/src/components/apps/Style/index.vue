@@ -114,6 +114,28 @@ function resetPanelConfig() {
         <span class="mr-[10px]">{{ $t('apps.baseSettings.searchBarSearchItem') }}</span>
         <NSwitch v-model:value="panelState.panelConfig.searchBoxSearchIcon" />
       </div>
+      <div v-if="panelState.panelConfig.searchBoxShow" class="flex items-center mt-[5px]">
+        <span class="mr-[10px]">{{ $t('apps.baseSettings.searchBarBorderColor') }}</span>
+        <NColorPicker
+          v-model:value="panelState.panelConfig.searchBoxBorderColor"
+          class="max-w-[200px]"
+          :show-alpha="false"
+          size="small"
+          :modes="['hex']"
+          :swatches="['#cccccc', '#000000', '#ffffff', '#2080F0']"
+        />
+      </div>
+      <div v-if="panelState.panelConfig.searchBoxShow" class="flex items-center mt-[5px]">
+        <span class="mr-[10px]">{{ $t('apps.baseSettings.searchBarPlaceholderColor') }}</span>
+        <NColorPicker
+          v-model:value="panelState.panelConfig.searchBoxPlaceholderColor"
+          class="max-w-[200px]"
+          :show-alpha="false"
+          size="small"
+          :modes="['hex']"
+          :swatches="['#cccccc', '#000000', '#ffffff', '#F0A020']"
+        />
+      </div>
     </NCard>
 
     <NCard style="border-radius:10px" class="mt-[10px]" size="small">

@@ -71,6 +71,8 @@
       "publicVisitModeShow": "Allow public mode display",
       "resetWarnText": "Are you sure you want to reset these styles?",
       "searchBar": "Search bar component",
+      "searchBarBorderColor": "Search bar border color",
+      "searchBarPlaceholderColor": "Search bar placeholder text color",
       "searchBarSearchItem": "Allow search bar to search items",
       "searchBarShow": "Configuration saved",
       "show": "Show",
@@ -99,7 +101,11 @@
     },
     "itemGroupManage": {
       "appName": "Group Management",
+      "cardStyle": "Card style",
+      "cardStyleInfo": "Info icon",
+      "cardStyleSmall": "Small icon",
       "deleteWarnText": "Are you sure you want to delete this group [{name}]? The application icons in this group will be lost after deletion.",
+      "followGlobal": "Follow global",
       "groupName": "Group name"
     },
     "uploadsFileManager": {
@@ -198,8 +204,14 @@
       "wed": "Wednesday"
     },
     "searchBox": {
+      "engineDeleteLastWarning": "At least one search engine must be kept",
+      "engineFormIncomplete": "Please fill in the name and search URL",
+      "engineIconUrl": "Icon URL (optional)",
+      "engineName": "Search engine name",
+      "engineUrl": "Search URL (use %s as keyword placeholder)",
       "inputPlaceholder": "Enter search content",
-      "openWithNewOpen": "Open in new window"
+      "openWithNewOpen": "Open in new window",
+      "searchEngineManage": "Search engine manage"
     }
   },
   "form": {

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { FormInst, FormRules } from 'naive-ui'
-import { NButton, NCard, NForm, NFormItem, NInput, useDialog, useMessage } from 'naive-ui'
+import { NButton, NCard, NColorPicker, NForm, NFormItem, NInput, NSelect, NSwitch, useDialog, useMessage } from 'naive-ui'
 import { VueDraggable } from 'vue-draggable-plus'
 import { deletes, edit, getList, saveSort } from '@/api/panel/itemIconGroup'
 import { RoundCardModal, SvgIcon } from '@/components/common'
+import { PanelPanelConfigStyleEnum } from '@/enums'
 import { t } from '@/locales'
 
 interface EditModalArg {
@@ -23,6 +24,30 @@ const defaultMNodal = {
   title: '',
   icon: 'material-symbols:folder-outline',
   sort: 9999,
+  // 分组级卡片样式 (对齐上游: 新分组默认详情图标)
+  cardStyle: 0 as number, // 0=详情图标, 1=小图标, -1=跟随全局
+  textColor: '', // 空 = 跟随全局
+  hideDescription: 0 as number,
+}
+
+const cardStyleOptions = [
+  { label: t('apps.itemGroupManage.cardStyleInfo'), value: PanelPanelConfigStyleEnum.info },
+  { label: t('apps.itemGroupManage.cardStyleSmall'), value: PanelPanelConfigStyleEnum.icon },
+  { label: t('apps.itemGroupManage.followGlobal'), value: -1 },
+]
+
+// 文字颜色: 空字符串表示跟随全局, 取色器展示时回退为白色
+const textColorValue = computed<string>({
+  get: () => editModalArg.value.model.textColor || '#ffffff',
+  set: (v: string) => {
+    editModalArg.value.model.textColor = v
+  },
+})
+
+const textColorFollowGlobal = computed(() => !editModalArg.value.model.textColor)
+
+function handleResetTextColor() {
+  editModalArg.value.model.textColor = ''
 }
 
 const editModalArg = ref<EditModalArg>({
@@ -186,9 +211,35 @@ onMounted(() => {
           <NInput v-model:value="editModalArg.model.title" type="text" :maxlength="20" show-count />
         </NFormItem>
 
-        <!-- <NFormItem path="name" label="昵称">
-          <NInput v-model:value="editModalArg.model" type="text" placeholder="请输入昵称" />
-        </NFormItem> -->
+        <!-- 卡片风格 -->
+        <NFormItem path="cardStyle" :label="$t('apps.itemGroupManage.cardStyle')">
+          <NSelect v-model:value="editModalArg.model.cardStyle" :options="cardStyleOptions" />
+        </NFormItem>
+
+        <!-- 隐藏描述信息 -->
+        <NFormItem path="hideDescription" :label="$t('apps.baseSettings.hideDescription')">
+          <NSwitch
+            :value="editModalArg.model.hideDescription === 1"
+            @update:value="(v: boolean) => editModalArg.model.hideDescription = v ? 1 : 0"
+          />
+        </NFormItem>
+
+        <!-- 文字颜色 -->
+        <NFormItem path="textColor" :label="$t('common.textColor')">
+          <div class="w-full flex items-center">
+            <NColorPicker
+              v-model:value="textColorValue"
+              class="flex-1"
+              :show-alpha="false"
+              size="small"
+              :modes="['hex']"
+              :swatches="['#000000', '#ffffff', '#18A058', '#2080F0', '#F0A020']"
+            />
+            <NButton v-if="!textColorFollowGlobal" quaternary type="info" size="small" class="ml-[8px]" @click="handleResetTextColor">
+              {{ $t('apps.itemGroupManage.followGlobal') }}
+            </NButton>
+          </div>
+        </NFormItem>
       </NForm>
       <template #footer>
         <NButton type="success" size="small" class="float-right" @click="handleSaveGroup">

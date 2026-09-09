@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { VueDraggable } from 'vue-draggable-plus'
 import { NBackTop, NButton, NButtonGroup, NDropdown, NModal, NSkeleton, NSpin, useDialog, useMessage } from 'naive-ui'
-import { nextTick, onMounted, ref } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
 import { AppIcon, AppStarter, EditItem } from './components'
 import { Clock, SearchBox } from '@/components/deskModule'
 import { SvgIcon } from '@/components/common'
@@ -268,6 +268,30 @@ onMounted(() => {
     setTitle(panelState.panelConfig.logoText)
 })
 
+// 系统应用弹窗关闭后刷新分组数据（分组级卡片样式等可能在弹窗中被修改）
+watch(settingModalShow, (show) => {
+  if (!show)
+    getList()
+})
+
+// 分组级卡片风格: -1 跟随全局
+function getGroupCardStyle(group: Panel.ItemIconGroup): PanelPanelConfigStyleEnum {
+  const style = group.cardStyle ?? -1
+  if (style === -1)
+    return panelState.panelConfig.iconStyle ?? PanelPanelConfigStyleEnum.icon
+  return style as PanelPanelConfigStyleEnum
+}
+
+// 分组级文字颜色: 空 = 跟随全局
+function getGroupTextColor(group: Panel.ItemIconGroup): string {
+  return group.textColor || panelState.panelConfig.iconTextColor || '#ffffff'
+}
+
+// 分组级隐藏描述: 与全局设置任一开启即隐藏
+function getGroupHideDescription(group: Panel.ItemIconGroup): boolean {
+  return group.hideDescription === 1 || panelState.panelConfig.iconTextInfoHideDescription === true
+}
+
 // 前端搜索过滤
 function itemFrontEndSearch(keyword?: string) {
   keyword = keyword?.trim()
@@ -282,7 +306,7 @@ function itemFrontEndSearch(keyword?: string) {
         )
       })
       if (element && element.length > 0)
-        filteredData.value.push({ items: element, hoverStatus: false })
+        filteredData.value.push({ ...items.value[i], items: element, hoverStatus: false })
     }
     filterItems.value = filteredData.value
   }
@@ -358,7 +382,11 @@ function handleAddItem(itemIconGroupId?: number) {
             </div>
           </div>
           <div v-if="panelState.panelConfig.searchBoxShow" class="flex mt-[20px] mx-auto sm:w-full lg:w-[80%]">
-            <SearchBox @item-search="itemFrontEndSearch" />
+            <SearchBox
+              :border-color="panelState.panelConfig.searchBoxBorderColor"
+              :placeholder-color="panelState.panelConfig.searchBoxPlaceholderColor"
+              @item-search="itemFrontEndSearch"
+            />
           </div>
         </div>
 
@@ -392,7 +420,7 @@ function handleAddItem(itemIconGroupId?: number) {
             </div>
 
             <!-- 详情图标 -->
-            <div v-if="panelState.panelConfig.iconStyle === PanelPanelConfigStyleEnum.info">
+            <div v-if="getGroupCardStyle(itemGroup) === PanelPanelConfigStyleEnum.info">
               <div v-if="itemGroup.items">
                 <VueDraggable
                   v-model="itemGroup.items" item-key="sort" :animation="300"
@@ -404,8 +432,8 @@ function handleAddItem(itemIconGroupId?: number) {
                     <AppIcon
                       :class="itemGroup.sortStatus ? 'cursor-move' : 'cursor-pointer'"
                       :item-info="item"
-                      :icon-text-color="panelState.panelConfig.iconTextColor"
-                      :icon-text-info-hide-description="panelState.panelConfig.iconTextInfoHideDescription || false"
+                      :icon-text-color="getGroupTextColor(itemGroup)"
+                      :icon-text-info-hide-description="getGroupHideDescription(itemGroup)"
                       :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
                       :style="0"
                       @click="handleItemClick(itemGroupIndex, item)"
@@ -416,8 +444,8 @@ function handleAddItem(itemIconGroupId?: number) {
                     <AppIcon
                       :class="itemGroup.sortStatus ? 'cursor-move' : 'cursor-pointer'"
                       :item-info="{ icon: { itemType: 3, text: 'subway:add' }, title: t('common.add'), url: '', openMethod: 0 }"
-                      :icon-text-color="panelState.panelConfig.iconTextColor"
-                      :icon-text-info-hide-description="panelState.panelConfig.iconTextInfoHideDescription || false"
+                      :icon-text-color="getGroupTextColor(itemGroup)"
+                      :icon-text-info-hide-description="getGroupHideDescription(itemGroup)"
                       :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
                       :style="0"
                       @click="handleAddItem(itemGroup.id)"
@@ -428,7 +456,7 @@ function handleAddItem(itemIconGroupId?: number) {
             </div>
 
             <!-- APP图标宫型盒子 -->
-            <div v-if="panelState.panelConfig.iconStyle === PanelPanelConfigStyleEnum.icon">
+            <div v-else>
               <div v-if="itemGroup.items">
                 <VueDraggable
                   v-model="itemGroup.items" item-key="sort" :animation="300"
@@ -441,8 +469,8 @@ function handleAddItem(itemIconGroupId?: number) {
                     <AppIcon
                       :class="itemGroup.sortStatus ? 'cursor-move' : 'cursor-pointer'"
                       :item-info="item"
-                      :icon-text-color="panelState.panelConfig.iconTextColor"
-                      :icon-text-info-hide-description="!panelState.panelConfig.iconTextInfoHideDescription"
+                      :icon-text-color="getGroupTextColor(itemGroup)"
+                      :icon-text-info-hide-description="getGroupHideDescription(itemGroup)"
                       :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
                       :style="1"
                       @click="handleItemClick(itemGroupIndex, item)"
@@ -453,8 +481,8 @@ function handleAddItem(itemIconGroupId?: number) {
                     <AppIcon
                       class="cursor-pointer"
                       :item-info="{ icon: { itemType: 3, text: 'subway:add' }, title: $t('common.add'), url: '', openMethod: 0 }"
-                      :icon-text-color="panelState.panelConfig.iconTextColor"
-                      :icon-text-info-hide-description="!panelState.panelConfig.iconTextInfoHideDescription"
+                      :icon-text-color="getGroupTextColor(itemGroup)"
+                      :icon-text-info-hide-description="getGroupHideDescription(itemGroup)"
                       :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
                       :style="1"
                       @click="handleAddItem(itemGroup.id)"

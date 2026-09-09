@@ -19,6 +19,8 @@ export function defaultStatePanelConfig(): Panel.panelConfig {
     clockShowSecond: false,
     searchBoxShow: false,
     searchBoxSearchIcon: false,
+    searchBoxBorderColor: '#cccccc',
+    searchBoxPlaceholderColor: '#cccccc',
     marginBottom: 10,
     marginTop: 10,
     maxWidth: 1200,

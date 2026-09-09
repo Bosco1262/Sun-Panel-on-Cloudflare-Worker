@@ -11,6 +11,9 @@ interface GroupRow {
   title: string
   description: string
   sort: number
+  card_style: number
+  text_color: string
+  hide_description: number
   created_at: string
   updateTime: string
   updated_at: string
@@ -23,6 +26,9 @@ interface ItemIconGroup {
   title?: string
   description?: string
   sort?: number
+  cardStyle?: number
+  textColor?: string
+  hideDescription?: number
 }
 
 // 分组列表 (为空时自动创建默认分组 "APP", 与 Go 版行为一致)
@@ -49,6 +55,9 @@ app.post('/itemIconGroup/getList', authMiddleware(), async (c) => {
       title: 'APP',
       description: '',
       sort: 0,
+      card_style: -1,
+      text_color: '',
+      hide_description: 0,
       created_at: '',
       updated_at: '',
       createTime: '',
@@ -70,18 +79,21 @@ app.post('/itemIconGroup/edit', authMiddleware(), async (c) => {
   const icon = body.icon ?? ''
   const title = body.title ?? ''
   const description = body.description ?? ''
+  const cardStyle = typeof body.cardStyle === 'number' ? body.cardStyle : -1
+  const textColor = body.textColor ?? ''
+  const hideDescription = body.hideDescription === 1 ? 1 : 0
 
   if (body.id) {
     const sort = body.sort ?? 0
     await db
-      .prepare('UPDATE item_icon_group SET icon = ?, title = ?, description = ?, sort = ? WHERE id = ? AND deleted_at IS NULL')
-      .bind(icon, title, description, sort, body.id)
+      .prepare('UPDATE item_icon_group SET icon = ?, title = ?, description = ?, sort = ?, card_style = ?, text_color = ?, hide_description = ? WHERE id = ? AND deleted_at IS NULL')
+      .bind(icon, title, description, sort, cardStyle, textColor, hideDescription, body.id)
       .run()
   }
   else {
     const result = await db
-      .prepare('INSERT INTO item_icon_group (icon, title, description, sort) VALUES (?, ?, ?, 0)')
-      .bind(icon, title, description)
+      .prepare('INSERT INTO item_icon_group (icon, title, description, sort, card_style, text_color, hide_description) VALUES (?, ?, ?, 0, ?, ?, ?)')
+      .bind(icon, title, description, cardStyle, textColor, hideDescription)
       .run()
     body.id = Number(result.meta.last_row_id)
   }
@@ -154,6 +166,9 @@ function mapGroup(row: GroupRow) {
     title: row.title,
     description: row.description,
     sort: row.sort,
+    cardStyle: row.card_style ?? -1,
+    textColor: row.text_color ?? '',
+    hideDescription: row.hide_description ?? 0,
     createTime: row.createTime || row.created_at,
     updateTime: row.updateTime || row.updated_at,
   }

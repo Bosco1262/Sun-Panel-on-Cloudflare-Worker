@@ -1,10 +1,9 @@
 declare namespace DeskModule.SearchBox {
 
     interface SearchEngine  {
-        iconSrc: string
+        iconSrc?: string
         title: string
         url: string
     }
 
 }
-

@@ -19,6 +19,9 @@ declare namespace Panel {
         icon?: string
         title?: string
         sort?:number
+        cardStyle?:number // -1 跟随全局, 0 详情图标(长条形), 1 小图标(正方形)
+        textColor?:string // 空 = 跟随全局
+        hideDescription?:number // 1 = 隐藏描述信息
     }
 
     interface ItemIcon {
@@ -50,6 +53,8 @@ declare namespace Panel {
         clockColor?:string
         searchBoxShow?:boolean
         searchBoxSearchIcon?:boolean
+        searchBoxBorderColor?:string
+        searchBoxPlaceholderColor?:string
         marginTop?:number
         marginBottom?:number
         maxWidth?:number

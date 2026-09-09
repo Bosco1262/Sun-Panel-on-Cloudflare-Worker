@@ -71,6 +71,8 @@
       "publicVisitModeShow": "公开模式允许显示",
       "resetWarnText": "确定要重置这些样式吗？",
       "searchBar": "搜索栏组件",
+      "searchBarBorderColor": "搜索栏边框颜色",
+      "searchBarPlaceholderColor": "搜索栏占位文字颜色",
       "searchBarSearchItem": "允许搜索栏搜索项目",
       "searchBarShow": "配置已保存",
       "show": "显示",
@@ -99,7 +101,11 @@
     },
     "itemGroupManage": {
       "appName": "分组管理",
+      "cardStyle": "卡片风格",
+      "cardStyleInfo": "详情图标",
+      "cardStyleSmall": "小图标",
       "deleteWarnText": "你确定删除此分组[{name}]，删除后此分组应用图标将丢失？",
+      "followGlobal": "跟随全局",
       "groupName": "分组名称"
     },
     "uploadsFileManager": {
@@ -198,8 +204,14 @@
       "wed": "星期三"
     },
     "searchBox": {
+      "engineDeleteLastWarning": "至少需要保留一个搜索引擎",
+      "engineFormIncomplete": "请填写名称和搜索地址",
+      "engineIconUrl": "图标地址（可选）",
+      "engineName": "搜索引擎名称",
+      "engineUrl": "搜索地址（用 %s 表示关键词位置）",
       "inputPlaceholder": "请输入搜索内容",
-      "openWithNewOpen": "新窗口打开"
+      "openWithNewOpen": "新窗口打开",
+      "searchEngineManage": "搜索引擎管理"
     }
   },
   "form": {
