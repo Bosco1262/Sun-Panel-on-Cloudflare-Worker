@@ -286,13 +286,18 @@
     "confirmLogoutText": "Are you sure you want to logout?",
     "confirmPassword": "Confirm new password",
     "confirmPasswordInconsistentMsg": "Passwords do not match",
+    "currentPassword": "Current password",
+    "currentPasswordRequiredMsg": "Current password cannot be empty",
     "logout": "Logout",
     "logoutSuccess": "You have safely logged out. Looking forward to seeing you again!",
     "newPassword": "New password",
+    "newUsername": "New username",
     "oldPassword": "Old password",
     "settings": "Settings",
-    "updateLoginInfo": "Update login info",
+    "updatePassword": "Change password",
+    "updateUsername": "Change username",
     "username": "Username",
-    "usernameRequiredMsg": "Username cannot be empty"
+    "usernameRequiredMsg": "Username cannot be empty",
+    "usernameUnchangedMsg": "The new username is the same as the current one"
   }
 }

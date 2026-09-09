@@ -286,13 +286,18 @@
     "confirmLogoutText": "你确定要退出登录吗？",
     "confirmPassword": "确认新密码",
     "confirmPasswordInconsistentMsg": "两次密码不一致",
+    "currentPassword": "当前密码",
+    "currentPasswordRequiredMsg": "当前密码不能为空",
     "logout": "退出登录",
     "logoutSuccess": "您已经安全退出，期待与你再次相见！",
     "newPassword": "新密码",
+    "newUsername": "新用户名",
     "oldPassword": "旧密码",
     "settings": "设置",
-    "updateLoginInfo": "修改登录信息",
+    "updatePassword": "修改密码",
+    "updateUsername": "修改用户名",
     "username": "用户名",
-    "usernameRequiredMsg": "用户名不能为空"
+    "usernameRequiredMsg": "用户名不能为空",
+    "usernameUnchangedMsg": "新用户名与当前用户名相同"
   }
 }

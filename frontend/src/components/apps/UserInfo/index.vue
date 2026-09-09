@@ -7,7 +7,7 @@ import { languageOptions } from '@/utils/defaultData'
 import type { Language, Theme } from '@/store/modules/app/helper'
 import { logout } from '@/api'
 import { RoundCardModal, SvgIcon } from '@/components/common/'
-import { updatePassword } from '@/api/system/user'
+import { updatePassword, updateUsername } from '@/api/system/user'
 import { updateLocalUserInfo } from '@/utils/cmn'
 import { t } from '@/locales'
 
@@ -21,6 +21,7 @@ const dialog = useDialog()
 const languageValue = ref(appStore.language)
 const themeValue = ref(appStore.theme)
 const formRef = ref<FormInst | null>(null)
+const usernameFormRef = ref<FormInst | null>(null)
 const themeOptions: { label: string; key: string; value: Theme }[] = [
   { label: t('apps.userInfo.themeStyle.dark'), key: 'dark', value: 'dark' },
   { label: t('apps.userInfo.themeStyle.light'), key: 'light', value: 'light' },
@@ -30,19 +31,21 @@ const updatePasswordModalState = ref({
   show: false,
   loading: false,
   form: {
-    username: authStore.userInfo?.username || '',
     password: '',
     oldPassword: '',
     confirmPassword: '',
   },
 })
+const updateUsernameModalState = ref({
+  show: false,
+  loading: false,
+  form: {
+    username: authStore.userInfo?.username || '',
+    password: '',
+  },
+})
 
 const updatePasswordModalFormRules: FormRules = {
-  username: {
-    required: true,
-    trigger: ['blur', 'input'],
-    message: t('settingUserInfo.usernameRequiredMsg'),
-  },
   oldPassword: {
     required: true,
     trigger: 'blur',
@@ -63,6 +66,19 @@ const updatePasswordModalFormRules: FormRules = {
     min: 6,
     max: 20,
     message: t('adminSettingUsers.formRules.passwordLimit'),
+  },
+}
+
+const updateUsernameModalFormRules: FormRules = {
+  username: {
+    required: true,
+    trigger: ['blur', 'input'],
+    message: t('settingUserInfo.usernameRequiredMsg'),
+  },
+  password: {
+    required: true,
+    trigger: 'blur',
+    message: t('settingUserInfo.currentPasswordRequiredMsg'),
   },
 }
 
@@ -89,18 +105,12 @@ function handleUpdatePassword(e: MouseEvent) {
       return
     }
 
-    if (!updatePasswordModalState.value.form.username.trim()) {
-      ms.error(t('settingUserInfo.usernameRequiredMsg'))
-      return
-    }
-
     if (updatePasswordModalState.value.form.password !== updatePasswordModalState.value.form.confirmPassword) {
       ms.error(t('settingUserInfo.confirmPasswordInconsistentMsg'))
       return
     }
     updatePasswordModalState.value.loading = true
     updatePassword(
-      updatePasswordModalState.value.form.username.trim(),
       updatePasswordModalState.value.form.oldPassword,
       updatePasswordModalState.value.form.password,
     ).then(({ code, msg }) => {
@@ -115,6 +125,40 @@ function handleUpdatePassword(e: MouseEvent) {
       }
     }).finally(() => {
       updatePasswordModalState.value.loading = false
+    }).catch(() => {
+      ms.error(t('common.serverError'))
+    })
+  })
+}
+
+function handleUpdateUsername(e: MouseEvent) {
+  e.preventDefault()
+  usernameFormRef.value?.validate((errors) => {
+    if (errors) {
+      console.log(errors)
+      return
+    }
+
+    const newUsername = updateUsernameModalState.value.form.username.trim()
+    if (newUsername === authStore.userInfo?.username) {
+      ms.error(t('settingUserInfo.usernameUnchangedMsg'))
+      return
+    }
+
+    updateUsernameModalState.value.loading = true
+    updateUsername(newUsername, updateUsernameModalState.value.form.password).then(({ code, msg }) => {
+      if (code === 0) {
+        // 成功
+        updateUsernameModalState.value.show = false
+        updateUsernameModalState.value.form.password = ''
+        updateLocalUserInfo()
+        ms.success(t('common.success'))
+      }
+      else {
+        ms.error(msg)
+      }
+    }).finally(() => {
+      updateUsernameModalState.value.loading = false
     }).catch(() => {
       ms.error(t('common.serverError'))
     })
@@ -158,13 +202,18 @@ function handleChangeTheme(value: Theme) {
         <div class="text-slate-500 font-bold">
           {{ $t('settingUserInfo.username') }}
         </div>
-        {{ authStore.userInfo?.username }}
+        <div class="flex items-center gap-[6px]">
+          <span>{{ authStore.userInfo?.username }}</span>
+          <NButton size="small" text type="info" @click="updateUsernameModalState.show = true">
+            {{ $t('settingUserInfo.updateUsername') }}
+          </NButton>
+        </div>
       </div>
 
       <NDivider style="margin: 10px 0;" dashed />
       <div>
         <NButton size="small" text type="info" @click="updatePasswordModalState.show = !updatePasswordModalState.show">
-          {{ $t('settingUserInfo.updateLoginInfo') }}
+          {{ $t('settingUserInfo.updatePassword') }}
         </NButton>
       </div>
     </NCard>
@@ -204,12 +253,8 @@ function handleChangeTheme(value: Theme) {
       </div>
     </NCard>
 
-    <RoundCardModal v-model:show="updatePasswordModalState.show" size="small" preset="card" style="width: 400px" :title="$t('settingUserInfo.updateLoginInfo')">
+    <RoundCardModal v-model:show="updatePasswordModalState.show" size="small" preset="card" style="width: 400px" :title="$t('settingUserInfo.updatePassword')">
       <NForm ref="formRef" :model="updatePasswordModalState.form" :rules="updatePasswordModalFormRules">
-        <NFormItem path="username" :label="$t('settingUserInfo.username')">
-          <NInput v-model:value="updatePasswordModalState.form.username" :maxlength="20" type="text" :placeholder="$t('settingUserInfo.username')" />
-        </NFormItem>
-
         <NFormItem path="oldPassword" :label="$t('settingUserInfo.oldPassword')">
           <NInput v-model:value="updatePasswordModalState.form.oldPassword" :maxlength="20" type="password" :placeholder="$t('settingUserInfo.oldPassword')" />
         </NFormItem>
@@ -226,6 +271,26 @@ function handleChangeTheme(value: Theme) {
       <template #footer>
         <div class="float-right">
           <NButton type="success" size="small" :loading="updatePasswordModalState.loading" @click="handleUpdatePassword">
+            {{ $t('common.save') }}
+          </NButton>
+        </div>
+      </template>
+    </RoundCardModal>
+
+    <RoundCardModal v-model:show="updateUsernameModalState.show" size="small" preset="card" style="width: 400px" :title="$t('settingUserInfo.updateUsername')">
+      <NForm ref="usernameFormRef" :model="updateUsernameModalState.form" :rules="updateUsernameModalFormRules">
+        <NFormItem path="username" :label="$t('settingUserInfo.newUsername')">
+          <NInput v-model:value="updateUsernameModalState.form.username" :maxlength="20" type="text" :placeholder="$t('settingUserInfo.newUsername')" />
+        </NFormItem>
+
+        <NFormItem path="password" :label="$t('settingUserInfo.currentPassword')">
+          <NInput v-model:value="updateUsernameModalState.form.password" :maxlength="20" type="password" :placeholder="$t('settingUserInfo.currentPassword')" />
+        </NFormItem>
+      </NForm>
+
+      <template #footer>
+        <div class="float-right">
+          <NButton type="success" size="small" :loading="updateUsernameModalState.loading" @click="handleUpdateUsername">
             {{ $t('common.save') }}
           </NButton>
         </div>

@@ -6,9 +6,16 @@ export function getAuthInfo<T>() {
   })
 }
 
-export function updatePassword<T>(username: string, oldPassword: string, newPassword: string) {
+export function updatePassword<T>(oldPassword: string, newPassword: string) {
   return post<T>({
     url: '/user/updatePassword',
-    data: { username, newPassword, oldPassword },
+    data: { newPassword, oldPassword },
+  })
+}
+
+export function updateUsername<T>(username: string, password: string) {
+  return post<T>({
+    url: '/user/updateUsername',
+    data: { username, password },
   })
 }

@@ -49,14 +49,11 @@ app.post('/user/updateInfo', authMiddleware(), async (c) => {
   return success(c)
 })
 
-// 修改登录信息（用户名 + 密码）
+// 修改密码（仅密码, 不改用户名）
 app.post('/user/updatePassword', authMiddleware(), async (c) => {
-  const body = await c.req.json<{ username?: string; oldPassword?: string; newPassword?: string }>().catch(() => null)
-  const username = typeof body?.username === 'string' ? body.username.trim() : ''
+  const body = await c.req.json<{ oldPassword?: string; newPassword?: string }>().catch(() => null)
   const oldPassword = typeof body?.oldPassword === 'string' ? body.oldPassword : ''
   const newPassword = typeof body?.newPassword === 'string' ? body.newPassword : ''
-  if (!username || username.length > 20)
-    return errorByCode(c, 1400)
   if (!oldPassword || !newPassword || newPassword.length < 6 || newPassword.length > 20)
     return errorByCode(c, 1400)
 
@@ -64,8 +61,25 @@ app.post('/user/updatePassword', authMiddleware(), async (c) => {
   if (storedPassword === null || passwordEncryption(oldPassword) !== storedPassword)
     return errorByCode(c, 1007)
 
-  await setSetting(c.env.DB, SETTING_ADMIN_USERNAME, username)
   await setSetting(c.env.DB, SETTING_ADMIN_PASSWORD, passwordEncryption(newPassword))
+  return success(c)
+})
+
+// 修改用户名（需当前密码校验, 不改密码）
+app.post('/user/updateUsername', authMiddleware(), async (c) => {
+  const body = await c.req.json<{ username?: string; password?: string }>().catch(() => null)
+  const username = typeof body?.username === 'string' ? body.username.trim() : ''
+  const password = typeof body?.password === 'string' ? body.password : ''
+  if (!username || username.length > 20)
+    return errorByCode(c, 1400)
+  if (!password)
+    return errorByCode(c, 1400)
+
+  const storedPassword = await getSetting(c.env.DB, SETTING_ADMIN_PASSWORD)
+  if (storedPassword === null || passwordEncryption(password) !== storedPassword)
+    return errorByCode(c, 1007)
+
+  await setSetting(c.env.DB, SETTING_ADMIN_USERNAME, username)
   return success(c)
 })
 

@@ -112,7 +112,7 @@ export async function updateLocalUserInfo() {
   if (code !== 0 || !data?.user)
     return
 
-  userStore.updateUserInfo({ headImage: data.user.headImage, name: data.user.name })
+  userStore.updateUserInfo({ username: data.user.username, headImage: data.user.headImage, name: data.user.name })
   authStore.setUserInfo(data.user)
   authStore.setVisitMode(data.visitMode)
 }
