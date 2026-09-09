@@ -32,7 +32,8 @@
     "1202": "Data record not found",
     "1300": "Upload failed",
     "1301": "Upload failed, unsupported file format",
-    "1400": "Parameter format error"
+    "1400": "Parameter format error",
+    "1401": "The unique name is already taken"
   },
   "appLauncher": {
     "title": "System Applications"
@@ -121,6 +122,12 @@
       "path": "File path",
       "setWallpaper": "Set as wallpaper",
       "uploadTime": "Upload time"
+    },
+    "globalSetting": {
+      "appName": "Global Settings",
+      "customJSAndCssAlert": "Custom code will be injected into all pages. It can be used together with the item unique name (onlyName) to customize card styles and behaviors. Note: make sure the code is safe and reliable; malicious code may cause data leaks",
+      "customCss": "Custom CSS",
+      "customJs": "Custom JS"
     },
     "userInfo": {
       "appName": "My Information",
@@ -219,7 +226,7 @@
   },
   "iconItem": {
     "add": "Add item",
-    "canvasTransparent": "Transparent canvas",
+    "cardBackground": "Card background color",
     "currentPageLayerOpen": "Open in current page as layer",
     "currentPageOpen": "Open in current page",
     "defaultUrl": "Default URL",
@@ -227,22 +234,34 @@
     "getGroupFail": "Failed to get group information",
     "getIcon": "Get icon",
     "geticonFail": "Failed to get icon",
+    "icon": {
+      "iconName": "Icon name",
+      "iconOnlineTip": "Online icons (a third-party icon library): the device accessing this page must be connected to the internet. Usage: go to the website, copy the desired icon name and paste it into the text box.",
+      "iconSizeTip": "Icon size: for aesthetics, 'svg' format icons in [Online icon] mode and [Image] mode are rendered smaller; icons in other formats are 100%.",
+      "iconStyle": "Icon style",
+      "imageUrl": "Image URL",
+      "textContent": "Text content"
+    },
     "iconGroup": "Group",
     "iconLibrary": "Icon library",
-    "iconStyle": "Icon style",
-    "iconStyleTip": "Choose how the icon is displayed: text, image, or online icon",
-    "imageUrl": "Image URL",
     "inputIconName": "Enter icon name",
     "inputIconUrlOrUpload": "Enter icon URL or upload",
     "lanUrl": "LAN URL",
-    "lanUrlInputPlaceholder": "http(s):// (LAN mode, will redirect to this address)",
+    "lanUrlInputPlaceholder": "http(s):// (LAN environment, will redirect to this address)",
+    "moreOptions": "More options",
     "newWindowOpen": "Open in new window",
     "onlineIcon": "Online icon",
     "onlineIconLibrary": "Online icon library",
+    "onlyName": "Unique name",
+    "onlyNameExisted": "The unique name is already taken",
+    "onlyNameTip": "English-only name. Can be used as an OpenAPI field: \"onlyName\"; it can also beautify cards with custom js, css, and footers",
     "openMethod": "Open method",
-    "previewReference": "Preview (for reference only)",
+    "preview": "Preview (for reference only)",
+    "previewTransparentCanvas": "Transparent canvas",
+    "selectOneIcon": "Please select an icon",
     "selectUpload": "Local upload",
-    "url": "URL"
+    "url": "URL",
+    "urlNoHttpStartWarn": "Notice: the link does not start with the standard \"http://\" or \"https://\". If it is correct, please ignore this notice"
   },
   "login": {
     "loginButton": "Login",

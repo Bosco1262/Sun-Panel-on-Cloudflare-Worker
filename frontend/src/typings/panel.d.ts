@@ -13,6 +13,7 @@ declare namespace Panel {
         description?: string
         openMethod: number
         itemIconGroupId ?:number
+        onlyName?: string // 唯一标识: 配合自定义 CSS/JS 美化卡片
     }
 
     interface ItemIconGroup extends Common.InfoBase {

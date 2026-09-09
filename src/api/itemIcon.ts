@@ -24,6 +24,7 @@ interface ItemIconBody {
   openMethod?: number
   sort?: number
   itemIconGroupId?: number
+  onlyName?: string
 }
 
 interface IconRow {
@@ -36,6 +37,7 @@ interface IconRow {
   open_method: number
   sort: number
   item_icon_group_id: number
+  only_name: string
   created_at: string
   updated_at: string
   createTime: string
@@ -64,6 +66,7 @@ function mapIcon(row: IconRow) {
     openMethod: row.open_method,
     sort: row.sort,
     itemIconGroupId: row.item_icon_group_id,
+    onlyName: row.only_name ?? '',
     createTime: row.createTime || row.created_at,
     updateTime: row.updateTime || row.updated_at,
   }
@@ -85,10 +88,21 @@ app.post('/itemIcon/edit', authMiddleware(), async (c) => {
   const lanUrl = body.lanUrl ?? ''
   const description = body.description ?? ''
   const openMethod = body.openMethod ?? 0
+  const onlyName = (body.onlyName ?? '').trim()
+
+  // 唯一标识占用校验 (对齐上游 onlyNameExisted)
+  if (onlyName) {
+    const dup = await db
+      .prepare('SELECT id FROM item_icon WHERE only_name = ? AND deleted_at IS NULL AND id != ?')
+      .bind(onlyName, body.id ?? 0)
+      .first()
+    if (dup)
+      return errorByCode(c, 1401)
+  }
 
   if (body.id) {
-    const updateFields = ['icon_json = ?', 'title = ?', 'url = ?', 'lan_url = ?', 'description = ?', 'open_method = ?', 'item_icon_group_id = ?']
-    const values: unknown[] = [iconJson, title, url, lanUrl, description, openMethod, body.itemIconGroupId]
+    const updateFields = ['icon_json = ?', 'title = ?', 'url = ?', 'lan_url = ?', 'description = ?', 'open_method = ?', 'item_icon_group_id = ?', 'only_name = ?']
+    const values: unknown[] = [iconJson, title, url, lanUrl, description, openMethod, body.itemIconGroupId, onlyName]
     if (typeof body.sort === 'number') {
       updateFields.push('sort = ?')
       values.push(body.sort)
@@ -102,10 +116,10 @@ app.post('/itemIcon/edit', authMiddleware(), async (c) => {
   else {
     const result = await db
       .prepare(
-        'INSERT INTO item_icon (icon_json, title, url, lan_url, description, open_method, sort, item_icon_group_id) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, 9999, ?)',
+        'INSERT INTO item_icon (icon_json, title, url, lan_url, description, open_method, sort, item_icon_group_id, only_name) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, 9999, ?, ?)',
       )
-      .bind(iconJson, title, url, lanUrl, description, openMethod, body.itemIconGroupId)
+      .bind(iconJson, title, url, lanUrl, description, openMethod, body.itemIconGroupId, onlyName)
       .run()
     body.id = Number(result.meta.last_row_id)
   }

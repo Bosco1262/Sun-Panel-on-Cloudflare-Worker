@@ -108,7 +108,10 @@ export async function updateLocalUserInfo() {
     visitMode: VisitMode
   }
 
-  const { data } = await getAuthInfo<Req>()
+  const { code, data } = await getAuthInfo<Req>()
+  if (code !== 0 || !data?.user)
+    return
+
   userStore.updateUserInfo({ headImage: data.user.headImage, name: data.user.name })
   authStore.setUserInfo(data.user)
   authStore.setVisitMode(data.visitMode)
@@ -121,7 +124,9 @@ export async function getNotice(displayType: number | number[]) {
   else
     param = displayType
 
-  const { data } = await getListByDisplayTypeApi<Common.ListResponse<Notice.NoticeInfo[]>>(param)
+  const { code, data } = await getListByDisplayTypeApi<Common.ListResponse<Notice.NoticeInfo[]>>(param)
+  if (code !== 0 || !data?.list)
+    return
 
   for (let i = 0; i < data.list.length; i++) {
     const element = data.list[i]

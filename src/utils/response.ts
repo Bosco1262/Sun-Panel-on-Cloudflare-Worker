@@ -15,6 +15,7 @@ export const ERROR_CODE_MAP: Record<number, string> = {
   1300: 'Upload failed',
   1301: 'Unsupported file format',
   1400: 'Parameter format error',
+  1401: 'Unique name already exists',
 }
 
 export function apiReturn(c: Context, code: number, msg: string, data?: unknown) {

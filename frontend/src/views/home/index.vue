@@ -90,9 +90,12 @@ function handWindowIframeIdLoad(payload: Event) {
 
 function getList() {
   // 获取组数据
-  getGroupList<Common.ListResponse<ItemGroup[]>>().then(({ code, data, msg }) => {
-    if (code === 0)
-      items.value = data.list
+  getGroupList<Common.ListResponse<ItemGroup[]>>().then(({ code, data }) => {
+    // 未登录/无权限时拦截器已跳转登录页，此处直接返回避免读取 undefined
+    if (code !== 0 || !data?.list)
+      return
+
+    items.value = data.list
     for (let i = 0; i < data.list.length; i++) {
       const element = data.list[i]
       if (element.id)
@@ -428,7 +431,7 @@ function handleAddItem(itemIconGroupId?: number) {
                   filter=".not-drag"
                   :disabled="!itemGroup.sortStatus"
                 >
-                  <div v-for="item, index in itemGroup.items" :key="index" :title="item.description" @contextmenu="(e) => handleContextMenu(e, itemGroupIndex, item)">
+                  <div v-for="item, index in itemGroup.items" :key="index" :title="item.description" :data-only-name="item.onlyName || undefined" @contextmenu="(e) => handleContextMenu(e, itemGroupIndex, item)">
                     <AppIcon
                       :class="itemGroup.sortStatus ? 'cursor-move' : 'cursor-pointer'"
                       :item-info="item"
@@ -465,7 +468,7 @@ function handleAddItem(itemIconGroupId?: number) {
                   filter=".not-drag"
                   :disabled="!itemGroup.sortStatus"
                 >
-                  <div v-for="item, index in itemGroup.items" :key="index" :title="item.description" @contextmenu="(e) => handleContextMenu(e, itemGroupIndex, item)">
+                  <div v-for="item, index in itemGroup.items" :key="index" :title="item.description" :data-only-name="item.onlyName || undefined" @contextmenu="(e) => handleContextMenu(e, itemGroupIndex, item)">
                     <AppIcon
                       :class="itemGroup.sortStatus ? 'cursor-move' : 'cursor-pointer'"
                       :item-info="item"

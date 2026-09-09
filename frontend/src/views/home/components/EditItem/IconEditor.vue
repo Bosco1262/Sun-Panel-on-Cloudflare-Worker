@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NButton, NCheckbox, NColorPicker, NInput, NTooltip, NUpload } from 'naive-ui'
+import { NButton, NCheckbox, NInput, NRadioButton, NRadioGroup, NTooltip, NUpload } from 'naive-ui'
 import type { UploadFileInfo } from 'naive-ui'
 import { computed, defineProps, ref } from 'vue'
 import { SvgIcon } from '@/components/common'
@@ -23,23 +23,11 @@ const panelState = usePanelState()
 const previewShow = ref(true)
 const canvasTransparent = ref(false)
 
-// 图标风格选项
+// 图标风格选项 (对齐上游: 文字 / 图片 / 在线图标)
 const iconStyleOptions = [
-  { type: 1, label: t('common.text') },
+  { type: 1, label: t('iconItem.icon.textContent') },
   { type: 2, label: t('common.image') },
   { type: 3, label: t('iconItem.onlineIcon') },
-]
-
-// 默认图标背景色
-const defautSwatchesBackground = [
-  '#00000000',
-  '#000000',
-  '#ffffff',
-  '#18A058',
-  '#2080F0',
-  '#F0A020',
-  'rgba(208, 48, 80, 1)',
-  '#C418D1FF',
 ]
 
 const initData: Panel.ItemIcon = {
@@ -79,11 +67,6 @@ function handleChange() {
   emit('update:itemIcon', itemIconInfo.value || null)
 }
 
-function handleResetBackgroundColor() {
-  itemIconInfo.value.backgroundColor = initData.backgroundColor
-  handleChange()
-}
-
 const handleUploadFinish = ({
   file,
   event,
@@ -111,10 +94,10 @@ const handleUploadFinish = ({
     <!-- 预览开关 -->
     <div class="flex items-center mb-[10px]">
       <NCheckbox v-model:checked="previewShow" class="mr-[20px]">
-        {{ $t('iconItem.previewReference') }}
+        {{ $t('iconItem.preview') }}
       </NCheckbox>
       <NCheckbox v-model:checked="canvasTransparent">
-        {{ $t('iconItem.canvasTransparent') }}
+        {{ $t('iconItem.previewTransparentCanvas') }}
       </NCheckbox>
     </div>
 
@@ -151,44 +134,42 @@ const handleUploadFinish = ({
       </div>
     </div>
 
-    <!-- 图标风格 -->
+    <!-- 图标风格 (对齐上游: Radio 组) -->
     <div class="flex items-center mb-[5px]">
       <div class="text-slate-500 font-bold mr-[5px]">
-        {{ $t('iconItem.iconStyle') }}
+        {{ $t('iconItem.icon.iconStyle') }}
       </div>
       <NTooltip trigger="hover" placement="top">
         <template #trigger>
           <SvgIcon icon="tabler:info-circle" class="text-slate-400" />
         </template>
-        {{ $t('iconItem.iconStyleTip') }}
+        {{ $t('iconItem.icon.iconSizeTip') }}
       </NTooltip>
     </div>
 
-    <div class="flex gap-[10px] mb-[10px]">
-      <NButton
-        v-for="option in iconStyleOptions"
-        :key="option.type"
-        size="small"
-        :type="itemIconInfo.itemType === option.type ? 'primary' : 'default'"
-        :secondary="itemIconInfo.itemType !== option.type"
-        @click="handleIconTypeChange(option.type)"
-      >
+    <NRadioGroup
+      :value="itemIconInfo.itemType"
+      name="iconType"
+      class="mb-[10px]"
+      @update:value="(v: number) => handleIconTypeChange(v)"
+    >
+      <NRadioButton v-for="option in iconStyleOptions" :key="option.type" :value="option.type">
         {{ option.label }}
-      </NButton>
-    </div>
+      </NRadioButton>
+    </NRadioGroup>
 
     <!-- 文字 -->
     <div v-if="itemIconInfo.itemType === 1" class="mb-[10px]">
       <div class="text-slate-500 font-bold mb-[5px]">
-        {{ $t('common.text') }}
+        {{ $t('iconItem.icon.textContent') }}
       </div>
-      <NInput v-model:value="itemIconInfo.text" type="text" :placeholder="$t('common.inputPlaceholder')" @input="handleChange" />
+      <NInput v-model:value="itemIconInfo.text" type="text" show-count :maxlength="10" :placeholder="$t('common.inputPlaceholder')" @input="handleChange" />
     </div>
 
     <!-- 图片 -->
     <div v-if="itemIconInfo.itemType === 2" class="mb-[10px]">
       <div class="text-slate-500 font-bold mb-[5px]">
-        {{ $t('iconItem.imageUrl') }}
+        {{ $t('iconItem.icon.imageUrl') }}
       </div>
       <div class="flex gap-[10px]">
         <NInput v-model:value="itemIconInfo.src" class="flex-1" type="text" :placeholder="$t('iconItem.inputIconUrlOrUpload')" @input="handleChange" />
@@ -219,8 +200,14 @@ const handleUploadFinish = ({
 
     <!-- 在线图标 -->
     <div v-if="itemIconInfo.itemType === 3" class="mb-[10px]">
-      <div class="text-slate-500 font-bold mb-[5px]">
+      <div class="text-slate-500 font-bold mb-[5px] flex items-center">
         {{ $t('iconItem.onlineIcon') }}
+        <NTooltip trigger="hover" placement="top">
+          <template #trigger>
+            <SvgIcon icon="tabler:info-circle" class="text-slate-400 ml-[5px]" />
+          </template>
+          {{ $t('iconItem.icon.iconOnlineTip') }}
+        </NTooltip>
       </div>
       <div class="flex gap-[10px]">
         <NInput v-model:value="itemIconInfo.text" class="flex-1" type="text" :placeholder="$t('iconItem.inputIconName')" @input="handleChange" />
@@ -229,28 +216,6 @@ const handleUploadFinish = ({
             <SvgIcon icon="tabler:apps" />
           </template>
           {{ $t('iconItem.onlineIconLibrary') }}
-        </NButton>
-      </div>
-    </div>
-
-    <!-- 背景颜色 -->
-    <div class="flex items-center">
-      <div class="w-auto text-slate-500 mr-[10px]">
-        {{ $t('common.backgroundColor') }}
-      </div>
-      <div class="w-[150px] flex items-center mr-[10px]">
-        <NColorPicker
-          v-model:value="itemIconInfo.backgroundColor"
-          size="small"
-          :modes="['hex']"
-          :swatches="defautSwatchesBackground"
-          @complete="handleChange"
-          @update-value="handleChange"
-        />
-      </div>
-      <div v-if="itemIconInfo.backgroundColor !== initData.backgroundColor" class="w-auto text-slate-500 mr-[10px] cursor-pointer">
-        <NButton quaternary type="info" @click="handleResetBackgroundColor">
-          {{ $t('common.reset') }}
         </NButton>
       </div>
     </div>

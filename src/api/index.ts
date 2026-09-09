@@ -9,6 +9,7 @@ import itemIcon from './itemIcon'
 import itemIconGroup from './itemIconGroup'
 import userConfig from './userConfig'
 import moduleConfig from './moduleConfig'
+import systemSetting from './systemSetting'
 import file from './file'
 
 const app = new Hono<{ Bindings: Env }>()
@@ -33,6 +34,7 @@ app.route('/panel', userConfig)
 
 // 系统管理
 app.route('/system', moduleConfig)
+app.route('/system', systemSetting)
 
 // 文件
 app.route('/', file)

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineEmits, defineProps, ref, watch } from 'vue'
 import type { FormInst, FormRules } from 'naive-ui'
-import { NButton, NForm, NFormItem, NGrid, NGridItem, NInput, NInputGroup, NModal, NSelect, useMessage } from 'naive-ui'
+import { NAlert, NButton, NCheckbox, NColorPicker, NForm, NFormItem, NGrid, NGridItem, NInput, NInputGroup, NModal, NSelect, useMessage } from 'naive-ui'
 import IconEditor from './IconEditor.vue'
 import { edit, getSiteFavicon } from '@/api/panel/itemIcon'
 import { getList as getGroupList } from '@/api/panel/itemIconGroup'
@@ -23,6 +23,9 @@ const itemIconGroupOptions = ref<{
   value: number
 }[]>([])
 
+// 更多选项折叠区 (对齐上游: 卡片背景色 / 分组 / 唯一标识, 不含卡片类型)
+const showMoreOptions = ref(false)
+
 const restoreDefault: Panel.Info = {
   icon: null,
   title: '',
@@ -30,6 +33,7 @@ const restoreDefault: Panel.Info = {
   lanUrl: '',
   description: '',
   openMethod: 2,
+  onlyName: '',
 }
 
 interface Emit {
@@ -52,11 +56,11 @@ const rules: FormRules = {
     type: 'string',
     message: t('form.required'),
   },
-  // itemIconGroupId: {
-  //   required: true,
-  //   trigger: ['blur', 'change'],
-  //   message: t('form.required'),
-  // },
+  itemIconGroupId: {
+    required: true,
+    trigger: ['blur', 'change'],
+    message: t('form.required'),
+  },
 }
 
 const options = [
@@ -83,6 +87,31 @@ const show = computed({
   },
 })
 
+// 卡片背景色 (对齐上游: 默认 #2a2a2a6b)
+const defaultBackground = '#2a2a2a6b'
+const backgroundColorValue = computed<string>({
+  get: () => model.value.icon?.backgroundColor || defaultBackground,
+  set: (v: string) => {
+    if (!model.value.icon)
+      model.value.icon = { itemType: 2, backgroundColor: v }
+    else
+      model.value.icon.backgroundColor = v
+  },
+})
+
+// 地址协议提醒 (对齐上游 urlNoHttpStartWarn)
+function isNonHttpUrl(url?: string) {
+  return !!url && !/^https?:\/\//i.test(url)
+}
+const showUrlWarn = computed(() => isNonHttpUrl(model.value.url))
+const showLanUrlWarn = computed(() => isNonHttpUrl(model.value.lanUrl))
+
+// 唯一标识仅允许英文/数字/下划线/中划线
+watch(() => model.value.onlyName, (v) => {
+  if (v && /[^A-Za-z0-9_-]/.test(v))
+    model.value.onlyName = v.replace(/[^A-Za-z0-9_-]/g, '')
+})
+
 async function editApi() {
   submitLoading.value = true
   try {
@@ -94,7 +123,10 @@ async function editApi() {
       emit('done', data)
     }
     else {
-      ms.error(`${t('common.saveFail')}:${msg}`)
+      if (code === 1401)
+        ms.error(t('iconItem.onlyNameExisted'))
+      else
+        ms.error(`${t('common.saveFail')}:${msg}`)
     }
   }
   catch (error) {
@@ -103,11 +135,28 @@ async function editApi() {
   submitLoading.value = false
 }
 
+// 图标有效性校验 (对齐上游 selectOneIcon)
+function validateIcon(): boolean {
+  const icon = model.value.icon
+  if (!icon)
+    return false
+  if (icon.itemType === 1 || icon.itemType === 3)
+    return !!icon.text?.trim()
+  if (icon.itemType === 2)
+    return !!icon.src?.trim()
+  return false
+}
+
 const handleValidateButtonClick = (e: MouseEvent) => {
   e.preventDefault()
   formRef.value?.validate((errors) => {
-    if (!errors)
-      editApi()
+    if (errors)
+      return
+    if (!validateIcon()) {
+      ms.error(t('iconItem.selectOneIcon'))
+      return
+    }
+    editApi()
   })
 }
 
@@ -136,6 +185,7 @@ watch(() => props.visible, (newValue) => {
     model.value = props.itemInfo ? { ...props.itemInfo } : { ...restoreDefault }
     if (props.itemGroupId)
       model.value.itemIconGroupId = props.itemGroupId
+    showMoreOptions.value = !!model.value.onlyName
   }
 
   getGroupListOptions()
@@ -167,7 +217,7 @@ function getGroupListOptions() {
 </script>
 
 <template>
-  <NModal v-model:show="show" preset="card" size="small" style="width: 700px;border-radius: 1rem;" :title="itemInfo ? t('iconItem.edit') : t('iconItem.add')">
+  <NModal v-model:show="show" preset="card" size="small" style="width: 600px;border-radius: 1rem;" :title="itemInfo ? t('iconItem.edit') : t('iconItem.add')">
     <div class="max-h-[600px] overflow-auto p-[5px]">
       <NForm ref="formRef" :model="model" :rules="rules" label-placement="top">
         <!-- 图标（预览 + 风格 + 地址） -->
@@ -198,6 +248,9 @@ function getGroupListOptions() {
             </NButton>
           </NInputGroup>
         </NFormItem>
+        <NAlert v-if="showUrlWarn" type="warning" :show-icon="false" class="mb-[10px]" style="border-radius: 10px;">
+          {{ $t('iconItem.urlNoHttpStartWarn') }}
+        </NAlert>
 
         <!-- 内网地址 -->
         <NFormItem path="lanUrl" :label="$t('iconItem.lanUrl')">
@@ -208,16 +261,51 @@ function getGroupListOptions() {
             </NButton>
           </NInputGroup>
         </NFormItem>
+        <NAlert v-if="showLanUrlWarn" type="warning" :show-icon="false" class="mb-[10px]" style="border-radius: 10px;">
+          {{ $t('iconItem.urlNoHttpStartWarn') }}
+        </NAlert>
 
         <!-- 打开方式 -->
         <NFormItem path="openMethod" :label="$t('iconItem.openMethod')">
           <NSelect v-model:value="model.openMethod" :options="options" />
         </NFormItem>
 
-        <!-- 分组 -->
-        <NFormItem path="itemIconGroupId" :label="t('iconItem.iconGroup')">
-          <NSelect v-model:value="model.itemIconGroupId" :options="itemIconGroupOptions" />
+        <!-- 更多选项 (卡片背景色 , 分组 , 唯一标识) -->
+        <NFormItem :show-label="false" class="mb-[10px]">
+          <NCheckbox v-model:checked="showMoreOptions">
+            {{ $t('iconItem.moreOptions') }} ({{ $t('iconItem.cardBackground') }} , {{ $t('iconItem.iconGroup') }} , {{ $t('iconItem.onlyName') }})
+          </NCheckbox>
         </NFormItem>
+
+        <div v-if="showMoreOptions">
+          <!-- 卡片背景色 / 分组 各占一半 -->
+          <NGrid cols="2" :x-gap="10" item-responsive>
+            <NGridItem span="2 500:1">
+              <NFormItem path="cardBackground" :label="$t('iconItem.cardBackground')">
+                <NColorPicker
+                  v-model:value="backgroundColorValue"
+                  :show-alpha="false"
+                  size="small"
+                  :modes="['hex']"
+                  :swatches="['#2a2a2a6b', '#000000', '#ffffff', '#18A058', '#2080F0', '#F0A020']"
+                />
+              </NFormItem>
+            </NGridItem>
+            <NGridItem span="2 500:1">
+              <NFormItem path="itemIconGroupId" :label="t('iconItem.iconGroup')">
+                <NSelect v-model:value="model.itemIconGroupId" :options="itemIconGroupOptions" />
+              </NFormItem>
+            </NGridItem>
+          </NGrid>
+
+          <!-- 唯一标识 -->
+          <NFormItem path="onlyName" :label="$t('iconItem.onlyName')" :show-feedback="false">
+            <NInput v-model:value="model.onlyName" type="text" show-count :maxlength="20" :placeholder="$t('common.inputPlaceholder')" />
+          </NFormItem>
+          <div class="text-slate-400 text-xs mb-[10px]">
+            {{ $t('iconItem.onlyNameTip') }}
+          </div>
+        </div>
       </NForm>
     </div>
 
