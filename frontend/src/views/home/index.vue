@@ -263,8 +263,12 @@ onMounted(() => {
   updateLocalUserInfo()
   getList()
 
-  // 更新同步云端配置
-  panelState.updatePanelConfigByCloud()
+  // 更新同步云端配置 (含搜索引擎配置)
+  panelState.updatePanelConfigByCloud().then(() => {
+    // 旧版把搜索引擎存在 module_config 中, 登录态下迁移到 user_config
+    if (authStore.visitMode === VisitMode.VISIT_MODE_LOGIN)
+      panelState.migrateLegacySearchEngine()
+  })
 
   // 设置标题
   if (panelState.panelConfig.logoText)

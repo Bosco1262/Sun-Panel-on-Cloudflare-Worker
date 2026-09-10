@@ -36,20 +36,6 @@ const cardStyleOptions = [
   { label: t('apps.itemGroupManage.followGlobal'), value: -1 },
 ]
 
-// 文字颜色: 空字符串表示跟随全局, 取色器展示时回退为白色
-const textColorValue = computed<string>({
-  get: () => editModalArg.value.model.textColor || '#ffffff',
-  set: (v: string) => {
-    editModalArg.value.model.textColor = v
-  },
-})
-
-const textColorFollowGlobal = computed(() => !editModalArg.value.model.textColor)
-
-function handleResetTextColor() {
-  editModalArg.value.model.textColor = ''
-}
-
 const editModalArg = ref<EditModalArg>({
   show: false,
   editStatus: 1,
@@ -64,6 +50,20 @@ const editModalArg = ref<EditModalArg>({
     ],
   },
 })
+
+// 文字颜色: 空字符串表示跟随全局, 取色器展示时回退为白色
+const textColorValue = computed<string>({
+  get: () => editModalArg.value.model.textColor || '#ffffff',
+  set: (v: string) => {
+    editModalArg.value.model.textColor = v
+  },
+})
+
+const textColorFollowGlobal = computed(() => !editModalArg.value.model.textColor)
+
+function handleResetTextColor() {
+  editModalArg.value.model.textColor = ''
+}
 
 const groups = ref<Panel.ItemIconGroup[]>([])
 

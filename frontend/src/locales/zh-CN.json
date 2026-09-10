@@ -214,6 +214,7 @@
       "wed": "星期三"
     },
     "searchBox": {
+      "builtinEngineTip": "尚未配置搜索引擎，当前使用内置的 Google / 百度 / Bing",
       "engineDeleteLastWarning": "至少需要保留一个搜索引擎",
       "engineFormIncomplete": "请填写名称和搜索地址",
       "engineIconUrl": "图标地址（可选）",
@@ -222,6 +223,38 @@
       "inputPlaceholder": "请输入搜索内容",
       "openWithNewOpen": "新窗口打开",
       "searchEngineManage": "搜索引擎管理"
+    },
+    "searchEngine": {
+      "addEngine": "添加搜索引擎",
+      "editEngine": "编辑搜索引擎",
+      "engineName": "名称",
+      "engineNamePlaceholder": "例如：Bing",
+      "engineNameRequired": "请填写搜索引擎名称",
+      "engineNameTooLong": "名称不能超过 20 个字",
+      "engineNameDuplicated": "已存在同名搜索引擎",
+      "engineUrl": "搜索地址",
+      "engineUrlPlaceholder": "例如：https://www.bing.com/search?q=测试",
+      "engineUrlRequired": "请填写搜索地址",
+      "engineUrlInvalid": "地址需以 http:// 或 https:// 开头",
+      "engineUrlDuplicated": "该搜索地址已存在",
+      "engineUrlTip": "直接粘贴一次真实搜索的网址即可（推荐带关键词参数，如 ?q=测试）；系统会自动识别关键词位置，也支持 %s、{keyword}、{q} 三种占位写法，没有占位符时关键词会追加到地址末尾。",
+      "engineIconUrl": "图标地址",
+      "engineIconPlaceholder": "留空则使用内置图标或名称首字母",
+      "engineIconUrlInvalid": "图标地址需为 http(s) 链接、/ 开头的站内路径或 data:image",
+      "engineRemark": "备注",
+      "engineRemarkPlaceholder": "仅用于自己区分（可选）",
+      "openMethod": "打开方式",
+      "sortTip": "拖动调整搜索框中的展示顺序",
+      "emptyTip": "还没有自定义搜索引擎，搜索框暂时使用内置的 Google / 百度 / Bing。点击「添加搜索引擎」或「恢复内置引擎」开始配置。",
+      "restoreBuiltin": "恢复内置引擎",
+      "restoreBuiltinDone": "已补充缺失的内置引擎",
+      "resetAll": "重置为默认",
+      "resetWarnText": "将清空全部自定义搜索引擎，并恢复为内置的 Google / 百度 / Bing，确定继续吗？",
+      "deleteWarnText": "确定要删除搜索引擎「{name}」吗？",
+      "previewTip": "关键词「{keyword}」的实际跳转地址：",
+      "matchedParam": "已识别关键词参数：{param}",
+      "manageTip": "在「风格设置 → 搜索栏组件」中管理搜索引擎",
+      "visitorSwitchTip": "访客模式下仅本次访问生效，刷新后恢复"
     }
   },
   "form": {

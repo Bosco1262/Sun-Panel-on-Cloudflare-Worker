@@ -1,5 +1,6 @@
 import { ss } from '@/utils/storage'
 import { PanelPanelConfigStyleEnum, PanelStateNetworkModeEnum } from '@/enums'
+import { createDefaultSearchEngineConfig, normalizeSearchEngineConfig } from '@/utils/searchBox'
 import defaultBackground from '@/assets/defaultBackground.webp'
 const LOCAL_NAME = 'panelStorage'
 
@@ -38,12 +39,18 @@ export function defaultState(): Panel.State {
     leftSiderCollapsed: false,
     networkMode: PanelStateNetworkModeEnum.wan,
     panelConfig: { ...defaultStatePanelConfig() },
+    searchEngine: createDefaultSearchEngineConfig(),
   }
 }
 
 export function getLocalState(): Panel.State {
   const localState = ss.get(LOCAL_NAME)
-  return { ...defaultState(), ...localState }
+  return {
+    ...defaultState(),
+    ...localState,
+    // 本地缓存里的搜索引擎配置同样做一次归一化, 避免历史结构残留
+    searchEngine: normalizeSearchEngineConfig(localState?.searchEngine),
+  }
 }
 
 export function setLocalState(state: Panel.State) {

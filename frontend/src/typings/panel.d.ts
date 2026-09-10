@@ -38,6 +38,7 @@ declare namespace Panel {
         leftSiderCollapsed: boolean
         networkMode:PanelStateNetworkModeEnum | null
         panelConfig:panelConfig
+        searchEngine:DeskModule.SearchBox.SearchEngineConfig
     }
 
     interface panelConfig{
@@ -66,8 +67,8 @@ declare namespace Panel {
     }
 
     interface userConfig{
-        panel:panelConfig
-        searchEngine?:any
+        panel?:panelConfig
+        searchEngine?:DeskModule.SearchBox.SearchEngineConfig
     }
 
     interface ItemIconSortRequest{

@@ -48,13 +48,24 @@ app.post('/userConfig/get', authMiddleware(), async (c) => {
 })
 
 // 保存面板配置
+// panel 与 searchEngine 同属一行数据: 只提交其中一个字段时保留另一个字段的原值,
+// 避免「改样式」把搜索引擎配置(或反之)清空
 app.post('/userConfig/set', authMiddleware(), async (c) => {
   const body = await c.req.json<UserConfigBody>().catch(() => null)
   if (!body || typeof body !== 'object')
     return errorByCode(c, 1400)
 
-  const panelJson = JSON.stringify(body.panel ?? {})
-  const searchEngineJson = JSON.stringify(body.searchEngine ?? {})
+  const hasPanel = body.panel !== undefined && body.panel !== null
+  const hasSearchEngine = body.searchEngine !== undefined && body.searchEngine !== null
+  if (!hasPanel && !hasSearchEngine)
+    return errorByCode(c, 1400)
+
+  const current = await c.env.DB
+    .prepare('SELECT panel_json, search_engine_json FROM user_config WHERE id = 1')
+    .first<Pick<UserConfigRow, 'panel_json' | 'search_engine_json'>>()
+
+  const panelJson = hasPanel ? JSON.stringify(body.panel) : (current?.panel_json ?? '{}')
+  const searchEngineJson = hasSearchEngine ? JSON.stringify(body.searchEngine) : (current?.search_engine_json ?? '{}')
 
   try {
     await c.env.DB

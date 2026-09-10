@@ -214,6 +214,7 @@
       "wed": "Wednesday"
     },
     "searchBox": {
+      "builtinEngineTip": "No search engine configured yet, using the built-in Google / Baidu / Bing",
       "engineDeleteLastWarning": "At least one search engine must be kept",
       "engineFormIncomplete": "Please fill in the name and search URL",
       "engineIconUrl": "Icon URL (optional)",
@@ -222,6 +223,38 @@
       "inputPlaceholder": "Enter search content",
       "openWithNewOpen": "Open in new window",
       "searchEngineManage": "Search engine manage"
+    },
+    "searchEngine": {
+      "addEngine": "Add search engine",
+      "editEngine": "Edit search engine",
+      "engineName": "Name",
+      "engineNamePlaceholder": "e.g. Bing",
+      "engineNameRequired": "Please enter the search engine name",
+      "engineNameTooLong": "Name must be 20 characters or fewer",
+      "engineNameDuplicated": "A search engine with the same name already exists",
+      "engineUrl": "Search URL",
+      "engineUrlPlaceholder": "e.g. https://www.bing.com/search?q=test",
+      "engineUrlRequired": "Please enter the search URL",
+      "engineUrlInvalid": "URL must start with http:// or https://",
+      "engineUrlDuplicated": "This search URL already exists",
+      "engineUrlTip": "Just paste a real search result URL (a keyword parameter such as ?q=test is recommended). The keyword position is detected automatically; %s, {keyword} and {q} are also supported, and the keyword is appended to the end when no placeholder is present.",
+      "engineIconUrl": "Icon URL",
+      "engineIconPlaceholder": "Leave empty to use the built-in icon or the first letter",
+      "engineIconUrlInvalid": "Icon must be an http(s) link, a site path starting with /, or data:image",
+      "engineRemark": "Note",
+      "engineRemarkPlaceholder": "For your own reference (optional)",
+      "openMethod": "Open method",
+      "sortTip": "Drag to change the order shown in the search box",
+      "emptyTip": "No custom search engine yet, the search box falls back to the built-in Google / Baidu / Bing. Click \"Add search engine\" or \"Restore built-in engines\" to start.",
+      "restoreBuiltin": "Restore built-in",
+      "restoreBuiltinDone": "Missing built-in engines restored",
+      "resetAll": "Reset to default",
+      "resetWarnText": "This clears all custom search engines and restores the built-in Google / Baidu / Bing. Continue?",
+      "deleteWarnText": "Delete search engine \"{name}\"?",
+      "previewTip": "Actual URL for keyword \"{keyword}\":",
+      "matchedParam": "Detected keyword parameter: {param}",
+      "manageTip": "Manage search engines in Style Settings → Search bar",
+      "visitorSwitchTip": "In visitor mode the switch only applies to this visit"
     }
   },
   "form": {

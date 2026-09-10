@@ -10,3 +10,9 @@ export enum PanelPanelConfigStyleEnum {
   'info' = 0, // 详情风格
   'small' = 1, // 同icon
 }
+
+// 搜索框结果打开方式
+export enum SearchEngineOpenMethodEnum {
+  'currentPage' = 0, // 当前页面打开
+  'newWindow' = 1, // 新窗口打开
+}

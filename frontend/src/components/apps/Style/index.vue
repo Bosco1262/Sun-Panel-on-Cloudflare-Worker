@@ -2,8 +2,8 @@
 import { ref, watch } from 'vue'
 import type { UploadFileInfo } from 'naive-ui'
 import { NButton, NCard, NColorPicker, NGrid, NGridItem, NInput, NInputGroup, NPopconfirm, NSelect, NSlider, NSwitch, NUpload, NUploadDragger, useMessage } from 'naive-ui'
+import SearchEngineSettings from './SearchEngineSettings.vue'
 import { useAuthStore, usePanelState } from '@/store'
-import { set as setUserConfig } from '@/api/panel/userConfig'
 import { PanelPanelConfigStyleEnum } from '@/enums/panel'
 import { t } from '@/locales'
 
@@ -13,6 +13,8 @@ const ms = useMessage()
 const showWallpaperInput = ref(false)
 
 const isSaveing = ref(false)
+// 保存期间又发生改动时置为 true, 保存结束后再补一次, 避免丢失最后一次修改
+let savePending = false
 
 const iconTypeOptions = [
   {
@@ -36,17 +38,29 @@ const maxWidthUnitOption = [
   },
 ]
 
-watch(panelState.panelConfig, () => {
-  if (!isSaveing.value) {
-    isSaveing.value = true
-
-    setTimeout(() => {
-      panelState.recordState()// 本地记录
-      isSaveing.value = false
-      uploadCloud()
-    }, 1000)
+// 面板配置 / 搜索引擎配置共用一次防抖保存 (二者在同一行数据里, 必须一起提交)
+function scheduleSave() {
+  if (isSaveing.value) {
+    savePending = true
+    return
   }
-})
+
+  isSaveing.value = true
+  savePending = false
+  setTimeout(() => {
+    panelState.recordState()// 本地记录
+    isSaveing.value = false
+    uploadCloud()
+    // 保存期间又有改动, 再补一次
+    if (savePending)
+      scheduleSave()
+  }, 1000)
+}
+
+watch(panelState.panelConfig, scheduleSave)
+
+// 搜索引擎列表/排序/当前选中项/打开方式变化
+watch(() => panelState.searchEngine, scheduleSave, { deep: true })
 
 function handleUploadBackgroundFinish({
   file,
@@ -61,7 +75,8 @@ function handleUploadBackgroundFinish({
 }
 
 function uploadCloud() {
-  setUserConfig({ panel: panelState.panelConfig }).then((res) => {
+  // 面板与搜索引擎一并提交, 后端也会对未提交字段做保留
+  panelState.savePanelConfig().then((res) => {
     if (res.code === 0)
       ms.success(t('apps.baseSettings.configSaved'))
     else
@@ -135,6 +150,9 @@ function resetPanelConfig() {
           :modes="['hex']"
           :swatches="['#cccccc', '#000000', '#ffffff', '#F0A020']"
         />
+      </div>
+      <div class="mt-[12px] pt-[12px] border-t border-slate-200 dark:border-zinc-700">
+        <SearchEngineSettings />
       </div>
     </NCard>
 
