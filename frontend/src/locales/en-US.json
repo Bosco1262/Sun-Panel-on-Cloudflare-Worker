@@ -139,6 +139,9 @@
       }
     }
   },
+  "chat": {
+    "copyCode": "Copy"
+  },
   "common": {
     "action": "Action",
     "add": "Add",
@@ -215,14 +218,8 @@
     },
     "searchBox": {
       "builtinEngineTip": "No search engine configured yet, using the built-in Google / Baidu / Bing",
-      "engineDeleteLastWarning": "At least one search engine must be kept",
-      "engineFormIncomplete": "Please fill in the name and search URL",
-      "engineIconUrl": "Icon URL (optional)",
-      "engineName": "Search engine name",
-      "engineUrl": "Search URL (use %s as keyword placeholder)",
       "inputPlaceholder": "Enter search content",
-      "openWithNewOpen": "Open in new window",
-      "searchEngineManage": "Search engine manage"
+      "openWithNewOpen": "Open in new window"
     },
     "searchEngine": {
       "addEngine": "Add search engine",
@@ -244,7 +241,6 @@
       "engineRemark": "Note",
       "engineRemarkPlaceholder": "For your own reference (optional)",
       "openMethod": "Open method",
-      "sortTip": "Drag to change the order shown in the search box",
       "emptyTip": "No custom search engine yet, the search box falls back to the built-in Google / Baidu / Bing. Click \"Add search engine\" or \"Restore built-in engines\" to start.",
       "restoreBuiltin": "Restore built-in",
       "restoreBuiltinDone": "Missing built-in engines restored",

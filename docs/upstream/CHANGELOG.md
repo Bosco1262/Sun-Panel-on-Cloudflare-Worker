@@ -1,6 +1,8 @@
 # 更新说明（上游）
 
-> 本文件为上游 [hslr-s/sun-panel](https://github.com/hslr-s/sun-panel) 的更新日志存档。
+> 本文件为上游 [hslr-s/sun-panel](https://github.com/hslr-s/sun-panel) 的更新日志存档，
+> 内容与上游仓库根目录的 `UPDATELOG.md` 一致，**只到 v1.1.0**（上游把 v1.2.0 起的日志放在了文档站：
+> [正式版更新日志](https://doc.sun-panel.top/zh_cn/update/update_log.html)，最新发布版本 v1.8.1）。
 > 本仓库（Cloudflare Worker 移植版）的改动请看 `git log`；上游原版 README 见 [README.md](./README.md)。
 
 > 老用户版本升级需要看升级说明，并且一定提前备份好重要数据。新用户可以直接使用最新版本。

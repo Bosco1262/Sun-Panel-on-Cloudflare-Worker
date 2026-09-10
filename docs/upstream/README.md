@@ -2,15 +2,16 @@
 
 > 本文件存档上游 [hslr-s/sun-panel](https://github.com/hslr-s/sun-panel) 的 README，便于对照功能与截图。
 > - 上游仓库：<https://github.com/hslr-s/sun-panel>
-> - 上游文档：<https://sun-panel-doc.enianteam.com>
+> - 上游文档：<https://doc.sun-panel.top>
 > - 本仓库移植版说明：[根 README](../../README.md)
-> - 上游更新日志：[CHANGELOG.md](./CHANGELOG.md)
+> - 上游更新日志：[CHANGELOG.md](./CHANGELOG.md)（仅存档到 v1.1.0，v1.2.0 起见上游文档站的「正式版更新日志」）
 >
 > 说明：原文中的「Donate」段落因相关图片（`doc/donate.md`、`doc/images/donate/*.png`）未随本仓库同步，已移除；
-> 图片路径已改指向本仓库的 [`../images/`](../images/)。
+> 图片路径已改指向本仓库的 [`../images/`](../images/)；上游文档站已从 `sun-panel-doc.enianteam.com`
+> 迁移到 <https://doc.sun-panel.top>，原文中的旧域名链接已一并替换。
 
-[[ 简体中文 ]](https://sun-panel-doc.enianteam.com/zh_cn/introduce/project.html) |
-[[ English ]](https://sun-panel-doc.enianteam.com/introduce/project.html)
+[[ 简体中文 ]](https://doc.sun-panel.top/zh_cn/introduce/project.html) |
+[[ English ]](https://doc.sun-panel.top/introduce/project.html)
 
 <div align=center>
 
@@ -28,8 +29,8 @@
 [![github downloads](https://img.shields.io/github/downloads/hslr-s/sun-panel/total.svg?logo=github)](https://github.com/hslr-s/sun-panel/releases)
 [![docker pulls](https://img.shields.io/docker/pulls/hslr/sun-panel.svg?logo=docker)](https://hub.docker.com/r/hslr/sun-panel)
 
-[[ 中文文档 ]](https://sun-panel-doc.enianteam.com/zh_cn) |
-[[ Document ]](https://sun-panel-doc.enianteam.com) |
+[[ 中文文档 ]](https://doc.sun-panel.top/zh_cn) |
+[[ Document ]](https://doc.sun-panel.top) |
 [[ Demo ]](http://sunpaneldemo.enianteam.com)
 
 A server, NAS navigation panel, Homepage, Browser homepage.
@@ -75,7 +76,7 @@ A server, NAS navigation panel, Homepage, Browser homepage.
 
 ## 🐳 Deployment tutorial
 
-[Deployment Tutorial](https://sun-panel-doc.enianteam.com/usage/quick_deploy.html)
+[Deployment Tutorial](https://doc.sun-panel.top/zh_cn/usage/quick_deploy.html)
 
 ## 🏖️ Communication group & community
 

@@ -6,6 +6,8 @@
 > - 计划使用 Drizzle ORM + `src/db/schema.ts`，实际直接用 D1 原生 `prepare/bind`（无 ORM 依赖）
 > - 计划前端产物输出到 `frontend/dist/`，实际输出到仓库根目录 `dist/`（由 `wrangler.toml` 的 `[assets]` 托管）
 > - 计划保留多用户 / 注册 / 公开访客模式，实际简化为单用户模式
+> - 计划系统设置存 KV，实际存 D1 的 `system_setting` 表（见 `src/utils/settings.ts`、`migrations/0001_init.sql`）
+> - 计划网站图标「仅返回 favicon URL」，实际会下载并存入 R2（见 `src/api/panel/itemIcon.ts` 的 `getSiteFavicon`）
 >
 > 当前结构与部署方式以 [README](../README.md) 和 [deployment.md](./deployment.md) 为准。
 

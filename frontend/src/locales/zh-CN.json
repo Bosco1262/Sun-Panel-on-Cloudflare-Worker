@@ -139,6 +139,9 @@
       }
     }
   },
+  "chat": {
+    "copyCode": "复制"
+  },
   "common": {
     "action": "操作",
     "add": "添加",
@@ -215,14 +218,8 @@
     },
     "searchBox": {
       "builtinEngineTip": "尚未配置搜索引擎，当前使用内置的 Google / 百度 / Bing",
-      "engineDeleteLastWarning": "至少需要保留一个搜索引擎",
-      "engineFormIncomplete": "请填写名称和搜索地址",
-      "engineIconUrl": "图标地址（可选）",
-      "engineName": "搜索引擎名称",
-      "engineUrl": "搜索地址（用 %s 表示关键词位置）",
       "inputPlaceholder": "请输入搜索内容",
-      "openWithNewOpen": "新窗口打开",
-      "searchEngineManage": "搜索引擎管理"
+      "openWithNewOpen": "新窗口打开"
     },
     "searchEngine": {
       "addEngine": "添加搜索引擎",
@@ -244,7 +241,6 @@
       "engineRemark": "备注",
       "engineRemarkPlaceholder": "仅用于自己区分（可选）",
       "openMethod": "打开方式",
-      "sortTip": "拖动调整搜索框中的展示顺序",
       "emptyTip": "还没有自定义搜索引擎，搜索框暂时使用内置的 Google / 百度 / Bing。点击「添加搜索引擎」或「恢复内置引擎」开始配置。",
       "restoreBuiltin": "恢复内置引擎",
       "restoreBuiltinDone": "已补充缺失的内置引擎",

@@ -233,27 +233,26 @@ function handleSave() {
 
 <template>
   <div class="w-full">
-    <div class="flex items-center justify-between flex-wrap gap-[5px]">
-      <div class="flex items-center">
+    <!-- 操作区: 拆成两行留出间距, 破坏性的「重置」单独放到底部, 避免按钮挤在一起 -->
+    <div class="flex flex-col gap-[8px]">
+      <div class="flex items-center flex-wrap gap-[8px]">
         <NButton v-if="!sortStatus" size="small" type="success" @click="handleAdd">
           {{ $t('deskModule.searchEngine.addEngine') }}
         </NButton>
         <NButton v-else size="small" type="warning" @click="handleChangeSort">
           {{ $t('common.saveSort') }}
         </NButton>
+      </div>
 
-        <NButton v-if="engineList.length > 1 && !sortStatus" size="small" class="ml-[10px]" @click="sortStatus = true">
+      <div v-if="!sortStatus" class="flex items-center flex-wrap gap-[8px]">
+        <NButton v-if="engineList.length > 1" size="small" @click="sortStatus = true">
           {{ $t('common.sort') }}
         </NButton>
 
-        <NButton size="small" class="ml-[10px]" @click="handleRestoreBuiltin">
+        <NButton size="small" @click="handleRestoreBuiltin">
           {{ $t('deskModule.searchEngine.restoreBuiltin') }}
         </NButton>
       </div>
-
-      <NButton size="small" quaternary type="error" @click="handleResetAll">
-        {{ $t('deskModule.searchEngine.resetAll') }}
-      </NButton>
     </div>
 
     <!-- 列表为空: 搜索框仍在用内置默认引擎, 这里给出说明 -->
@@ -323,11 +322,18 @@ function handleSave() {
       </VueDraggable>
     </div>
 
-    <div class="flex items-center mt-[10px]">
+    <div class="flex items-center mt-[12px]">
       <span class="mr-[10px]">{{ $t('deskModule.searchEngine.openMethod') }}</span>
       <NCheckbox v-model:checked="openMethodValue">
         {{ $t('deskModule.searchBox.openWithNewOpen') }}
       </NCheckbox>
+    </div>
+
+    <!-- 破坏性操作单独放到底部, 与上方按钮拉开距离 -->
+    <div class="mt-[12px] pt-[12px] border-t border-slate-200 dark:border-zinc-700">
+      <NButton size="small" quaternary type="error" @click="handleResetAll">
+        {{ $t('deskModule.searchEngine.resetAll') }}
+      </NButton>
     </div>
 
     <RoundCardModal

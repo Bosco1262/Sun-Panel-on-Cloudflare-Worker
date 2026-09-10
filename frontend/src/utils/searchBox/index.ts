@@ -195,7 +195,7 @@ function isSupportedIconSrc(src: string): boolean {
   return isHttpUrl(value)
 }
 
-/** 表单校验, 返回 i18n key, 由调用方翻译 */
+/** 表单校验, 返回 i18n key, 由调用方翻译 (文案在 locales 的 deskModule.searchEngine.* 下) */
 export function validateSearchEngine(engine: DeskModule.SearchBox.SearchEngine): DeskModule.SearchBox.SearchEngineValidateResult {
   const title = engine.title.trim()
   const url = engine.url.trim()
@@ -203,17 +203,17 @@ export function validateSearchEngine(engine: DeskModule.SearchBox.SearchEngine):
 
   let titleError = ''
   if (!title)
-    titleError = 'deskModule.searchBox.engineNameRequired'
+    titleError = 'deskModule.searchEngine.engineNameRequired'
   else if (title.length > 20)
-    titleError = 'deskModule.searchBox.engineNameTooLong'
+    titleError = 'deskModule.searchEngine.engineNameTooLong'
 
   let urlError = ''
   if (!url)
-    urlError = 'deskModule.searchBox.engineUrlRequired'
+    urlError = 'deskModule.searchEngine.engineUrlRequired'
   else if (!isHttpUrl(url))
-    urlError = 'deskModule.searchBox.engineUrlInvalid'
+    urlError = 'deskModule.searchEngine.engineUrlInvalid'
 
-  const iconError = isSupportedIconSrc(iconSrc) ? '' : 'deskModule.searchBox.engineIconUrlInvalid'
+  const iconError = isSupportedIconSrc(iconSrc) ? '' : 'deskModule.searchEngine.engineIconUrlInvalid'
 
   return {
     valid: !titleError && !urlError && !iconError,

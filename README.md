@@ -76,6 +76,7 @@ npm run dev:web    # 终端 2: 前端热更新 (http://127.0.0.1:1002)
 | 文档 | 内容 |
 |------|------|
 | [docs/deployment.md](./docs/deployment.md) | 部署与本地开发完整说明 |
+| [docs/search-engine.md](./docs/search-engine.md) | 搜索引擎设置（风格设置管理区）使用说明、占位符规则、数据迁移与自检脚本 |
 | [docs/migration-plan.md](./docs/migration-plan.md) | 从 Go 版迁移到 Worker 的设计与阶段计划（历史文档） |
 | [docs/todo.md](./docs/todo.md) | 移植过程中收集的需求 / 待办清单 |
 | [docs/upstream/README.md](./docs/upstream/README.md) | 上游原版 README（特性、截图、致谢） |
@@ -92,6 +93,10 @@ npm run dev:web    # 终端 2: 前端热更新 (http://127.0.0.1:1002)
 | 站点图标 | 抓取后下载存至 R2（与手动上传的图标统一存放于 R2） |
 | 鉴权 | 内存 Token → JWT (无状态, 7 天有效期) |
 | 登录保护 | 验证码/邮件 → KV 级失败限流 (同一 IP 10 分钟内最多失败 5 次) |
+
+> 「v1.3.0」指本移植版所基于的上游**最后一个开源代码版本**：上游自 v1.4.0 起转为闭源发布
+> （最新发布版本 v1.8.1，2025-12-31），其 README 至今仍写明「目前开源最新版本为 v1.3.0」。
+> 上游完整更新日志见 <https://doc.sun-panel.top/zh_cn/update/update_log.html>。
 
 > 前端构建产物统一输出到根目录 `dist/`，由 Worker 静态资源托管；`frontend/` 仅存放源码。
 

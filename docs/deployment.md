@@ -1,6 +1,6 @@
 # 部署与本地开发
 
-> 本文是 [README](../README.md) 中「Cloudflare 部署」章节的完整版。
+> 本文承接根 [README](../README.md) 的「🚀 快速开始」章节，是部署与本地开发的完整说明。
 > 目标形态：**单个 Cloudflare Worker 同时提供 API 与前端静态资源**。
 
 ## 技术栈
@@ -21,11 +21,12 @@
 ├── src/                     # Worker 后端源码 (Hono)
 │   ├── api/                 # 路由: panel/ 与 system/ 分层，与前端 src/api/ 一一对应
 │   ├── middleware/          # JWT 鉴权中间件
-│   └── utils/               # 响应格式 / 密码 / JWT / 文件 / 系统设置
+│   └── utils/               # 响应格式 / 密码 / JWT / 文件 / 系统设置 / 站点图标
 ├── migrations/              # D1 数据库迁移
 ├── frontend/                # Vue 3 前端 (npm workspace)
 ├── dist/                    # 前端构建产物 (gitignored, 由 Worker 静态托管)
-├── docs/                    # 项目文档 (部署、迁移计划、待办、上游资料)
+├── docs/                    # 项目文档 (部署、搜索引擎、迁移计划、待办、上游资料)
+├── scratch/                 # 自检脚本 (搜索引擎工具函数 / userConfig 合并语义)
 ├── reference/               # 上游源码对照副本 (gitignored, 不参与构建)
 ├── wrangler.toml            # Worker 配置 (D1/KV/R2/assets 绑定)
 ├── .dev.vars                # 本地开发环境变量 (gitignored, 模板见 .dev.vars.example)
@@ -36,11 +37,15 @@
 ## 前置要求
 
 1. 注册 [Cloudflare](https://dash.cloudflare.com) 账号
-2. 安装 [Node.js](https://nodejs.org) 18+ 和 [Wrangler](https://developers.cloudflare.com/workers/wrangler/)：
+2. 安装 [Node.js](https://nodejs.org) **22+** 和 [Wrangler](https://developers.cloudflare.com/workers/wrangler/)：
    ```bash
    npm install -g wrangler
    wrangler login
    ```
+
+> 版本下限来自 wrangler 自身：仓库锁定 `wrangler ^4.45.0`，当前 4.x 要求 Node ≥ 22
+> （安装后会提示 `Wrangler requires at least Node.js v22.0.0`；Node 18 已 EOL）。
+> 走方式一（Workers Git 集成）时不需要本地 Node，Cloudflare 构建镜像默认使用 Node 24。
 
 ## 方式一: Workers Git 集成 (推荐, 自动创建资源 + 自动迁移)
 
@@ -49,15 +54,21 @@
 1. 进入 Cloudflare Dashboard → **Workers & Pages → Create → Import a repository**，
    选择本仓库（Worker 名称需与 `wrangler.toml` 中的 `name = "sun-panel"` 一致）
 2. **Build command**: `npm run build`
-   > 不要写成 `npm install && npm run build`：平台在执行构建命令前已经跑过 `npm clean-install`，
-   > 再装一遍依赖会让构建白白多花几分钟（实测 install 阶段约 8 分钟）。
+   > 不要写成 `npm install && npm run build`：Workers Builds 在执行构建命令前会**自动安装依赖**
+   > （官方文档中可用 `SKIP_DEPENDENCY_INSTALL` 关闭这一行为），再装一遍依赖会让构建白白多花几分钟
+   > （实测 install 阶段约 8 分钟）。
 3. **Deploy command**:
    ```bash
    npx wrangler deploy && npx wrangler d1 migrations apply sun-panel --remote
    ```
+   - 先 `deploy` 后迁移：`wrangler.toml` 里没有 `database_id` 时，D1 是在部署阶段由自动资源供应
+     创建的，迁移命令只能作用于已存在的库（顺序颠倒会报
+     `Couldn't find an auto-provisioned D1 DB named 'sun-panel' for binding 'DB'. Run 'wrangler deploy' to provision it...`）
    - 部署时 wrangler (>= 4.45) 检测到配置中的 D1/KV/R2 资源不存在会**自动创建**并绑定
      ([自动资源供应](https://developers.cloudflare.com/changelog/post/2025-10-24-automatic-resource-provisioning/), Open Beta)
-   - 构建环境自动注入 `CLOUDFLARE_API_TOKEN`，无需配置任何密钥即可执行迁移
+   - `wrangler deploy` 用构建环境注入的 API token 就能完成；但 Workers Builds 自动创建的 token
+     权限只有 Workers Scripts / KV / R2 (edit) 等，**不含 D1**，远程迁移可能因此报鉴权错误。
+     遇到时请在 Worker → **Settings → Build → API token** 换成（或新建）一个带 D1 编辑权限的 token
 4. 首次部署成功后，设置一次 JWT 密钥（Secret 无法由构建创建）：
    Worker → Settings → Variables and Secrets → 添加 `JWT_SECRET`（或本地执行 `npx wrangler secret put JWT_SECRET`）
 
@@ -87,8 +98,10 @@ npx wrangler kv namespace create sun-panel-login-rate
 npx wrangler r2 bucket create sun-panel-files
 ```
 
-手动创建后需将输出的 `database_id` 填入 `wrangler.toml` 的
-`[[d1_databases]]`，将 KV 的 `id` 填入 `[[kv_namespaces]]`。
+手动创建后需自行把输出的 `database_id` 加到 `wrangler.toml` 的 `[[d1_databases]]`、
+把 KV 的 `id` 加到 `[[kv_namespaces]]`（当前配置里这两个字段是留空的）。
+不手动创建也可以：部署阶段由自动资源供应完成创建，本地交互式 `wrangler deploy`
+还会把生成的 id 写回配置文件（可保存或丢弃）；CI 环境不回写，但后续部署同样可用。
 
 ## 构建与部署
 
@@ -99,20 +112,24 @@ npm install
 # 2. 构建前端 (输出到 dist/, 由 Worker 自动托管)
 npm run build
 
-# 3. 应用数据库迁移 (远程 D1)
-npm run migrations:apply
-
-# 4. 设置 JWT 密钥 (登录签名用)
+# 3. 设置 JWT 密钥 (登录签名用)
 npx wrangler secret put JWT_SECRET
 
-# 5. 部署
+# 4. 部署 (首次部署会按 wrangler.toml 创建并绑定 D1/KV/R2)
 npm run deploy
+
+# 5. 应用数据库迁移 (远程 D1; 需 D1 已存在, 因此放在部署之后)
+npm run migrations:apply
 ```
+
+> **顺序不要颠倒**：未填 `database_id` 时 D1 由第一次 `wrangler deploy` 创建，
+> 先执行 `npm run migrations:apply` 会因为找不到数据库而失败。
+> 已按上一节手动创建过 D1 的话，先迁移再部署也可以。
 
 部署完成后访问输出的 URL（如 `https://sun-panel.xxx.workers.dev`），
 使用默认账号 `admin` / `12345678` 登录。
 
-> 也可执行 `npm run deploy:all` 一步完成「构建前端 + 部署」。
+> 也可执行 `npm run deploy:all` 一步完成「构建前端 + 部署」（迁移仍需单独执行）。
 
 ## 本地开发与测试
 
@@ -168,9 +185,24 @@ Error: ENOENT: no such file or directory, open '.env'
 
 **构建耗时过长（install 阶段出现两次、共十余分钟）**
 
-Workers Build 在执行构建命令前已经跑过 `npm clean-install`，Build command 再写一次
+Workers Builds 在执行构建命令前会自动安装依赖，Build command 再写一次
 `npm install` 会重复装依赖。把 Build command 从 `npm install && npm run build` 改为
 `npm run build` 即可。
+
+**本地/首次部署时 `npm run migrations:apply` 报找不到数据库**
+
+```
+Couldn't find an auto-provisioned D1 DB named 'sun-panel' for binding 'DB'.
+Run 'wrangler deploy' to provision it, or add 'database_name' / 'database_id' to your config.
+```
+
+原因：未填 `database_id` 时 D1 由 `wrangler deploy` 创建，迁移命令只作用于已存在的库。
+先执行 `npm run deploy`，再执行 `npm run migrations:apply`。
+
+**Workers Builds 的 Deploy command 在迁移步骤报鉴权错误**
+
+自动创建的构建 token 不含 D1 权限。在 Worker → **Settings → Build → API token**
+换成带 D1 编辑权限的 token 后重新构建。
 
 ## 与上游 (Sun-Panel v1.3.0) 的差异
 
@@ -183,5 +215,9 @@ Workers Build 在执行构建命令前已经跑过 `npm clean-install`，Build c
 | 站点图标 | 抓取后下载存至 R2（与手动上传的图标统一存放于 R2） |
 | 鉴权 | 内存 Token → JWT (无状态, 7 天有效期) |
 | 登录保护 | 验证码/邮件 → KV 级失败限流 (同一 IP 10 分钟内最多失败 5 次) |
+
+> 「v1.3.0」指本移植版所基于的上游**最后一个开源代码版本**：上游自 v1.4.0 起转为闭源发布
+> （最新发布版本 v1.8.1，2025-12-31），其 README 至今仍写明「目前开源最新版本为 v1.3.0」。
+> 上游完整更新日志见 <https://doc.sun-panel.top/zh_cn/update/update_log.html>。
 
 > 前端构建产物统一输出到根目录 `dist/`，由 Worker 静态资源托管；`frontend/` 仅存放源码。

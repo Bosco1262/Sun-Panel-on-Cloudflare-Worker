@@ -525,7 +525,7 @@ function handleAddItem(itemIconGroupId?: number) {
     />
 
     <!-- 悬浮按钮 -->
-    <div class="fixed-element shadow-[0_0_10px_2px_rgba(0,0,0,0.2)]">
+    <div class="fixed-element fixed-element-shadow">
       <NButtonGroup vertical>
         <!-- 网络模式切换按钮组 -->
         <NButton
@@ -569,7 +569,7 @@ function handleAddItem(itemIconGroupId?: number) {
       :bottom="10"
       style="background-color:transparent;border: none;box-shadow: none;"
     >
-      <div class="shadow-[0_0_10px_2px_rgba(0,0,0,0.2)]">
+      <div class="fixed-element-shadow">
         <NButton color="#2a2a2a6b">
           <template #icon>
             <SvgIcon class="text-white font-xl" icon="icon-park-outline:to-top" />
@@ -656,6 +656,17 @@ html {
   /* 距离屏幕顶部的距离 */
   bottom: 50px;
   /* 距离屏幕左侧的距离 */
+  /* 与按钮组外圈的圆角保持一致, 否则阴影会在四个角露出方角 */
+  border-radius: 3px;
+}
+
+/*
+ * 悬浮按钮的投影
+ * 不用 box-shadow: 它按容器的矩形外框绘制, 而按钮组的四个角是圆的,
+ * 会在四角留下一小片不透明像素; drop-shadow 按实际渲染出的圆角轮廓绘制, 四角始终干净。
+ */
+.fixed-element-shadow {
+  filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.25));
 }
 
 .icon-info-box {

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   buildSearchUrl,
   deduceTemplateFromTestUrl,
@@ -75,12 +77,43 @@ eq(
 )
 
 console.log('== validateSearchEngine ==')
-eq('缺名称', validateSearchEngine({ id: '1', title: '', url: 'https://a.com?q=%s' }).titleError, 'deskModule.searchBox.engineNameRequired')
-eq('名称超长', validateSearchEngine({ id: '1', title: 'x'.repeat(21), url: 'https://a.com?q=%s' }).titleError, 'deskModule.searchBox.engineNameTooLong')
-eq('地址非法', validateSearchEngine({ id: '1', title: 'a', url: 'a.com?q=%s' }).urlError, 'deskModule.searchBox.engineUrlInvalid')
-eq('图标非法', validateSearchEngine({ id: '1', title: 'a', url: 'https://a.com', iconSrc: 'javascript:alert(1)' }).iconError, 'deskModule.searchBox.engineIconUrlInvalid')
+// 校验返回的 i18n key 必须与 locales 里的命名空间一致 (deskModule.searchEngine.*),
+// 否则表单会把原始 key 直接显示给用户
+eq('缺名称', validateSearchEngine({ id: '1', title: '', url: 'https://a.com?q=%s' }).titleError, 'deskModule.searchEngine.engineNameRequired')
+eq('名称超长', validateSearchEngine({ id: '1', title: 'x'.repeat(21), url: 'https://a.com?q=%s' }).titleError, 'deskModule.searchEngine.engineNameTooLong')
+eq('缺地址', validateSearchEngine({ id: '1', title: 'a', url: '' }).urlError, 'deskModule.searchEngine.engineUrlRequired')
+eq('地址非法', validateSearchEngine({ id: '1', title: 'a', url: 'a.com?q=%s' }).urlError, 'deskModule.searchEngine.engineUrlInvalid')
+eq('图标非法', validateSearchEngine({ id: '1', title: 'a', url: 'https://a.com', iconSrc: 'javascript:alert(1)' }).iconError, 'deskModule.searchEngine.engineIconUrlInvalid')
 eq('站内相对路径图标合法', validateSearchEngine({ id: '1', title: 'a', url: 'https://a.com', iconSrc: '/uploads/x.png' }).valid, true)
 eq('全通过', validateSearchEngine({ id: '1', title: 'a', url: 'https://a.com', iconSrc: 'https://a.com/f.ico' }).valid, true)
+
+// 所有校验错误文案都必须存在于 zh-CN / en-US 的 deskModule.searchEngine 命名空间下
+console.log('== 校验文案 key 与 locales 对齐 ==')
+{
+  const zhLocale = JSON.parse(readFileSync(join(process.cwd(), 'frontend/src/locales/zh-CN.json'), 'utf8'))
+  const enLocale = JSON.parse(readFileSync(join(process.cwd(), 'frontend/src/locales/en-US.json'), 'utf8'))
+  const samples: DeskModule.SearchBox.SearchEngine[] = [
+    { id: '1', title: '', url: '' },
+    { id: '1', title: 'x'.repeat(21), url: '' },
+    { id: '1', title: 'a', url: 'bad-url' },
+    { id: '1', title: 'a', url: 'https://a.com', iconSrc: 'javascript:1' },
+  ]
+  const keys = new Set<string>()
+  for (const sample of samples) {
+    const r = validateSearchEngine(sample)
+    for (const k of [r.titleError, r.urlError, r.iconError]) {
+      if (k)
+        keys.add(k)
+    }
+  }
+  eq('覆盖到全部 5 个校验文案', keys.size, 5)
+  for (const key of keys) {
+    const path = key.split('.')
+    const pick = (obj: Record<string, unknown>) => path.reduce<unknown>((acc, p) => (acc as Record<string, unknown>)?.[p], obj)
+    eq(`zh-CN 存在 ${key}`, typeof pick(zhLocale), 'string')
+    eq(`en-US 存在 ${key}`, typeof pick(enLocale), 'string')
+  }
+}
 
 console.log('== isDuplicateEngine ==')
 const list = [
