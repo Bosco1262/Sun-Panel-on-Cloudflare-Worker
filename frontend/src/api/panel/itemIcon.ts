@@ -48,3 +48,19 @@ export function getSiteFavicon<T>(url: string) {
     data: { url },
   })
 }
+
+// 获取站点图标候选列表 (多候选时前端弹窗选择)
+export function getSiteFaviconCandidates<T>(url: string) {
+  return post<T>({
+    url: '/panel/itemIcon/getSiteFaviconCandidates',
+    data: { url },
+  })
+}
+
+// 保存选中的站点图标 (url = 选中的候选, pageUrl = 用户填写的站点地址)
+export function saveSiteFavicon<T>(url: string, pageUrl: string) {
+  return post<T>({
+    url: '/panel/itemIcon/saveSiteFavicon',
+    data: { url, pageUrl },
+  })
+}

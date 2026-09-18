@@ -233,18 +233,16 @@ function handleSave() {
 
 <template>
   <div class="w-full">
-    <!-- 操作区: 拆成两行留出间距, 破坏性的「重置」单独放到底部, 避免按钮挤在一起 -->
-    <div class="flex flex-col gap-[8px]">
-      <div class="flex items-center flex-wrap gap-[8px]">
-        <NButton v-if="!sortStatus" size="small" type="success" @click="handleAdd">
-          {{ $t('deskModule.searchEngine.addEngine') }}
-        </NButton>
-        <NButton v-else size="small" type="warning" @click="handleChangeSort">
-          {{ $t('common.saveSort') }}
-        </NButton>
-      </div>
+    <!-- 操作区: 三个按钮排在同一行, 窗口过窄时自动换行; 破坏性的「重置」单独放到底部 -->
+    <div class="flex items-center flex-wrap gap-[8px]">
+      <NButton v-if="!sortStatus" size="small" type="success" @click="handleAdd">
+        {{ $t('deskModule.searchEngine.addEngine') }}
+      </NButton>
+      <NButton v-else size="small" type="warning" @click="handleChangeSort">
+        {{ $t('common.saveSort') }}
+      </NButton>
 
-      <div v-if="!sortStatus" class="flex items-center flex-wrap gap-[8px]">
+      <template v-if="!sortStatus">
         <NButton v-if="engineList.length > 1" size="small" @click="sortStatus = true">
           {{ $t('common.sort') }}
         </NButton>
@@ -252,7 +250,7 @@ function handleSave() {
         <NButton size="small" @click="handleRestoreBuiltin">
           {{ $t('deskModule.searchEngine.restoreBuiltin') }}
         </NButton>
-      </div>
+      </template>
     </div>
 
     <!-- 列表为空: 搜索框仍在用内置默认引擎, 这里给出说明 -->

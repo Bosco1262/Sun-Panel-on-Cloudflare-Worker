@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { NAlert, NButton, NButtonGroup, NCard, NEllipsis, NGrid, NGridItem, NImage, NImageGroup, NSpin, useDialog, useMessage } from 'naive-ui'
+import { NAlert, NButton, NButtonGroup, NCard, NEllipsis, NGrid, NGridItem, NImage, NImageGroup, NSpin, NSwitch, useDialog, useMessage } from 'naive-ui'
 import { onMounted, ref } from 'vue'
-import { deletes, getList } from '@/api/system/file'
+import { cleanUnused, deletes, getList } from '@/api/system/file'
+import { getStorageSettings, saveStorageSettings } from '@/api/system/setting'
 import { set as savePanelConfig } from '@/api/panel/userConfig'
 import { RoundCardModal, SvgIcon } from '@/components/common'
 import { copyToClipboard, timeFormat } from '@/utils/cmn'
@@ -18,6 +19,10 @@ const ms = useMessage()
 const dialog = useDialog()
 const panelStore = usePanelState()
 const loading = ref(false)
+const cleaning = ref(false)
+/** 删除项目/分组时是否自动回收未引用图片 (默认开, 与接口默认值一致) */
+const autoCleanUnused = ref(true)
+const savingSetting = ref(false)
 const infoModalState = ref<InfoModalState>({
   show: false,
   title: '',
@@ -73,13 +78,83 @@ function handleInfoClick(fileInfo: File.Info) {
   infoModalState.value.show = true
 }
 
+// 清理未被引用的文件: 删除项目/分组后, 对应的图片会变成孤儿 (R2 里有对象、列表里还有记录)
+function handleCleanUnused() {
+  dialog.warning({
+    title: t('common.warning'),
+    content: t('apps.uploadsFileManager.cleanUnusedWarning'),
+    positiveText: t('common.confirm'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: () => {
+      cleanUnusedImages()
+    },
+  })
+}
+
+async function cleanUnusedImages() {
+  cleaning.value = true
+  try {
+    const { code, msg, data } = await cleanUnused<{ checked: number; deleted: number }>()
+    if (code === 0) {
+      ms.success(t('apps.uploadsFileManager.cleanUnusedDone', { count: data?.deleted ?? 0 }))
+      getFileList()
+    }
+    else {
+      ms.error(`${t('common.failed')}:${msg}`)
+    }
+  }
+  catch {
+    ms.error(t('common.failed'))
+  }
+  finally {
+    cleaning.value = false
+  }
+}
+
 function handleSetWallpaper(imgSrc: string) {
   panelStore.panelConfig.backgroundImageSrc = imgSrc
   savePanelConfig({ panel: panelStore.panelConfig })
 }
 
+// 删除项目/分组时是否自动回收未引用的图片
+// 关掉后图片保留在列表里可复用, 需要时再手动点「清理未引用文件」
+async function handleAutoCleanChange(value: boolean) {
+  const previous = autoCleanUnused.value
+  autoCleanUnused.value = value
+  savingSetting.value = true
+  try {
+    const { code, msg } = await saveStorageSettings<unknown>(value)
+    if (code === 0) {
+      ms.success(t('common.saveSuccess'))
+    }
+    else {
+      autoCleanUnused.value = previous
+      ms.error(`${t('common.failed')}:${msg}`)
+    }
+  }
+  catch {
+    autoCleanUnused.value = previous
+    ms.error(t('common.failed'))
+  }
+  finally {
+    savingSetting.value = false
+  }
+}
+
+async function loadStorageSettings() {
+  try {
+    const { code, data } = await getStorageSettings<{ autoCleanUnused: boolean }>()
+    if (code === 0 && typeof data?.autoCleanUnused === 'boolean')
+      autoCleanUnused.value = data.autoCleanUnused
+  }
+  catch {
+    // 读取失败保持默认(开), 与接口侧默认值一致
+  }
+}
+
 onMounted(() => {
   getFileList()
+  loadStorageSettings()
 })
 </script>
 
@@ -89,6 +164,16 @@ onMounted(() => {
     <NAlert type="info" :bordered="false">
       {{ $t('apps.uploadsFileManager.alertText') }}
     </NAlert>
+    <div class="flex items-center justify-between flex-wrap gap-2 mt-2">
+      <div class="flex items-center flex-wrap gap-2">
+        <NSwitch :value="autoCleanUnused" size="small" :loading="savingSetting" @update:value="handleAutoCleanChange" />
+        <span class="text-xs">{{ $t('apps.uploadsFileManager.autoCleanUnused') }}</span>
+        <span class="text-xs text-slate-500 dark:text-slate-400">{{ $t('apps.uploadsFileManager.autoCleanUnusedTip') }}</span>
+      </div>
+      <NButton size="small" :loading="cleaning" @click="handleCleanUnused">
+        {{ $t('apps.uploadsFileManager.cleanUnused') }}
+      </NButton>
+    </div>
     <div class="flex justify-center mt-2">
       <div v-if="imageList.length === 0 && !loading" class="flex">
         {{ $t('apps.uploadsFileManager.nothingText') }}

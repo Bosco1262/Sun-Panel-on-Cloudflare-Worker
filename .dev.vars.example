@@ -1,4 +1,14 @@
 # 本地开发环境变量 (仅 wrangler dev 使用)
 # 用法: 复制为 .dev.vars 后按需修改 (.dev.vars 已被 .gitignore 排除)
-# 生产环境请使用: npx wrangler secret put JWT_SECRET
+# 生产环境请使用: npx wrangler secret put <名称>
 JWT_SECRET=dev-secret-change-me
+
+# 密码哈希 pepper (可选, 强烈建议配置)
+# 配置后新密码/改密会使用 PBKDF2-SHA256 + 随机盐 + pepper; 旧的三重 MD5 哈希仍可登录,
+# 并在登录成功后自动升级。⚠️ 一旦配置就不要随意更换: 换了之后旧哈希无法校验
+# (服务端会返回明确的 1009 提示而不是「密码错误」), 需要恢复原有值。
+# PASSWORD_PEPPER=please-change-me
+
+# PBKDF2 迭代数 (可选, 默认 5000 ≈ 2.6ms CPU)
+# Workers 免费版每请求 CPU 上限 10ms, 设太大登录会报 1102; 升级到 Paid 后可调到 210000。
+# PASSWORD_PBKDF2_ITERATIONS=5000

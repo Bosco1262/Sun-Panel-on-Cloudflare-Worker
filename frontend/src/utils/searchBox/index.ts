@@ -10,12 +10,9 @@ import { SearchEngineOpenMethodEnum } from '@/enums/panel'
  * 1. 关键词占位符不再强制要求 %s, 同时兼容 {keyword} / {q}; 模板中没有任何占位符时
  *    自动把关键词追加到地址末尾, 保证「填一个能打开的搜索地址」即可用。
  * 2. 列表项带稳定 id, 当前选中项按 id 记录, 不再依赖对象引用比较。
- * 3. normalize 兼容三种历史数据: 旧 module_config 结构 (newWindowOpen + iconSrc)、
- *    旧内置引擎 (无 id)、以及新结构, 老用户升级后配置不会丢。
+ * 3. normalize 兼容历史结构: 旧内置引擎 (无 id) 与旧字段名 (newWindowOpen + iconSrc),
+ *    保证本地缓存里残留的老数据升级后不丢。
  */
-
-/** 旧版搜索引擎配置存放的 module_config 名称 (迁移用, 见 panel store) */
-export const SEARCH_BOX_LEGACY_MODULE_NAME = 'deskModuleSearchBox'
 
 /** 新用户 / 重置时使用的内置搜索引擎 id */
 const BUILTIN_ENGINE_IDS = ['google', 'baidu', 'bing']
@@ -81,21 +78,8 @@ function toStr(value: unknown): string {
 }
 
 /**
- * 云端是否已经存在「新结构」的搜索引擎配置
- *
- * engineList 字段本身就是新结构的版本标记:
- * - 老版本存在 module_config 里的数据没有该字段
- * - 用户主动清空引擎时列表为 [], 该字段依然存在 (因此清空不会被误判成"未配置")
- */
-export function hasStoredSearchEngineConfig(raw: unknown): boolean {
-  if (!raw || typeof raw !== 'object')
-    return false
-  return Array.isArray((raw as Record<string, unknown>).engineList)
-}
-
-/**
  * 把云端 / 历史数据结构统一成 SearchEngineConfig
- * - 兼容旧结构中的 iconSrc 字段与 newWindowOpen 布尔值
+ * - 兼容旧结构中的 iconSrc 字段与 newWindowOpen 布尔值 (本地缓存里可能还有)
  * - 过滤空项、补齐缺失 id、去重 id
  */
 export function normalizeSearchEngineConfig(raw: unknown): DeskModule.SearchBox.SearchEngineConfig {
@@ -105,7 +89,7 @@ export function normalizeSearchEngineConfig(raw: unknown): DeskModule.SearchBox.
 
   const rawList = Array.isArray(source.engineList) ? source.engineList : null
 
-  // 老结构(module_config 或 v1.8 上游的 searchEngineList) 没有 id, 这里补齐
+  // 老结构(上游 v1.8 的 searchEngineList) 没有 id, 这里补齐
   if (!rawList && Array.isArray(source.searchEngineList))
     return normalizeEngineList(source.searchEngineList, source)
   if (!rawList)

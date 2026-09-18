@@ -4,7 +4,6 @@ import {
   buildSearchUrl,
   deduceTemplateFromTestUrl,
   hasPlaceholder,
-  hasStoredSearchEngineConfig,
   normalizeSearchEngineConfig,
   validateSearchEngine,
   isDuplicateEngine,
@@ -124,11 +123,6 @@ eq('同名', isDuplicateEngine(list, { id: 'c', title: 'google', url: 'https://x
 eq('同地址', isDuplicateEngine(list, { id: 'c', title: 'X', url: 'https://B.COM?q=%s' }), 'url')
 eq('编辑自身不算重复', isDuplicateEngine(list, { id: 'a', title: 'Google', url: 'https://g.com?q=%s' }), '')
 eq('全新', isDuplicateEngine(list, { id: 'c', title: 'X', url: 'https://x.com' }), '')
-
-console.log('== hasStoredSearchEngineConfig ==')
-eq('未配置', hasStoredSearchEngineConfig(undefined), false)
-eq('老 module_config 数据', hasStoredSearchEngineConfig({ currentSearchEngine: {}, searchEngineList: [], newWindowOpen: false }), false)
-eq('新结构', hasStoredSearchEngineConfig({ currentEngineId: 'a', engineList: [] }), true)
 
 console.log('== normalizeSearchEngineConfig ==')
 const legacy = normalizeSearchEngineConfig({

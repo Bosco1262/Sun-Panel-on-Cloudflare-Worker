@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { VueDraggable } from 'vue-draggable-plus'
 import { NBackTop, NButton, NButtonGroup, NDropdown, NModal, NSkeleton, NSpin, useDialog, useMessage } from 'naive-ui'
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { AppIcon, AppStarter, EditItem } from './components'
 import { Clock, SearchBox } from '@/components/deskModule'
 import { SvgIcon } from '@/components/common'
 import { deletes, getListByGroupId, saveSort } from '@/api/panel/itemIcon'
-import { getList as getGroupList } from '@/api/panel/itemIconGroup'
+import { getListWithItems as getGroupListWithItems } from '@/api/panel/itemIconGroup'
 
 import { setTitle, updateLocalUserInfo } from '@/utils/cmn'
+import { buildItemGroupViews } from '@/utils/panelFilter'
 import { useAuthStore, usePanelState } from '@/store'
 import { PanelPanelConfigStyleEnum, PanelStateNetworkModeEnum } from '@/enums'
 import { VisitMode } from '@/enums/auth'
@@ -46,7 +47,26 @@ const currentAddItenIconGroupId = ref<number | undefined>()
 const settingModalShow = ref(false)
 
 const items = ref<ItemGroup[]>([])
-const filterItems = ref<ItemGroup[]>([])
+/** 搜索框里的关键词: 面板过滤的唯一数据源 (由搜索框的 itemSearch 事件写入) */
+const filterKeyword = ref('')
+
+/** 是否按关键词过滤面板 (风格设置里关闭「允许搜索栏搜索项目」或关键词为空时不生效) */
+const isFiltering = computed(() =>
+  filterKeyword.value.trim() !== '' && panelState.panelConfig.searchBoxSearchIcon === true,
+)
+
+/**
+ * 渲染用的分组视图
+ *
+ * 视图元素携带的是**原始分组对象**, 交互回调直接改它。
+ * 过滤后命中的分组下标会偏移, 旧实现按下标回写 items.value, 会把 hover / 排序作用到别的分组上。
+ */
+const filterItems = computed(() => buildItemGroupViews(items.value, filterKeyword.value, isFiltering.value))
+
+/** 过滤提示用: 命中项目数 */
+const filteredItemCount = computed(() =>
+  filterItems.value.reduce((total, view) => total + (view.items?.length ?? 0), 0),
+)
 
 function openPage(openMethod: number, url: string, title?: string) {
   switch (openMethod) {
@@ -68,8 +88,9 @@ function openPage(openMethod: number, url: string, title?: string) {
   }
 }
 
-function handleItemClick(itemGroupIndex: number, item: Panel.ItemInfo) {
-  if (items.value[itemGroupIndex] && items.value[itemGroupIndex].sortStatus) {
+function handleItemClick(group: ItemGroup, item: Panel.ItemInfo) {
+  // 排序模式下点击项目 = 编辑该项目
+  if (group.sortStatus) {
     handleEditItem(item)
     return
   }
@@ -89,28 +110,30 @@ function handWindowIframeIdLoad(payload: Event) {
 }
 
 function getList() {
-  // 获取组数据
-  getGroupList<Common.ListResponse<ItemGroup[]>>().then(({ code, data }) => {
+  // 分组 + 项目一次取回 (旧流程是「先查分组, 再逐个分组查项目」= 1+N 次 Worker 请求)
+  getGroupListWithItems<Common.ListResponse<ItemGroup[]>>().then(({ code, data }) => {
     // 未登录/无权限时拦截器已跳转登录页，此处直接返回避免读取 undefined
     if (code !== 0 || !data?.list)
       return
 
     items.value = data.list
-    for (let i = 0; i < data.list.length; i++) {
-      const element = data.list[i]
-      if (element.id)
-        updateItemIconGroupByNet(i, element.id)
-    }
-    filterItems.value = items.value
+    // 过滤结果由 filterItems 计算属性派生, 无需在此重置
     // console.log(items)
   })
 }
 
-// 从后端获取组下面的图标
-function updateItemIconGroupByNet(itemIconGroupIndex: number, itemIconGroupId: number) {
-  getListByGroupId<Common.ListResponse<Panel.ItemInfo[]>>(itemIconGroupId).then((res) => {
-    if (res.code === 0)
-      items.value[itemIconGroupIndex].items = res.data.list
+// 从后端获取组下面的图标 (按 id 定位分组, 不依赖数组下标, 过滤时也不会串组)
+function updateItemIconGroupByNet(group: ItemGroup) {
+  const groupId = group.id
+  if (!groupId)
+    return
+
+  getListByGroupId<Common.ListResponse<Panel.ItemInfo[]>>(groupId).then((res) => {
+    if (res.code !== 0)
+      return
+    const target = items.value.find(item => item.id === groupId)
+    if (target)
+      target.items = res.data.list
   })
 }
 
@@ -161,8 +184,9 @@ function handleRightMenuSelect(key: string | number) {
   }
 }
 
-function handleContextMenu(e: MouseEvent, itemGroupIndex: number, item: Panel.ItemInfo) {
-  if (items.value[itemGroupIndex] && items.value[itemGroupIndex].sortStatus)
+function handleContextMenu(e: MouseEvent, group: ItemGroup, item: Panel.ItemInfo) {
+  // 排序模式下不弹右键菜单
+  if (group.sortStatus)
     return
 
   e.preventDefault()
@@ -264,11 +288,7 @@ onMounted(() => {
   getList()
 
   // 更新同步云端配置 (含搜索引擎配置)
-  panelState.updatePanelConfigByCloud().then(() => {
-    // 旧版把搜索引擎存在 module_config 中, 登录态下迁移到 user_config
-    if (authStore.visitMode === VisitMode.VISIT_MODE_LOGIN)
-      panelState.migrateLegacySearchEngine()
-  })
+  panelState.updatePanelConfigByCloud()
 
   // 设置标题
   if (panelState.panelConfig.logoText)
@@ -299,45 +319,44 @@ function getGroupHideDescription(group: Panel.ItemIconGroup): boolean {
   return group.hideDescription === 1 || panelState.panelConfig.iconTextInfoHideDescription === true
 }
 
-// 前端搜索过滤
+// 搜索框输入: 只记录关键词, 过滤结果由 filterItems 计算属性派生
+// (旧实现在这里做浅拷贝 + 按下标回写, 过滤后下标偏移会把 hover / 排序作用到别的分组)
 function itemFrontEndSearch(keyword?: string) {
-  keyword = keyword?.trim()
-  if (keyword !== '' && panelState.panelConfig.searchBoxSearchIcon) {
-    const filteredData = ref<ItemGroup[]>([])
-    for (let i = 0; i < items.value.length; i++) {
-      const element = items.value[i].items?.filter((item: Panel.ItemInfo) => {
-        return (
-          item.title.toLowerCase().includes(keyword?.toLowerCase() ?? '')
-          || item.url.toLowerCase().includes(keyword?.toLowerCase() ?? '')
-          || item.description?.toLowerCase().includes(keyword?.toLowerCase() ?? '')
-        )
-      })
-      if (element && element.length > 0)
-        filteredData.value.push({ ...items.value[i], items: element, hoverStatus: false })
+  filterKeyword.value = keyword ?? ''
+}
+
+function handleSetHoverStatus(group: ItemGroup, hoverStatus: boolean) {
+  group.hoverStatus = hoverStatus
+}
+
+/**
+ * 切换分组的排序模式
+ *
+ * 过滤中直接忽略: 此时拖拽只作用于命中的子集, 保存排序会把完整列表的顺序写坏。
+ * 开始过滤时也会主动退出所有排序模式 (见下方 watch)。
+ */
+function handleSetSortStatus(group: ItemGroup) {
+  if (isFiltering.value)
+    return
+
+  group.sortStatus = !group.sortStatus
+
+  // 未保存就退出排序: 重新拉取该组, 丢弃本地拖拽顺序
+  if (!group.sortStatus)
+    updateItemIconGroupByNet(group)
+}
+
+// 一旦进入过滤状态, 退出所有分组的排序模式 (过滤结果只是子集, 排序保存会写坏完整顺序)
+watch(isFiltering, (filtering) => {
+  if (!filtering)
+    return
+  for (const group of items.value) {
+    if (group.sortStatus) {
+      group.sortStatus = false
+      updateItemIconGroupByNet(group)
     }
-    filterItems.value = filteredData.value
   }
-  else {
-    filterItems.value = items.value
-  }
-}
-
-function handleSetHoverStatus(groupIndex: number, hoverStatus: boolean) {
-  if (items.value[groupIndex])
-    items.value[groupIndex].hoverStatus = hoverStatus
-}
-
-function handleSetSortStatus(groupIndex: number, sortStatus: boolean) {
-  if (items.value[groupIndex])
-    items.value[groupIndex].sortStatus = sortStatus
-
-  // 并未保存排序重新更新数据
-  if (!sortStatus) {
-    // 单独更新组
-    if (items.value[groupIndex] && items.value[groupIndex].id)
-      updateItemIconGroupByNet(groupIndex, items.value[groupIndex].id as number)
-  }
-}
+})
 
 function handleEditItem(item: Panel.ItemInfo) {
   editItemInfoData.value = item
@@ -399,63 +418,69 @@ function handleAddItem(itemIconGroupId?: number) {
 
         <!-- 应用盒子 -->
         <div :style="{ marginLeft: `${panelState.panelConfig.marginX}px`, marginRight: `${panelState.panelConfig.marginX}px` }">
-          <!-- 组纵向排列 -->
+          <!-- 过滤状态提示 (「允许搜索栏搜索项目」开启且搜索框有关键词时) -->
+          <div v-if="isFiltering" class="mt-[30px] ml-[10px] text-sm text-white/80 text-shadow">
+            {{ $t('deskModule.searchBox.filteringTip', { keyword: filterKeyword.trim(), count: filteredItemCount }) }}
+          </div>
+
+          <!-- 组纵向排列: view 里带的是原始分组对象, 交互回调不再按下标回查 -->
           <div
-            v-for="(itemGroup, itemGroupIndex) in filterItems" :key="itemGroupIndex"
+            v-for="view in filterItems" :key="view.group.id ?? view.group.title"
             class="item-list mt-[50px]"
-            :class="itemGroup.sortStatus ? 'shadow-2xl border shadow-[0_0_30px_10px_rgba(0,0,0,0.3)]  p-[10px] rounded-2xl' : ''"
-            @mouseenter="handleSetHoverStatus(itemGroupIndex, true)"
-            @mouseleave="handleSetHoverStatus(itemGroupIndex, false)"
+            :class="view.group.sortStatus ? 'shadow-2xl border shadow-[0_0_30px_10px_rgba(0,0,0,0.3)]  p-[10px] rounded-2xl' : ''"
+            @mouseenter="handleSetHoverStatus(view.group, true)"
+            @mouseleave="handleSetHoverStatus(view.group, false)"
           >
             <!-- 分组标题 -->
             <div class="text-white text-xl font-extrabold mb-[20px] ml-[10px] flex items-center">
               <span class="group-title text-shadow">
-                {{ itemGroup.title }}
+                {{ view.group.title }}
               </span>
               <div
                 v-if="authStore.visitMode === VisitMode.VISIT_MODE_LOGIN"
                 class="group-buttons ml-2 delay-100 transition-opacity flex"
-                :class="itemGroup.hoverStatus ? 'opacity-100' : 'opacity-0'"
+                :class="view.group.hoverStatus ? 'opacity-100' : 'opacity-0'"
               >
-                <span class="mr-2 cursor-pointer" :title="t('common.add')" @click="handleAddItem(itemGroup.id)">
+                <span class="mr-2 cursor-pointer" :title="t('common.add')" @click="handleAddItem(view.group.id)">
                   <SvgIcon class="text-white font-xl" icon="typcn:plus" />
                 </span>
-                <span class="mr-2 cursor-pointer " :title="t('common.sort')" @click="handleSetSortStatus(itemGroupIndex, !itemGroup.sortStatus)">
+                <!-- 过滤中不提供排序: 拖拽只作用于命中的子集, 保存会把完整列表的顺序写坏 -->
+                <span v-if="!isFiltering" class="mr-2 cursor-pointer " :title="t('common.sort')" @click="handleSetSortStatus(view.group)">
                   <SvgIcon class="text-white font-xl" icon="ri:drag-drop-line" />
                 </span>
               </div>
             </div>
 
             <!-- 详情图标 -->
-            <div v-if="getGroupCardStyle(itemGroup) === PanelPanelConfigStyleEnum.info">
-              <div v-if="itemGroup.items">
+            <div v-if="getGroupCardStyle(view.group) === PanelPanelConfigStyleEnum.info">
+              <div v-if="view.group.items">
                 <VueDraggable
-                  v-model="itemGroup.items" item-key="sort" :animation="300"
+                  v-model="view.group.items" item-key="sort" :animation="300"
                   class="icon-info-box"
                   filter=".not-drag"
-                  :disabled="!itemGroup.sortStatus"
+                  :disabled="!view.group.sortStatus"
                 >
-                  <div v-for="item, index in itemGroup.items" :key="index" :title="item.description" :data-only-name="item.onlyName || undefined" @contextmenu="(e) => handleContextMenu(e, itemGroupIndex, item)">
+                  <div v-for="item, index in view.items" :key="item.id ?? index" :title="item.description" :data-only-name="item.onlyName || undefined" @contextmenu="(e) => handleContextMenu(e, view.group, item)">
                     <AppIcon
-                      :class="itemGroup.sortStatus ? 'cursor-move' : 'cursor-pointer'"
+                      :class="view.group.sortStatus ? 'cursor-move' : 'cursor-pointer'"
                       :item-info="item"
-                      :icon-text-color="getGroupTextColor(itemGroup)"
-                      :icon-text-info-hide-description="getGroupHideDescription(itemGroup)"
+                      :icon-text-color="getGroupTextColor(view.group)"
+                      :icon-text-info-hide-description="getGroupHideDescription(view.group)"
                       :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
                       :style="0"
-                      @click="handleItemClick(itemGroupIndex, item)"
+                      @click="handleItemClick(view.group, item)"
                     />
                   </div>
 
-                  <div v-if="itemGroup.items.length === 0" class="not-drag">
+                  <div v-if="view.group.items.length === 0" class="not-drag">
                     <AppIcon
-                      :class="itemGroup.sortStatus ? 'cursor-move' : 'cursor-pointer'"
+                      :class="view.group.sortStatus ? 'cursor-move' : 'cursor-pointer'"
                       :item-info="{ icon: { itemType: 3, text: 'subway:add' }, title: t('common.add'), url: '', openMethod: 0 }"
-                      :icon-text-color="getGroupTextColor(itemGroup)"
-                      :icon-text-info-hide-description="getGroupHideDescription(itemGroup)"
+                      :icon-text-color="getGroupTextColor(view.group)"
+                      :icon-text-info-hide-description="getGroupHideDescription(view.group)"
                       :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
                       :style="0"
-                      @click="handleAddItem(itemGroup.id)"
+                      @click="handleAddItem(view.group.id)"
                     />
                   </div>
                 </VueDraggable>
@@ -464,35 +489,35 @@ function handleAddItem(itemIconGroupId?: number) {
 
             <!-- APP图标宫型盒子 -->
             <div v-else>
-              <div v-if="itemGroup.items">
+              <div v-if="view.group.items">
                 <VueDraggable
-                  v-model="itemGroup.items" item-key="sort" :animation="300"
+                  v-model="view.group.items" item-key="sort" :animation="300"
                   class="icon-small-box"
 
                   filter=".not-drag"
-                  :disabled="!itemGroup.sortStatus"
+                  :disabled="!view.group.sortStatus"
                 >
-                  <div v-for="item, index in itemGroup.items" :key="index" :title="item.description" :data-only-name="item.onlyName || undefined" @contextmenu="(e) => handleContextMenu(e, itemGroupIndex, item)">
+                  <div v-for="item, index in view.items" :key="item.id ?? index" :title="item.description" :data-only-name="item.onlyName || undefined" @contextmenu="(e) => handleContextMenu(e, view.group, item)">
                     <AppIcon
-                      :class="itemGroup.sortStatus ? 'cursor-move' : 'cursor-pointer'"
+                      :class="view.group.sortStatus ? 'cursor-move' : 'cursor-pointer'"
                       :item-info="item"
-                      :icon-text-color="getGroupTextColor(itemGroup)"
-                      :icon-text-info-hide-description="getGroupHideDescription(itemGroup)"
+                      :icon-text-color="getGroupTextColor(view.group)"
+                      :icon-text-info-hide-description="getGroupHideDescription(view.group)"
                       :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
                       :style="1"
-                      @click="handleItemClick(itemGroupIndex, item)"
+                      @click="handleItemClick(view.group, item)"
                     />
                   </div>
 
-                  <div v-if="itemGroup.items.length === 0" class="not-drag">
+                  <div v-if="view.group.items.length === 0" class="not-drag">
                     <AppIcon
                       class="cursor-pointer"
                       :item-info="{ icon: { itemType: 3, text: 'subway:add' }, title: $t('common.add'), url: '', openMethod: 0 }"
-                      :icon-text-color="getGroupTextColor(itemGroup)"
-                      :icon-text-info-hide-description="getGroupHideDescription(itemGroup)"
+                      :icon-text-color="getGroupTextColor(view.group)"
+                      :icon-text-info-hide-description="getGroupHideDescription(view.group)"
                       :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
                       :style="1"
-                      @click="handleAddItem(itemGroup.id)"
+                      @click="handleAddItem(view.group.id)"
                     />
                   </div>
                 </vuedraggable>
@@ -500,9 +525,9 @@ function handleAddItem(itemIconGroupId?: number) {
             </div>
 
             <!-- 编辑栏 -->
-            <div v-if="itemGroup.sortStatus" class="flex mt-[10px]">
+            <div v-if="view.group.sortStatus" class="flex mt-[10px]">
               <div>
-                <NButton color="#2a2a2a6b" @click="handleSaveSort(itemGroup)">
+                <NButton color="#2a2a2a6b" @click="handleSaveSort(view.group)">
                   <template #icon>
                     <SvgIcon class="text-white font-xl" icon="material-symbols:save" />
                   </template>
@@ -512,6 +537,11 @@ function handleAddItem(itemIconGroupId?: number) {
                 </NButton>
               </div>
             </div>
+          </div>
+
+          <!-- 过滤后一个都没命中 -->
+          <div v-if="isFiltering && filterItems.length === 0" class="mt-[50px] ml-[10px] text-white/80 text-shadow">
+            {{ $t('deskModule.searchBox.filteringEmptyTip', { keyword: filterKeyword.trim() }) }}
           </div>
         </div>
         <div class="mt-5 footer" v-html="panelState.panelConfig.footerHtml" />

@@ -14,3 +14,18 @@ export function saveCustomCode<T>(customCss: string, customJs: string) {
     data: { customCss, customJs },
   })
 }
+
+/** 读取存储设置 (删除项目/分组时是否自动回收未引用图片) */
+export function getStorageSettings<T>() {
+  return post<T>({
+    url: '/system/getStorageSettings',
+  })
+}
+
+/** 保存存储设置 */
+export function saveStorageSettings<T>(autoCleanUnused: boolean) {
+  return post<T>({
+    url: '/system/saveStorageSettings',
+    data: { autoCleanUnused },
+  })
+}

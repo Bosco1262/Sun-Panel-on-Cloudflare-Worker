@@ -1,16 +1,38 @@
-// 站点图标获取: 解析页面 <link rel="icon">, 失败回退 favicon.ico / icon.horse, 返回可下载的图标 URL
+// 站点图标候选获取: 解析页面 <link rel*="icon">, 失败回退 favicon.ico / icon.horse, 返回候选列表供用户选择
+import { normalizeIconContentType } from './file'
+
 const MAX_ICON_SIZE = 1024 * 1024 // 限制 1MB (与 Go 版一致)
 
-export async function getSiteFaviconUrl(pageUrl: string): Promise<string | null> {
+/** 候选上限: 防止畸形页面 (几百条 link) 拖慢解析与弹窗渲染 */
+export const MAX_ICON_CANDIDATES = 12
+
+/** 候选来源: 页面声明 / 站点根 favicon.ico / icon.horse 兜底 */
+export type IconCandidateSource = 'link' | 'favicon.ico' | 'icon-horse'
+
+export interface IconCandidate {
+  url: string
+  sizes?: string
+  type?: string
+  source: IconCandidateSource
+}
+
+/**
+ * 抓取站点图标候选列表
+ *
+ * 与改造前的失败链一致 (页面 <link> → /favicon.ico → icon.horse),
+ * 区别是把「取第一个」变成「返回全部」, 让前端在多候选时弹窗选一张。
+ * 无候选时返回空数组 (不抛错)。
+ */
+export async function getSiteFaviconCandidates(pageUrl: string): Promise<IconCandidate[]> {
   let parsed: URL
   try {
     parsed = new URL(pageUrl)
   }
   catch {
-    return null
+    return []
   }
 
-  // 方案 1: 解析页面 HTML 中的 <link rel="icon">
+  // 方案 1: 解析页面 HTML 中的所有 <link rel*="icon">
   try {
     const resp = await fetch(parsed.toString(), {
       headers: {
@@ -22,47 +44,55 @@ export async function getSiteFaviconUrl(pageUrl: string): Promise<string | null>
     })
     if (resp.ok) {
       const html = await readBodyTruncated(resp, MAX_ICON_SIZE)
-      const icon = extractIconHref(html, parsed)
-      if (icon)
-        return icon
+      const candidates = extractIconCandidates(html, parsed)
+      if (candidates.length > 0)
+        return candidates
     }
   }
   catch {
     // 忽略抓取失败
   }
 
-  // 方案 2: 站点根路径 favicon.ico
+  // 方案 2: 站点根路径 favicon.ico (HEAD 200 才收录)
   try {
-    const resp = await fetch(`${parsed.origin}/favicon.ico`, {
+    const faviconUrl = `${parsed.origin}/favicon.ico`
+    const resp = await fetch(faviconUrl, {
       method: 'HEAD',
       redirect: 'follow',
       signal: AbortSignal.timeout(5000),
     })
     if (resp.ok)
-      return `${parsed.origin}/favicon.ico`
+      return [{ url: faviconUrl, source: 'favicon.ico' }]
   }
   catch {
     // 忽略
   }
 
-  // 方案 3: icon.horse 免费图标服务 (失败则返回 null)
+  // 方案 3: icon.horse 免费图标服务 (仅当前面一个候选都没有时)
   try {
-    const resp = await fetch(`https://icon.horse/icon/${parsed.host}`, {
+    const horseUrl = `https://icon.horse/icon/${parsed.host}`
+    const resp = await fetch(horseUrl, {
       method: 'HEAD',
       redirect: 'follow',
       signal: AbortSignal.timeout(5000),
     })
     if (resp.ok)
-      return `https://icon.horse/icon/${parsed.host}`
+      return [{ url: horseUrl, source: 'icon-horse' }]
   }
   catch {
     // 忽略
   }
 
-  return null
+  return []
 }
 
-// 下载图标二进制 (≤1MB)
+/** 取候选列表第一条 (旧接口 getSiteFavicon 内部使用, 行为与改造前一致) */
+export async function getSiteFaviconUrl(pageUrl: string): Promise<string | null> {
+  const candidates = await getSiteFaviconCandidates(pageUrl)
+  return candidates[0]?.url ?? null
+}
+
+// 下载图标二进制 (≤1MB, 且必须是图片)
 export async function downloadFavicon(url: string): Promise<{ data: ArrayBuffer; contentType: string } | null> {
   try {
     const resp = await fetch(url, {
@@ -80,7 +110,12 @@ export async function downloadFavicon(url: string): Promise<{ data: ArrayBuffer;
     if (data.byteLength > MAX_ICON_SIZE)
       return null
 
-    return { data, contentType: resp.headers.get('content-type') ?? '' }
+    // 非图片内容直接丢弃: 否则第三方页面可以把 HTML/脚本存进 R2, 再由我们的域名同源返回
+    const contentType = normalizeIconContentType(resp.headers.get('content-type') ?? '', url)
+    if (!contentType)
+      return null
+
+    return { data, contentType }
   }
   catch {
     return null
@@ -114,29 +149,75 @@ async function readBodyTruncated(resp: Response, maxBytes: number): Promise<stri
   return text
 }
 
-function extractIconHref(html: string, base: URL): string | null {
-  // rel="icon" 在前, href 在后
-  const relFirst = /<link[^>]+rel=["'][^"']*\bicon\b[^"']*["'][^>]*href=["']([^"']+)["']/i.exec(html)
-  // href 在前, rel 在后
-  const hrefFirst = /<link[^>]+href=["']([^"']+)["'][^>]*rel=["'][^"']*\bicon\b[^"']*["']/i.exec(html)
-
-  const href = relFirst?.[1] || hrefFirst?.[1]
-  if (!href)
-    return null
-
-  // 跳过 data: 内联图片
-  if (/^data:/i.test(href.trim()))
-    return null
-
+/**
+ * 纯函数: 从 HTML 里收集所有图标候选 (不发网络请求, 便于自检)
+ *
+ * - 收集 rel 含 icon 的 <link> (icon / shortcut icon / apple-touch-icon / mask-icon ...)
+ * - 跳过 data: 内联图片与非 http(s) 协议; 按绝对 URL 去重; 保留文档顺序; 上限 12 条
+ * - 与旧实现一致: 去掉查询参数 (避免 ?v= 之类的缓存参数产生重复候选)
+ * - favicon.ico / icon.horse 兜底需要网络探测, 在 getSiteFaviconCandidates 里追加
+ */
+export function extractIconCandidates(html: string, baseUrl: string | URL): IconCandidate[] {
+  let base: URL
   try {
-    const iconUrl = new URL(href, base)
-    if (iconUrl.protocol !== 'http:' && iconUrl.protocol !== 'https:')
-      return null
-    // 与 Go 版一致: 去除参数的图标 URL (scheme://host/path)
-    iconUrl.search = ''
-    return iconUrl.toString()
+    base = typeof baseUrl === 'string' ? new URL(baseUrl) : baseUrl
   }
   catch {
-    return null
+    return []
   }
+
+  const candidates: IconCandidate[] = []
+  const seen = new Set<string>()
+
+  const linkRe = /<link\b[^>]*>/gi
+  let match: RegExpExecArray | null
+  while ((match = linkRe.exec(html)) !== null) {
+    if (candidates.length >= MAX_ICON_CANDIDATES)
+      break
+
+    const tag = match[0]
+    const rel = getTagAttr(tag, 'rel')
+    if (!rel || !rel.toLowerCase().includes('icon'))
+      continue
+
+    const href = getTagAttr(tag, 'href')
+    if (!href || /^data:/i.test(href))
+      continue
+
+    let iconUrl: URL
+    try {
+      iconUrl = new URL(href, base)
+    }
+    catch {
+      continue
+    }
+    if (iconUrl.protocol !== 'http:' && iconUrl.protocol !== 'https:')
+      continue
+
+    iconUrl.search = ''
+    const abs = iconUrl.toString()
+    if (seen.has(abs))
+      continue
+    seen.add(abs)
+
+    const candidate: IconCandidate = { url: abs, source: 'link' }
+    const sizes = getTagAttr(tag, 'sizes')
+    const type = getTagAttr(tag, 'type')
+    if (sizes)
+      candidate.sizes = sizes
+    if (type)
+      candidate.type = type
+    candidates.push(candidate)
+  }
+
+  return candidates
+}
+
+/** 读取 HTML 标签属性 (兼容双引号 / 单引号 / 无引号三种写法; 属性名前必须是空白, 避免误配 x-type 之类) */
+function getTagAttr(tag: string, name: string): string | null {
+  const re = new RegExp(`(?:^|\\s)${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'>]+))`, 'i')
+  const match = re.exec(tag)
+  if (!match)
+    return null
+  return (match[2] ?? match[3] ?? match[4] ?? '').trim()
 }

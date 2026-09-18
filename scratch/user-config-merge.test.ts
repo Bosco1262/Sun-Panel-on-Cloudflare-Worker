@@ -53,7 +53,8 @@ const db = {
 }
 
 const env = { DB: db, JWT_SECRET: 'test-secret' }
-const token = await signToken('test-secret', { id: 1, username: 'admin', name: 'admin', headImage: '', role: 1 })
+// 第三个参数是 token 世代 (auth_epoch): 假 D1 读不到 system_setting 时按默认世代 1 处理
+const token = await signToken('test-secret', { id: 1, username: 'admin', name: 'admin', headImage: '', role: 1 }, 1)
 
 function req(path: string, body: unknown) {
   return userConfigApp.fetch(

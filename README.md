@@ -6,7 +6,7 @@
 
 把 [Sun-Panel](https://github.com/hslr-s/sun-panel)（Vue 3 前端 + Go 后端）移植到 **Cloudflare Workers** 的单用户版本。
 
-Worker (Hono) + D1 + KV + R2 + Vue 3
+Worker (Hono) + D1 + R2 + Vue 3
 
 [![Repo](https://img.shields.io/badge/Github-123456?logo=github&labelColor=242424)](https://github.com/Bosco1262/Sun-Panel-on-Cloudflare-Worker)
 [![Upstream](https://img.shields.io/badge/Upstream-sun--panel-blue?logo=github&labelColor=242424)](https://github.com/hslr-s/sun-panel)
@@ -15,7 +15,7 @@ Worker (Hono) + D1 + KV + R2 + Vue 3
 
 > [!NOTE]
 > 本仓库是上游 [hslr-s/sun-panel](https://github.com/hslr-s/sun-panel) 的社区移植版本：
-> 后端由 Go (Gin) + SQLite 改写为 Cloudflare Worker (Hono) + D1/KV/R2，前端沿用上游 Vue 3 代码并做适配。
+> 后端由 Go (Gin) + SQLite 改写为 Cloudflare Worker (Hono) + D1/R2，前端沿用上游 Vue 3 代码并做适配。
 > 上游 README 原文见 [docs/upstream/README.md](./docs/upstream/README.md)。
 
 ![](./docs/images/main-dark.png)
@@ -27,9 +27,10 @@ Worker (Hono) + D1 + KV + R2 + Vue 3
 | 后端 | Cloudflare Worker + Hono (TypeScript)，位于根目录 `src/` |
 | 数据库 | Cloudflare D1 (SQLite) |
 | 文件存储 | Cloudflare R2（头像、图片、文件上传，`/uploads/*` 由 Worker 代理） |
-| 登录限流 | Cloudflare KV（同一 IP 10 分钟内最多失败 5 次） |
+| 登录限流 | Cloudflare D1（同一 IP 10 分钟内最多失败 5 次，滑动窗口；单条 UPSERT 原子计数） |
 | 前端 | Vue 3 + Vite + Naive UI + Pinia（构建产物输出到根目录 `dist/`） |
-| 鉴权 | JWT（jose，无状态，7 天有效期） |
+| 鉴权 | JWT（jose，无状态，72 小时有效期；`auth_epoch` 世代号支持改密/退出所有设备即刻吊销） |
+| 密码存储 | 默认兼容上游三重 MD5；配置 `PASSWORD_PEPPER` 后使用 PBKDF2-SHA256 + 随机盐 + pepper，旧哈希登录时自动升级 |
 
 ## 🚀 快速开始
 
@@ -45,7 +46,7 @@ copy .dev.vars.example .dev.vars
 npm run migrations:apply:local
 
 # 4. 启动开发环境
-npm run dev        # 终端 1: Worker + 本地 D1/KV/R2 (http://127.0.0.1:8787)
+npm run dev        # 终端 1: Worker + 本地 D1/R2 (http://127.0.0.1:8787)
 npm run dev:web    # 终端 2: 前端热更新 (http://127.0.0.1:1002)
 ```
 
@@ -65,7 +66,7 @@ npm run dev:web    # 终端 2: 前端热更新 (http://127.0.0.1:1002)
 ├── dist/                    # 前端构建产物 (gitignored, 由 Worker 静态托管)
 ├── docs/                    # 项目文档 (部署、迁移计划、待办、上游资料)
 ├── reference/               # 上游源码对照副本 (gitignored, 不参与构建)
-├── wrangler.toml            # Worker 配置 (D1/KV/R2/assets 绑定)
+├── wrangler.toml            # Worker 配置 (D1/R2/静态资源; 无 assets binding, 见 docs/improvement-plan.md §5.2)
 ├── .dev.vars                # 本地开发环境变量 (gitignored, 模板见 .dev.vars.example)
 ├── package.json             # 根包: Worker 依赖 + 脚本 + frontend workspace
 └── tsconfig.json            # Worker TypeScript 配置
@@ -76,6 +77,8 @@ npm run dev:web    # 终端 2: 前端热更新 (http://127.0.0.1:1002)
 | 文档 | 内容 |
 |------|------|
 | [docs/deployment.md](./docs/deployment.md) | 部署与本地开发完整说明 |
+| [docs/improvement-plan.md](./docs/improvement-plan.md) | 改进计划：数据层整理、安全加固、一致性优化与后续候选（§9）；含待办标记与提交拆分 |
+| [docs/storage.md](./docs/storage.md) | 存储与资源说明：D1 各表用途、R2 对象布局与回收、本地 `.wrangler` 状态、结构变更约定 |
 | [docs/search-engine.md](./docs/search-engine.md) | 搜索引擎设置（风格设置管理区）使用说明、占位符规则、数据迁移与自检脚本 |
 | [docs/migration-plan.md](./docs/migration-plan.md) | 从 Go 版迁移到 Worker 的设计与阶段计划（历史文档） |
 | [docs/todo.md](./docs/todo.md) | 移植过程中收集的需求 / 待办清单 |
@@ -91,14 +94,25 @@ npm run dev:web    # 终端 2: 前端热更新 (http://127.0.0.1:1002)
 | 图形验证码/邮件 | 已移除（仅密码登录） |
 | 文件存储 | 本地磁盘 → R2（路径 `/uploads/*` 由 Worker 代理） |
 | 站点图标 | 抓取后下载存至 R2（与手动上传的图标统一存放于 R2） |
-| 鉴权 | 内存 Token → JWT (无状态, 7 天有效期) |
-| 登录保护 | 验证码/邮件 → KV 级失败限流 (同一 IP 10 分钟内最多失败 5 次) |
+| 鉴权 | 内存 Token → JWT (无状态, 72 小时有效期 + `auth_epoch` 世代可吊销) |
+| 密码存储 | 三重 MD5 → 可选 PBKDF2-SHA256 + 随机盐 + pepper（配了 `PASSWORD_PEPPER` 才启用，登录时自动升级旧哈希） |
+| 登录保护 | 验证码/邮件 → D1 级失败限流 (同一 IP 10 分钟内最多失败 5 次) |
+| 数据库迁移 | `migrations/` 合并为单个 `0001_init.sql` 基线（只对全新库生效，约定见 docs/improvement-plan.md §2.2） |
 
 > 「v1.3.0」指本移植版所基于的上游**最后一个开源代码版本**：上游自 v1.4.0 起转为闭源发布
 > （最新发布版本 v1.8.1，2025-12-31），其 README 至今仍写明「目前开源最新版本为 v1.3.0」。
 > 上游完整更新日志见 <https://doc.sun-panel.top/zh_cn/update/update_log.html>。
 
 > 前端构建产物统一输出到根目录 `dist/`，由 Worker 静态资源托管；`frontend/` 仅存放源码。
+
+## ⚠️ 已知限制
+
+| 限制 | 说明 |
+|------|------|
+| 多标签页同时改配置 | 面板样式与搜索引擎配置存在 `user_config` 的整份 JSON 里（覆盖写），**请避免多个标签页同时修改**，否则后保存的会覆盖先保存的 |
+| 删除图片后的浏览器缓存 | `/uploads/*` 的上传文件带 `immutable`（最长 24 小时），删掉文件后同一 URL 仍可能命中浏览器缓存，硬刷新即可 |
+| 迁移基线 | `migrations/0001_init.sql` 只对**全新库**生效；已部署库的结构变化需按 `docs/improvement-plan.md` §2.2 的约定处理 |
+| 自定义 JS/CSS | 由管理员自己填写并注入所有页面，等同于给自己开了一个 XSS 入口，请只粘贴可信代码 |
 
 ## 📄 License
 

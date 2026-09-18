@@ -1,8 +1,10 @@
 import { Hono } from 'hono'
 import type { Env } from '../../types'
 import { error, errorByCode, errorByCodeAndMsg, success, successData, successList } from '../../utils/response'
-import { downloadFavicon, getSiteFaviconUrl } from '../../utils/favicon'
-import { buildR2Key, contentTypeFromExt, extFromContentType, extFromUrl, isImageExt } from '../../utils/file'
+import { downloadFavicon, getSiteFaviconCandidates, getSiteFaviconUrl } from '../../utils/favicon'
+import { buildIconKey, buildIconKeyPrefix, contentTypeFromExt, extFromContentType, extFromUrl, isImageExt, r2KeyFromSrc } from '../../utils/file'
+import { cleanupUploads, isUploadSrcReferenced, srcFromIconJson } from '../../utils/uploadRefs'
+import { getAutoCleanUnused } from '../../utils/settings'
 import { authMiddleware } from '../../middleware/auth'
 
 const app = new Hono<{ Bindings: Env }>()
@@ -27,7 +29,7 @@ interface ItemIconBody {
   onlyName?: string
 }
 
-interface IconRow {
+export interface IconRow {
   id: number
   icon_json: string
   title: string
@@ -55,7 +57,7 @@ function iconJsonToIcon(iconJson: string): ItemIconIcon | null {
   }
 }
 
-function mapIcon(row: IconRow) {
+export function mapIcon(row: IconRow) {
   return {
     id: row.id,
     icon: iconJsonToIcon(row.icon_json),
@@ -168,15 +170,24 @@ app.post('/itemIcon/getListByGroupId', authMiddleware(), async (c) => {
   return successList(c, results.map(mapIcon), 0)
 })
 
-// 删除图标
+// 删除图标 (软删记录 + 清理不再被引用的图片)
 app.post('/itemIcon/deletes', authMiddleware(), async (c) => {
   const body = await c.req.json<{ ids?: unknown }>().catch(() => null)
   const ids = Array.isArray(body?.ids) ? body.ids.filter((v): v is number => typeof v === 'number') : []
   if (ids.length === 0)
     return errorByCode(c, 1400)
 
+  const placeholders = ids.map(() => '?').join(',')
+  let iconJsons: string[] = []
+
   try {
-    const placeholders = ids.map(() => '?').join(',')
+    // 先取出待删项目的图标, 用于删完后判断哪些图片没人用了
+    const { results } = await c.env.DB
+      .prepare(`SELECT icon_json FROM item_icon WHERE deleted_at IS NULL AND id IN (${placeholders})`)
+      .bind(...ids)
+      .all<{ icon_json: string }>()
+    iconJsons = results.map(row => row.icon_json)
+
     await c.env.DB
       .prepare(`UPDATE item_icon SET deleted_at = datetime('now') WHERE deleted_at IS NULL AND id IN (${placeholders})`)
       .bind(...ids)
@@ -185,6 +196,11 @@ app.post('/itemIcon/deletes', authMiddleware(), async (c) => {
   catch (err) {
     return errorByCodeAndMsg(c, 1200, (err as Error).message)
   }
+
+  // R2 清理放在 DB 写入之后, 失败只记日志 (cleanupUploads 内部已兜住)
+  // 开关关闭时不自动回收: 图片留在「上传文件管理」里可复用, 需要时手动点「清理未引用文件」
+  if (await getAutoCleanUnused(c.env.DB))
+    await cleanupUploads(c.env.DB, c.env.FILES, iconJsons.map(srcFromIconJson))
 
   return success(c)
 })
@@ -214,7 +230,82 @@ app.post('/itemIcon/saveSort', authMiddleware(), async (c) => {
   return success(c)
 })
 
+/**
+ * 下载并保存站点图标: R2 key 按站点稳定 (icons/<md5(host)>.<ext>) 覆盖写, file 行 UPSERT。
+ * 扩展名变化时回收旧对象 (受自动回收开关 + 引用检查双重保护)。
+ * 失败时返回 { error }, 由各路由拼成 'acquisition failed: ...' (与旧实现同文案)。
+ */
+async function storeFavicon(env: Env, host: string, iconUrl: string): Promise<{ iconUrl: string } | { error: string }> {
+  const img = await downloadFavicon(iconUrl)
+  if (!img)
+    return { error: 'download favicon error' }
+
+  // downloadFavicon 已保证是图片类型; 扩展名以 Content-Type 为准
+  // (避免 icon.horse 这类无扩展名 URL 误判), URL 扩展名仅作兜底
+  const urlExt = extFromUrl(iconUrl)
+  const ext = extFromContentType(img.contentType) || (isImageExt(urlExt) ? urlExt : '.png')
+  const contentType = contentTypeFromExt(ext)
+
+  // 保存到 R2 + 记录到 file 表 (fileName 使用站点域名, 与 Go 版一致)
+  // key 按站点稳定 (icons/<md5(host)>.<ext>): 重复获取会覆盖同一个对象,
+  // 不再像旧实现那样每点一次就往 R2 里堆一份 (旧 key 带 Date.now(), 必然新建)
+  const key = buildIconKey(host, ext)
+  const src = `./uploads/${key}`
+  try {
+    await env.FILES.put(key, img.data, { httpMetadata: { contentType } })
+
+    // 该站点已有的记录: 用来判断是覆盖、换扩展名还是首次写入
+    const { results: existing } = await env.DB
+      .prepare('SELECT src FROM file WHERE deleted_at IS NULL AND src LIKE ?')
+      .bind(`./uploads/${buildIconKeyPrefix(host)}%`)
+      .all<{ src: string }>()
+
+    if (existing.some(row => row.src === src)) {
+      await env.DB
+        .prepare('UPDATE file SET file_name = ?, ext = ?, updated_at = datetime(\'now\') WHERE src = ?')
+        .bind(host, ext, src)
+        .run()
+    }
+    else if (existing.length > 0) {
+      // 扩展名变了 (例如原来 .png 现在是 .ico): 复用旧行, 旧对象稍后清掉
+      await env.DB
+        .prepare('UPDATE file SET src = ?, ext = ?, updated_at = datetime(\'now\') WHERE src = ?')
+        .bind(src, ext, existing[0].src)
+        .run()
+    }
+    else {
+      await env.DB
+        .prepare('INSERT INTO file (src, file_name, method, ext) VALUES (?, ?, 0, ?)')
+        .bind(src, host, ext)
+        .run()
+    }
+
+    // 清掉扩展名变化后残留的旧对象
+    // 两个保护: 关掉自动回收时不删; 旧图标仍被项目/背景/头像引用时不删 (否则在用图标会变 404)
+    const autoClean = await getAutoCleanUnused(env.DB)
+    for (const row of existing) {
+      if (row.src === src || !autoClean)
+        continue
+      try {
+        if (await isUploadSrcReferenced(env.DB, row.src))
+          continue
+        await env.FILES.delete(r2KeyFromSrc(row.src))
+      }
+      catch (err) {
+        console.warn('[favicon] delete stale object failed:', (err as Error).message)
+      }
+    }
+
+    return { iconUrl: `uploads/${key}` }
+  }
+  catch (err) {
+    return { error: (err as Error).message }
+  }
+}
+
 // 获取站点图标: 抓取后下载并保存至 R2 (与手动上传的图标统一存储在 R2)
+// 兼容旧前端/脚本: 内部 = 候选第一条 + 保存; 需要多候选选择时改用
+// getSiteFaviconCandidates 拿列表 → saveSiteFavicon 保存选中项
 app.post('/itemIcon/getSiteFavicon', authMiddleware(), async (c) => {
   const body = await c.req.json<{ url?: string }>().catch(() => null)
   const url = typeof body?.url === 'string' ? body.url.trim() : ''
@@ -233,31 +324,47 @@ app.post('/itemIcon/getSiteFavicon', authMiddleware(), async (c) => {
   if (!iconUrl)
     return error(c, 'acquisition failed: get favicon url error')
 
-  const img = await downloadFavicon(iconUrl)
-  if (!img)
-    return error(c, 'acquisition failed: download favicon error')
+  const saved = await storeFavicon(c.env, parsed.host, iconUrl)
+  if ('error' in saved)
+    return error(c, `acquisition failed: ${saved.error}`)
 
-  // 扩展名: Content-Type 优先 (避免 icon.horse 等无扩展名 URL 误判),
-  // URL 扩展名仅在属于图片格式时采用
-  const urlExt = extFromUrl(iconUrl)
-  const ctExt = extFromContentType(img.contentType)
-  const ext = ctExt || (isImageExt(urlExt) ? urlExt : '.png')
-  const contentType = img.contentType || contentTypeFromExt(ext)
+  return successData(c, { iconUrl: saved.iconUrl })
+})
 
-  // 保存到 R2 + 记录到 file 表 (fileName 使用站点域名, 与 Go 版一致)
-  const key = buildR2Key(parsed.host, ext)
+// 获取站点图标候选列表 (一次抓取返回多条, 前端在 ≥2 个候选时弹窗让用户选一张)
+app.post('/itemIcon/getSiteFaviconCandidates', authMiddleware(), async (c) => {
+  const body = await c.req.json<{ url?: string }>().catch(() => null)
+  const url = typeof body?.url === 'string' ? body.url.trim() : ''
+  if (!url)
+    return errorByCode(c, 1400)
+
+  // 无候选 (含 url 非法/页面抓不到) 返回空数组而不是报错, 由前端统一提示「获取失败」
+  const candidates = await getSiteFaviconCandidates(url)
+  return successData(c, { candidates })
+})
+
+// 保存用户选中的站点图标 (下载 → 内容校验 → R2 覆盖写 → file 行 UPSERT → 旧扩展名对象回收)
+app.post('/itemIcon/saveSiteFavicon', authMiddleware(), async (c) => {
+  const body = await c.req.json<{ url?: string; pageUrl?: string }>().catch(() => null)
+  const iconUrl = typeof body?.url === 'string' ? body.url.trim() : ''
+  const pageUrl = typeof body?.pageUrl === 'string' ? body.pageUrl.trim() : ''
+  if (!iconUrl || !pageUrl)
+    return errorByCode(c, 1400)
+
+  let parsed: URL
   try {
-    await c.env.FILES.put(key, img.data, { httpMetadata: { contentType } })
-    const src = `./uploads/${key}`
-    await c.env.DB
-      .prepare('INSERT INTO file (src, file_name, method, ext) VALUES (?, ?, 0, ?)')
-      .bind(src, parsed.host, ext)
-      .run()
-    return successData(c, { iconUrl: `uploads/${key}` })
+    parsed = new URL(pageUrl)
   }
-  catch (err) {
-    return error(c, `acquisition failed: ${(err as Error).message}`)
+  catch {
+    return error(c, 'acquisition failed: invalid url')
   }
+
+  // 只保存内容校验通过的图片 (下载失败/非图片/超限都会返回 error), 不做任意 URL 代理
+  const saved = await storeFavicon(c.env, parsed.host, iconUrl)
+  if ('error' in saved)
+    return error(c, `acquisition failed: ${saved.error}`)
+
+  return successData(c, { iconUrl: saved.iconUrl })
 })
 
 export default app

@@ -51,11 +51,11 @@ https://www.bing.com/search?q=%s&form=QBLH
 - 配置存放在 D1 的 `user_config.search_engine_json`（与面板配置同一行、同一接口）。
 - `POST /api/panel/userConfig/set` 支持只提交 `panel` 或 `searchEngine`，未提交的字段保留原值，
   因此「改样式」不会再清空搜索引擎配置。
-- 老版本把引擎存在 `module_config` 的 `module-deskModuleSearchBox` 里：
-  首次以管理员身份进入首页时会自动迁移，迁移后写一次 `user_config.search_engine_json`
-  作为「已迁移」标记，之后不再访问旧位置。
-  （只有查旧配置的接口报错、或云端已有新结构配置时才不写标记；这两种情况都不需要迁移。）
-- 旧数据结构里的 `newWindowOpen`（布尔）会自动转成 `openMethod`（0=当前页面 / 1=新窗口），
+- 老版本把引擎存在 `module_config` 的 `module-deskModuleSearchBox` 里：这条兼容迁移已随死代码清理
+  **一并移除**（见 [improvement-plan.md](./improvement-plan.md) §5.1，`module_config` 表也不再创建）。
+  如果你是从很老的版本直接升级、且从未打开过迁移后的新版，自定义引擎不会自动恢复，
+  需要在「风格设置 → 搜索栏组件」里重新配置（或点「恢复内置引擎」）。
+- 本地缓存里可能残留旧结构：`newWindowOpen`（布尔）会自动转成 `openMethod`（0=当前页面 / 1=新窗口），
   缺失的 `id` 会自动补齐。
 
 ## 访客（公开）模式：本移植版不适用

@@ -33,6 +33,14 @@ declare namespace Panel {
         backgroundColor ?: string
     }
 
+    /** 站点图标候选 (「获取图标」多候选弹窗) */
+    interface FaviconCandidate {
+        url: string
+        sizes?: string
+        type?: string
+        source: 'link' | 'favicon.ico' | 'icon-horse'
+    }
+
     interface State {
         rightSiderCollapsed: boolean
         leftSiderCollapsed: boolean

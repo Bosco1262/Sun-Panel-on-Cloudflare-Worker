@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import type { Env } from '../../types'
 import { errorByCode, success, successData } from '../../utils/response'
 import { authMiddleware } from '../../middleware/auth'
-import { getSetting, setSetting } from '../../utils/settings'
+import { SETTING_AUTO_CLEAN_UNUSED, getAutoCleanUnused, getSetting, setSetting } from '../../utils/settings'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -31,6 +31,25 @@ app.post('/saveCustomCode', authMiddleware(), async (c) => {
 
   await setSetting(c.env.DB, SETTING_CUSTOM_CSS, body.customCss)
   await setSetting(c.env.DB, SETTING_CUSTOM_JS, body.customJs)
+  return success(c)
+})
+
+// ===================== 存储设置 =====================
+
+// 读取存储相关设置 (目前只有「删除时自动回收未引用图片」)
+app.post('/getStorageSettings', authMiddleware(), async (c) => {
+  return successData(c, {
+    autoCleanUnused: await getAutoCleanUnused(c.env.DB),
+  })
+})
+
+// 保存存储相关设置
+app.post('/saveStorageSettings', authMiddleware(), async (c) => {
+  const body = await c.req.json<{ autoCleanUnused?: unknown }>().catch(() => null)
+  if (typeof body?.autoCleanUnused !== 'boolean')
+    return errorByCode(c, 1400)
+
+  await setSetting(c.env.DB, SETTING_AUTO_CLEAN_UNUSED, body.autoCleanUnused ? '1' : '0')
   return success(c)
 })
 

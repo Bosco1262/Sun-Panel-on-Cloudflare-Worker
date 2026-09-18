@@ -3,9 +3,10 @@ import { computed, defineEmits, defineProps, ref, watch } from 'vue'
 import type { FormInst, FormRules } from 'naive-ui'
 import { NAlert, NButton, NCheckbox, NColorPicker, NFlex, NForm, NFormItem, NGrid, NGridItem, NInput, NInputGroup, NModal, NSelect, NSpace, NTooltip, useMessage } from 'naive-ui'
 import IconEditor from './IconEditor.vue'
+import FaviconPicker from './FaviconPicker.vue'
 import AppIcon from '@/views/home/components/AppIcon/index.vue'
 import { SvgIcon } from '@/components/common'
-import { edit, getSiteFavicon } from '@/api/panel/itemIcon'
+import { edit, getSiteFaviconCandidates, saveSiteFavicon } from '@/api/panel/itemIcon'
 import { getList as getGroupList } from '@/api/panel/itemIconGroup'
 import { t } from '@/locales'
 
@@ -175,24 +176,74 @@ const handleValidateButtonClick = (e: MouseEvent) => {
   })
 }
 
+// ===================== 获取站点图标 =====================
+
+// 一次抓取返回候选列表: 1 个直接保存; ≥2 个弹窗选一张 (只保存选中的)
+const faviconPickerVisible = ref(false)
+const faviconCandidates = ref<Panel.FaviconCandidate[]>([])
+const faviconPageUrl = ref('')
+const saveFaviconLoading = ref(false)
+
 async function getIconByUrl(url: string, loadingIndex: number) {
   getIconLoading.value[loadingIndex] = true
   try {
-    const { code, data } = await getSiteFavicon<{ iconUrl: string }>(url)
-    if (code === 0) {
-      model.value.icon = {
-        itemType: 2,
-        src: data.iconUrl,
-      }
-    }
-    else {
+    const { code, data } = await getSiteFaviconCandidates<{ candidates: Panel.FaviconCandidate[] }>(url)
+    if (code !== 0) {
       ms.error(t('iconItem.geticonFail'))
+      return
     }
+
+    const candidates = data.candidates ?? []
+    if (candidates.length === 0) {
+      ms.error(t('iconItem.geticonFail'))
+      return
+    }
+
+    // 1 个候选保持「一键获取」; 多个候选弹窗让用户选一张
+    if (candidates.length === 1) {
+      await saveFavicon(candidates[0], url)
+      return
+    }
+
+    faviconCandidates.value = candidates
+    faviconPageUrl.value = url
+    faviconPickerVisible.value = true
   }
   catch (error) {
     ms.error(t('iconItem.geticonFail'))
   }
-  getIconLoading.value[loadingIndex] = false
+  finally {
+    getIconLoading.value[loadingIndex] = false
+  }
+}
+
+// 弹窗选中后保存 (保存失败时保持弹窗打开, 可换一张重试)
+async function handleFaviconSelected(candidate: Panel.FaviconCandidate) {
+  const ok = await saveFavicon(candidate, faviconPageUrl.value)
+  if (ok)
+    faviconPickerVisible.value = false
+}
+
+async function saveFavicon(candidate: Panel.FaviconCandidate, pageUrl: string): Promise<boolean> {
+  saveFaviconLoading.value = true
+  try {
+    const { code, data } = await saveSiteFavicon<{ iconUrl: string }>(candidate.url, pageUrl)
+    if (code === 0 && data?.iconUrl) {
+      model.value.icon = {
+        itemType: 2,
+        src: data.iconUrl,
+      }
+      return true
+    }
+    ms.error(t('iconItem.geticonFail'))
+  }
+  catch (error) {
+    ms.error(t('iconItem.geticonFail'))
+  }
+  finally {
+    saveFaviconLoading.value = false
+  }
+  return false
 }
 
 watch(() => props.visible, (newValue) => {
@@ -397,6 +448,14 @@ function getGroupListOptions() {
         </NCheckbox>
       </NForm>
     </div>
+
+    <!-- 多候选时弹窗选一张 (只保存选中的这张) -->
+    <FaviconPicker
+      v-model:visible="faviconPickerVisible"
+      :candidates="faviconCandidates"
+      :loading="saveFaviconLoading"
+      @selected="handleFaviconSelected"
+    />
 
     <template #footer>
       <NSpace justify="end">

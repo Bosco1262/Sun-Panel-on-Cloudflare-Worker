@@ -1,12 +1,11 @@
 import { Hono } from 'hono'
 import type { Env } from '../../types'
-import { buildR2Key, contentTypeFromExt, r2KeyFromSrc } from '../../utils/file'
+import { buildR2Key, contentTypeFromExt, isAllowedExt, isImageExt, r2KeyFromSrc } from '../../utils/file'
+import { cleanupUploads, normalizeUploadSrc } from '../../utils/uploadRefs'
 import { errorByCode, errorByCodeAndMsg, success, successData, successList } from '../../utils/response'
 import { authMiddleware } from '../../middleware/auth'
 
 const app = new Hono<{ Bindings: Env }>()
-
-const IMG_AGREE_EXTS = ['.png', '.jpg', '.gif', '.jpeg', '.webp', '.svg', '.ico']
 
 interface FileRow {
   id: number
@@ -31,7 +30,7 @@ app.post('/file/uploadImg', authMiddleware(), async (c) => {
   const ext = file.name.includes('.')
     ? file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
     : ''
-  if (!IMG_AGREE_EXTS.includes(ext))
+  if (!isImageExt(ext))
     return errorByCode(c, 1301)
 
   const key = buildR2Key(file.name, ext)
@@ -65,6 +64,11 @@ app.post('/file/uploadFiles', authMiddleware(), async (c) => {
     const ext = file.name.includes('.')
       ? file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
       : ''
+    // 白名单校验: 不允许任意类型写入 R2 再从同源返回
+    if (!isAllowedExt(ext)) {
+      errFiles.push(file.name)
+      continue
+    }
     const key = buildR2Key(file.name, ext)
     try {
       await c.env.FILES.put(key, file.stream(), {
@@ -102,6 +106,18 @@ app.post('/file/getList', authMiddleware(), async (c) => {
   }))
 
   return successList(c, list, list.length)
+})
+
+// 清理未被引用的文件 (R2 + 记录)
+// 图片可能同时被项目图标 / 面板背景 / 头像引用, 所以统一交给 cleanupUploads 做引用检查
+app.post('/file/cleanUnused', authMiddleware(), async (c) => {
+  const { results } = await c.env.DB
+    .prepare('SELECT * FROM file WHERE deleted_at IS NULL ORDER BY created_at')
+    .all<FileRow>()
+
+  const deleted = await cleanupUploads(c.env.DB, c.env.FILES, results.map(row => normalizeUploadSrc(row.src)))
+
+  return successData(c, { checked: results.length, deleted })
 })
 
 // 删除文件 (R2 + 记录)

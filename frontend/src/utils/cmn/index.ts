@@ -1,17 +1,11 @@
 import moment from 'moment'
-import { h } from 'vue'
-import type { NotificationReactive } from 'naive-ui'
-import { NButton, createDiscreteApi } from 'naive-ui'
-import { useAuthStore, useNoticeStore, useUserStore } from '@/store'
+import { useAuthStore, useUserStore } from '@/store'
 import { getAuthInfo } from '@/api/system/user'
 import type { VisitMode } from '@/enums/auth'
-import { getListByDisplayType as getListByDisplayTypeApi } from '@/api/notice'
 
-const noticeStore = useNoticeStore()
 const userStore = useUserStore()
 const authStore = useAuthStore()
 
-const { notification } = createDiscreteApi(['notification'])
 /**
  * 生成指定时间格式
  * @param format 时间格式 默认：'YYYY-MM-DD HH:mm:ss'
@@ -26,71 +20,6 @@ export function buildTimeString(format?: string): string {
 
 export function timeFormat(timeString?: string) {
   return moment(timeString).format('YYYY-MM-DD HH:mm:ss')
-}
-
-/**
- * 创建新的公告
- * @param timeString
- */
-export function noticeCreate(info: Notice.NoticeInfo) {
-  const option: any = {
-    title: info.title,
-    content: info.content,
-    meta: info.createTime ? timeFormat(info.createTime) : '',
-  }
-
-  const btns: any = []
-
-  let n: NotificationReactive
-  // 链接按钮
-  if (info.url !== '') {
-    btns.push(
-      h(
-        NButton,
-        {
-          text: true,
-          type: 'info',
-          onClick: () => {
-            window.open(info.url, '_blank')
-            n.destroy()
-          },
-        },
-        {
-          default: () => '打开链接',
-        },
-      ),
-    )
-  }
-  if (info.oneRead === 1) {
-    btns.push(
-      h(
-        NButton,
-        {
-          text: true,
-          type: 'primary',
-          style: { marginLeft: '20px' },
-          onClick: () => {
-            if (info.id) {
-              if (info.isLogin === 1 && userStore.userInfo.username) {
-                noticeStore.setReadByUsername(userStore.userInfo.username, info.id)
-                console.log('设置用户已读', info.id)
-              }
-              else {
-                noticeStore.setReadByGlobal(info.id)
-                console.log('设置全局已读', info.id)
-              }
-            }
-            n.destroy()
-          },
-        },
-        {
-          default: () => '不再提醒',
-        },
-      ),
-    )
-  }
-  option.action = () => btns
-  n = notification.create(option)
 }
 
 export function setTitle(titile: string) {
@@ -115,24 +44,6 @@ export async function updateLocalUserInfo() {
   userStore.updateUserInfo({ username: data.user.username, headImage: data.user.headImage, name: data.user.name })
   authStore.setUserInfo(data.user)
   authStore.setVisitMode(data.visitMode)
-}
-
-export async function getNotice(displayType: number | number[]) {
-  let param: number[]
-  if (typeof displayType === 'number')
-    param = [displayType]
-  else
-    param = displayType
-
-  const { code, data } = await getListByDisplayTypeApi<Common.ListResponse<Notice.NoticeInfo[]>>(param)
-  if (code !== 0 || !data?.list)
-    return
-
-  for (let i = 0; i < data.list.length; i++) {
-    const element = data.list[i]
-    if (element.id && !noticeStore.getReadByNoticeId(element.id, userStore.userInfo.username))
-      noticeCreate(element)
-  }
 }
 
 // 权限受限暂时不用

@@ -3,16 +3,10 @@ import { defaultState, defaultStatePanelConfig, getLocalState, removeLocalState,
 import { router } from '@/router'
 import type { PanelStateNetworkModeEnum } from '@/enums'
 import { get as getUserConfig, set as setUserConfig } from '@/api/panel/userConfig'
-import { getValueByName as getModuleConfigByName } from '@/api/system/moduleConfig'
 import {
-  SEARCH_BOX_LEGACY_MODULE_NAME,
   createDefaultSearchEngineConfig,
-  hasStoredSearchEngineConfig,
   normalizeSearchEngineConfig,
 } from '@/utils/searchBox'
-
-// 旧版搜索引擎配置迁移只在一次会话里尝试一次, 避免每次进首页都多打一个请求
-let legacyEngineMigrated = false
 
 export const usePanelState = defineStore('panel', {
   state: (): Panel.State => getLocalState() || defaultState(),
@@ -65,44 +59,6 @@ export const usePanelState = defineStore('panel', {
       else {
         this.resetPanelConfig() // 重置恢复默认
         this.recordState()
-      }
-    },
-
-    /**
-     * 从旧的 module_config(deskModuleSearchBox) 迁移搜索引擎配置
-     *
-     * 只在云端还没有新结构配置时执行一次:
-     * - 旧数据里有用户改过的引擎 -> 迁移过来
-     * - 否则写入一次默认配置, 让 engineList 字段成为「已迁移」标记, 之后不再查询旧位置
-     *
-     * 该接口需要登录态, 调用方需自行判断 (见 views/home/index.vue)。
-     */
-    async migrateLegacySearchEngine() {
-      if (legacyEngineMigrated)
-        return
-      legacyEngineMigrated = true
-
-      try {
-        const { code, data } = await getModuleConfigByName<Record<string, unknown>>(
-          `module-${SEARCH_BOX_LEGACY_MODULE_NAME}`,
-        )
-        // 云端已有新结构配置 (含用户主动清空的情况) 时不迁移, 避免把删掉的引擎又找回来
-        if (code !== 0 || !data || hasStoredSearchEngineConfig(data))
-          return
-
-        const legacyList = Array.isArray((data as Record<string, unknown>).searchEngineList)
-          ? (data as Record<string, unknown>).searchEngineList as unknown[]
-          : []
-        if (legacyList.length > 0)
-          this.searchEngine = normalizeSearchEngineConfig(data)
-
-        // 无论是否迁移到旧数据, 都落一次库作为「已迁移」标记
-        this.recordState()
-        await this.saveSearchEngine()
-      }
-      catch {
-        // 迁移失败不影响正常使用, 下次进首页会重试
-        legacyEngineMigrated = false
       }
     },
 

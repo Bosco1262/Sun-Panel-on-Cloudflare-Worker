@@ -24,7 +24,7 @@
 |---|------|------|
 | 1 | 重新设计「搜索引擎设置」：入口移到「风格设置 → 搜索栏组件」，做成完整管理区（增删改 / 拖拽排序 / 设为当前 / 恢复内置 / 重置 / 实时预览）；搜索框弹层只保留切换与新窗口开关 | 已实现<br>`frontend/src/components/apps/Style/SearchEngineSettings.vue`、`frontend/src/components/deskModule/SearchBox/index.vue`，详见 [search-engine.md](./search-engine.md)<br>校验提示的 i18n 命名空间问题已修（见下表） |
 | 2 | 关键词占位不再强制 `%s`，兼容 `%s` / `{keyword}` / `{q}`，无占位符时自动追加，并支持粘贴真实搜索网址自动推导模板 | 已实现<br>`frontend/src/utils/searchBox/index.ts` |
-| 3 | 搜索引擎配置从 `module_config` 迁移到 `user_config.search_engine_json`，并修复「改样式会清空搜索引擎配置」的 bug | 已实现<br>`src/api/panel/userConfig.ts`（未提交字段保留原值）、`frontend/src/store/modules/panel/index.ts`（含旧数据自动迁移） |
+| 3 | 搜索引擎配置从 `module_config` 迁移到 `user_config.search_engine_json`，并修复「改样式会清空搜索引擎配置」的 bug | 已实现<br>`src/api/panel/userConfig.ts`（未提交字段保留原值）。<br>⚠️ 后续调整（见 [improvement-plan.md](./improvement-plan.md) §5.1）：`module_config` 的一次性迁移读取已随死代码清理**移除**，`module_config` 表也不再创建；从很老版本直升、且从未打开过迁移后新版的实例，自定义引擎需在「风格设置 → 搜索栏组件」里重新配置 |
 
 ## 已修复（核对时发现，本轮已处理）
 
