@@ -108,7 +108,9 @@
       "cardStyleSmall": "Small icon",
       "deleteWarnText": "Are you sure you want to delete this group [{name}]? The application icons in this group will be lost after deletion.",
       "followGlobal": "Follow global",
-      "groupName": "Group name"
+      "groupCount": "{count} group(s)",
+      "groupName": "Group name",
+      "sortTip": "Drag cards to reorder groups"
     },
     "uploadsFileManager": {
       "alertText": "Here you can manage wallpapers and icons you have uploaded.",

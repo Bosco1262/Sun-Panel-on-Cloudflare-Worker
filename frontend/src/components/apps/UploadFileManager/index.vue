@@ -119,6 +119,10 @@ function handleSetWallpaper(imgSrc: string) {
 // 删除项目/分组时是否自动回收未引用的图片
 // 关掉后图片保留在列表里可复用, 需要时再手动点「清理未引用文件」
 async function handleAutoCleanChange(value: boolean) {
+  // 保存中忽略重复触发, 值未变化时不请求
+  if (savingSetting.value || value === autoCleanUnused.value)
+    return
+
   const previous = autoCleanUnused.value
   autoCleanUnused.value = value
   savingSetting.value = true
@@ -141,6 +145,11 @@ async function handleAutoCleanChange(value: boolean) {
   }
 }
 
+// 点击文字说明区与点击开关等效
+function handleToggleAutoCleanUnused() {
+  handleAutoCleanChange(!autoCleanUnused.value)
+}
+
 async function loadStorageSettings() {
   try {
     const { code, data } = await getStorageSettings<{ autoCleanUnused: boolean }>()
@@ -159,23 +168,44 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="bg-slate-200 dark:bg-zinc-900 p-2 h-full">
-    <NSpin v-show="loading" size="small" />
-    <NAlert type="info" :bordered="false">
+  <div class="bg-slate-200 dark:bg-zinc-900 p-2 h-full flex flex-col gap-2">
+    <NAlert type="info" :bordered="false" class="shrink-0">
       {{ $t('apps.uploadsFileManager.alertText') }}
     </NAlert>
-    <div class="flex items-center justify-between flex-wrap gap-2 mt-2">
-      <div class="flex items-center flex-wrap gap-2">
-        <NSwitch :value="autoCleanUnused" size="small" :loading="savingSetting" @update:value="handleAutoCleanChange" />
-        <span class="text-xs">{{ $t('apps.uploadsFileManager.autoCleanUnused') }}</span>
-        <span class="text-xs text-slate-500 dark:text-slate-400">{{ $t('apps.uploadsFileManager.autoCleanUnusedTip') }}</span>
+
+    <!-- 工具栏: 左侧自动清理设置(点击文字同开关), 右侧手动清理按钮 -->
+    <div class="shrink-0 flex items-center flex-wrap gap-x-4 gap-y-2 px-3 py-2 bg-white dark:bg-zinc-800 rounded-xl">
+      <div class="flex flex-1 items-center gap-2 min-w-0">
+        <NSwitch
+          :value="autoCleanUnused"
+          size="small"
+          :loading="savingSetting"
+          @update:value="handleAutoCleanChange"
+        />
+        <div class="min-w-0 cursor-pointer select-none" @click="handleToggleAutoCleanUnused">
+          <div class="text-sm leading-tight">
+            {{ $t('apps.uploadsFileManager.autoCleanUnused') }}
+          </div>
+          <div class="text-xs text-slate-500 dark:text-slate-400 mt-[2px]">
+            {{ $t('apps.uploadsFileManager.autoCleanUnusedTip') }}
+          </div>
+        </div>
       </div>
-      <NButton size="small" :loading="cleaning" @click="handleCleanUnused">
+
+      <NButton size="small" secondary :loading="cleaning" @click="handleCleanUnused">
+        <template #icon>
+          <SvgIcon icon="material-symbols:delete-outline-rounded" />
+        </template>
         {{ $t('apps.uploadsFileManager.cleanUnused') }}
       </NButton>
     </div>
-    <div class="flex justify-center mt-2">
-      <div v-if="imageList.length === 0 && !loading" class="flex">
+
+    <!-- 文件列表: flex-1 自适应剩余高度, 内部滚动 -->
+    <div class="flex-1 min-h-0 overflow-auto">
+      <div v-if="loading" class="h-full flex items-center justify-center">
+        <NSpin size="small" />
+      </div>
+      <div v-else-if="imageList.length === 0" class="h-full flex items-center justify-center text-sm text-slate-400 dark:text-slate-500">
         {{ $t('apps.uploadsFileManager.nothingText') }}
       </div>
       <NImageGroup v-else>

@@ -109,7 +109,7 @@ function handleDelete(groupInfo: Panel.ItemIconGroup) {
     negativeText: t('common.cancel'),
     onPositiveClick: () => {
       if (groupInfo.id) {
-        deletes([groupInfo.id]).then(({ code, msg }) => {
+        deletes([groupInfo.id]).then(({ code }) => {
           if (code !== 0)
             ms.error(t('common.deleteFail'))
           else
@@ -138,7 +138,7 @@ function handleSaveGroup() {
 }
 
 function refreshList() {
-  getList<Common.ListResponse<Panel.ItemIconGroup[]>>().then(({ code, data }) => {
+  getList<Common.ListResponse<Panel.ItemIconGroup[]>>().then(({ data }) => {
     groups.value = data.list
   })
 }
@@ -149,58 +149,71 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="h-full">
-    <div class="p-2">
-      <NButton type="success" size="small" style="margin-right: 10px;" @click="handleAddGroup">
+  <div class="h-full flex flex-col gap-2 bg-slate-200 dark:bg-zinc-900 p-2">
+    <!-- 工具栏: 操作按钮靠左, 状态提示靠右 -->
+    <div class="shrink-0 flex items-center gap-2 px-3 py-2 bg-white dark:bg-zinc-800 rounded-xl">
+      <NButton type="success" size="small" @click="handleAddGroup">
+        <template #icon>
+          <SvgIcon icon="typcn:plus" />
+        </template>
         {{ $t('common.add') }}
       </NButton>
 
       <NButton v-if="!sortStatus" size="small" @click="handleDragSort">
+        <template #icon>
+          <SvgIcon icon="ri:drag-drop-line" />
+        </template>
         {{ $t('common.sort') }}
       </NButton>
 
       <NButton v-else type="warning" size="small" @click="handleSaveSort">
+        <template #icon>
+          <SvgIcon icon="material-symbols:save" />
+        </template>
         {{ $t('common.saveSort') }}
       </NButton>
+
+      <span class="ml-auto truncate text-xs text-slate-400 dark:text-slate-500">
+        {{ sortStatus ? $t('apps.itemGroupManage.sortTip') : $t('apps.itemGroupManage.groupCount', { count: groups.length }) }}
+      </span>
     </div>
 
-    <div class=" overflow-auto w-full mt-[20px]  bg-slate-200 dark:bg-zinc-900 rounded-xl" style="height:calc(100% - 65px)">
+    <!-- 分组列表: flex-1 自适应剩余高度, 内部滚动 -->
+    <div class="flex-1 min-h-0 overflow-auto">
       <VueDraggable
         v-model="groups"
         item-key="sort" :animation="300"
-        :style="{ padding: sortStatus ? '20px' : '10px' }"
         :disabled="!sortStatus"
       >
         <div v-for="(item, index) in groups" :key="index" class="w-full">
-          <NCard size="small" style="border-radius:10px;margin-bottom: 10px;">
-            <div class="flex" :class="sortStatus ? 'cursor-move' : ''">
-              <div class="flex items-center">
-                <span class="mr-[10px]">
-                  <SvgIcon class="text-[20px]" icon="material-symbols:ad-group-outline-rounded" />
-                  <!-- <SvgIcon class="text-[20px]" :icon="item.icon" /> -->
-                </span>
-                <span>
-                  {{ item.title }}
-                </span>
-              </div>
-              <div class="ml-auto">
-                <span>
-                  <NButton strong secondary type="success" size="small" @click="handleEditGroup(item)">
-                    <template #icon>
-                      <SvgIcon icon="basil:edit-solid" />
-                    </template>
-                  </NButton>
-                </span>
-                <span class="ml-[10px]">
-                  <NButton strong secondary type="error" size="small" class="ml-[10px]" @click="handleDelete(item)">
-                    <template #icon>
-                      <SvgIcon icon="material-symbols:delete" />
-                    </template>
-                  </NButton>
-                </span>
+          <NCard size="small" class="group-card" :class="sortStatus ? 'cursor-move' : ''">
+            <div class="flex items-center gap-3">
+              <span class="shrink-0 text-[20px]">
+                <SvgIcon icon="material-symbols:ad-group-outline-rounded" />
+                <!-- <SvgIcon :icon="item.icon" /> -->
+              </span>
+              <span class="flex-1 min-w-0 truncate">
+                {{ item.title }}
+              </span>
+              <div class="shrink-0 flex items-center gap-2">
+                <NButton strong secondary type="success" size="small" :title="$t('common.edit')" @click="handleEditGroup(item)">
+                  <template #icon>
+                    <SvgIcon icon="basil:edit-solid" />
+                  </template>
+                </NButton>
+                <NButton strong secondary type="error" size="small" :title="$t('common.delete')" @click="handleDelete(item)">
+                  <template #icon>
+                    <SvgIcon icon="material-symbols:delete" />
+                  </template>
+                </NButton>
               </div>
             </div>
           </NCard>
+        </div>
+
+        <!-- 空状态 -->
+        <div v-if="groups.length === 0" class="py-10 text-center text-sm text-slate-400 dark:text-slate-500">
+          {{ $t('common.noData') }}
         </div>
       </VueDraggable>
     </div>
@@ -249,3 +262,10 @@ onMounted(() => {
     </RoundCardModal>
   </div>
 </template>
+
+<style scoped>
+.group-card {
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+</style>

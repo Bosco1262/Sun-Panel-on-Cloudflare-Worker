@@ -108,7 +108,9 @@
       "cardStyleSmall": "小图标",
       "deleteWarnText": "你确定删除此分组[{name}]，删除后此分组应用图标将丢失？",
       "followGlobal": "跟随全局",
-      "groupName": "分组名称"
+      "groupCount": "共{count}个分组",
+      "groupName": "分组名称",
+      "sortTip": "拖拽卡片调整分组顺序"
     },
     "uploadsFileManager": {
       "alertText": "你可以在这里管理你上传过的壁纸和图标",
