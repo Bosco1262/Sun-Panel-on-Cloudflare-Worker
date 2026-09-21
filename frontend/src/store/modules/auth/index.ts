@@ -2,14 +2,9 @@ import { defineStore } from 'pinia'
 import { getStorage, removeToken as hRemoveToken, setStorage } from './helper'
 import { VisitMode } from '@/enums/auth'
 
-// interface SessionResponse {
-//   auth: boolean
-// }
-
 export interface AuthState {
   token: string | null
   userInfo: User.Info | null
-  // session: SessionResponse | null
   visitMode: VisitMode
 }
 
@@ -20,7 +15,8 @@ const defaultState: AuthState = {
 }
 
 export const useAuthStore = defineStore('auth-store', {
-  state: (): AuthState => getStorage() || defaultState,
+  // 与默认值合并: 本地缓存可能是旧版/损坏结构 (缺 visitMode 等), 直接当 AuthState 用会得到 undefined
+  state: (): AuthState => ({ ...defaultState, ...(getStorage() ?? {}) }),
 
   actions: {
     setToken(token: string) {

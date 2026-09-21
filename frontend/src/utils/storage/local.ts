@@ -1,17 +1,20 @@
-import { deCrypto, enCrypto } from '../crypto'
-
 interface StorageData<T = any> {
   data: T
   expire: number | null
 }
 
-export function createLocalStorage(options?: { expire?: number | null; crypto?: boolean }) {
+/**
+ * 本地缓存 (localStorage)
+ *
+ * 说明: 上游这里还有一条 AES 加密分支 (`ls`) 与 `clear()`, 前者只被已删除的死代码使用、
+ * 且密钥硬编码在源码里 (混淆意义大于安全性), 已一并移除。
+ */
+export function createLocalStorage(options?: { expire?: number | null }) {
   const DEFAULT_CACHE_TIME = 60 * 60 * 24 * 7
 
-  const { expire, crypto } = Object.assign(
+  const { expire } = Object.assign(
     {
       expire: DEFAULT_CACHE_TIME,
-      crypto: true,
     },
     options,
   )
@@ -22,8 +25,13 @@ export function createLocalStorage(options?: { expire?: number | null; crypto?: 
       expire: expire !== null ? new Date().getTime() + expire * 1000 : null,
     }
 
-    const json = crypto ? enCrypto(storageData) : JSON.stringify(storageData)
-    window.localStorage.setItem(key, json)
+    try {
+      window.localStorage.setItem(key, JSON.stringify(storageData))
+    }
+    catch (err) {
+      // 配额满 / 隐私模式: 写缓存失败不应影响主流程 (面板配置里可能含较大的壁纸地址与页脚 HTML)
+      console.warn(`[storage] write ${key} failed:`, (err as Error).message)
+    }
   }
 
   function get(key: string) {
@@ -32,10 +40,10 @@ export function createLocalStorage(options?: { expire?: number | null; crypto?: 
       let storageData: StorageData | null = null
 
       try {
-        storageData = crypto ? deCrypto(json) : JSON.parse(json)
+        storageData = JSON.parse(json)
       }
       catch {
-        // Prevent failure
+        // 缓存损坏: 走下面的 remove 清理, 返回 null
       }
 
       if (storageData) {
@@ -53,18 +61,12 @@ export function createLocalStorage(options?: { expire?: number | null; crypto?: 
     window.localStorage.removeItem(key)
   }
 
-  function clear() {
-    window.localStorage.clear()
-  }
-
   return {
     set,
     get,
     remove,
-    clear,
   }
 }
 
-export const ls = createLocalStorage()
-
-export const ss = createLocalStorage({ expire: null, crypto: false })
+/** 永不过期的本地缓存 (token / 用户信息 / 面板配置等) */
+export const ss = createLocalStorage({ expire: null })

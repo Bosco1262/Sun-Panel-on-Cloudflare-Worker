@@ -7,18 +7,16 @@ export type Theme = 'light' | 'dark' | 'auto'
 export type Language = 'zh-CN' | 'en-US'
 
 export interface AppState {
-  siderCollapsed: boolean
   theme: Theme
   language: Language
 }
 
 export function defaultSetting(): AppState {
-  const lan = (navigator.language).toLowerCase()
-  let language: Language = 'en-US'
-  if (lan.includes('zh'))
-    language = 'zh-CN'
+  // navigator 在非浏览器环境 (SSR / 单测) 不存在, 直接取会 ReferenceError
+  const lan = (typeof navigator !== 'undefined' ? navigator.language : '').toLowerCase()
+  const language: Language = lan.includes('zh') ? 'zh-CN' : 'en-US'
 
-  return { siderCollapsed: false, theme: 'auto', language }
+  return { theme: 'auto', language }
 }
 
 export function getLocalSetting(): AppState {

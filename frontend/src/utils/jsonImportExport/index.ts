@@ -38,6 +38,8 @@ export interface Icon {
   lanUrl: string
   description: string
   openMethod: number
+  /** 唯一标识 (与自定义 CSS/JS 配合使用); 旧版本导出的文件没有此字段 */
+  onlyName?: string
 }
 
 // 图标组
@@ -81,10 +83,16 @@ export function exportJson(appVersion?: string): ExportJsonResult {
       const jsonString = JSON.stringify(jsonData)
       if (jsonString) {
         const blob = new Blob([jsonString], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
         const link = document.createElement('a')
-        link.href = URL.createObjectURL(blob)
+        link.href = url
         link.download = `SunPanel-Data${moment().format('YYYYMMDDHHmm')}.sun-panel.json`
+        // 部分浏览器要求 a 节点在文档中才会触发下载
+        document.body.appendChild(link)
         link.click()
+        document.body.removeChild(link)
+        // 释放 blob URL, 否则每次导出都会泄漏一个
+        URL.revokeObjectURL(url)
       }
     },
 
@@ -112,18 +120,15 @@ export function importJsonString(jsonString: string): ImportJsonResult | null {
   try {
     data = JSON.parse(jsonString)
   }
-  catch (error) {
+  catch {
     throw new FormatError('file format error')
-    return null
   }
 
   const jsonStruct = transformJson(data)
-  const md5 = generateMD5(jsonString)
-
-  if (!jsonStruct) {
+  if (!jsonStruct)
     throw new FormatError('file format error')
-    return null
-  }
+
+  const md5 = generateMD5(jsonString)
 
   if (data.version < ALLOW_LOW_VERSION)
     throw new ConfigVersionLowError('')
@@ -144,6 +149,11 @@ export function importJsonString(jsonString: string): ImportJsonResult | null {
 }
 
 function transformJson(jsonData: any): JsonStructure | null {
+  // 顶层必须是对象: 否则 `key in jsonData` 会抛 TypeError (不是我们自己的 FormatError,
+  // 调用方只会识别 FormatError/ConfigVersionLowError, 结果就是静默失败、用户没有任何提示)
+  if (typeof jsonData !== 'object' || jsonData === null || Array.isArray(jsonData))
+    return null
+
   // 检查必须存在的键
   const requiredKeys: Array<keyof JsonStructure> = ['version', 'appName', 'exportTime', 'appVersion', 'md5']
   for (const key of requiredKeys) {

@@ -6,9 +6,6 @@ export const SETTING_ADMIN_USERNAME = 'admin_username'
 export const SETTING_ADMIN_PASSWORD = 'admin_password'
 export const SETTING_ADMIN_NAME = 'admin_name'
 export const SETTING_ADMIN_HEAD_IMAGE = 'admin_head_image'
-export const SETTING_SYSTEM_APPLICATION = 'system_application'
-export const SETTING_DISCLAIMER = 'disclaimer'
-export const SETTING_WEB_ABOUT_DESCRIPTION = 'web_about_description'
 /** token 世代: 递增即让此前签发的所有 JWT 失效 (见 src/utils/authEpoch.ts) */
 export const SETTING_AUTH_EPOCH = 'auth_epoch'
 /**
@@ -18,6 +15,14 @@ export const SETTING_AUTH_EPOCH = 'auth_epoch'
  * 关闭后删除操作不再动 R2: 图片留在「上传文件管理」里可复用, 需要时手动点「清理未引用文件」。
  */
 export const SETTING_AUTO_CLEAN_UNUSED = 'storage_auto_clean_unused'
+/**
+ * 自定义 CSS / JS (全局设置注入)
+ *
+ * 放在这里而不是 api 层: 引用检查 (src/utils/uploadRefs.ts) 也要读这两个键,
+ * 常量提到 utils 可以避免 utils ↔ api 的循环依赖。
+ */
+export const SETTING_CUSTOM_CSS = 'custom_css'
+export const SETTING_CUSTOM_JS = 'custom_js'
 
 export async function getSetting(db: D1Database, name: string): Promise<string | null> {
   const row = await db
@@ -35,22 +40,6 @@ export async function setSetting(db: D1Database, name: string, value: string): P
     )
     .bind(name, value)
     .run()
-}
-
-export async function getSettingJson<T>(db: D1Database, name: string, fallback: T): Promise<T> {
-  const v = await getSetting(db, name)
-  if (v === null || v === '')
-    return fallback
-  try {
-    return JSON.parse(v) as T
-  }
-  catch {
-    return fallback
-  }
-}
-
-export async function setSettingJson(db: D1Database, name: string, value: unknown): Promise<void> {
-  await setSetting(db, name, JSON.stringify(value))
 }
 
 // 读取当前用户资料 (单用户模式: 固定 id=1)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { t } from '@/locales'
 
 const props = defineProps<{
@@ -18,6 +18,17 @@ const currentDate = ref<CurrentDate>({
   week: '--',
 })
 
+// 星期文案只在语言变化时重算, 不必每秒重建数组
+const daysOfWeek = computed(() => [
+  t('deskModule.clock.sun'),
+  t('deskModule.clock.mon'),
+  t('deskModule.clock.tue'),
+  t('deskModule.clock.wed'),
+  t('deskModule.clock.thu'),
+  t('deskModule.clock.fri'),
+  t('deskModule.clock.sat'),
+])
+
 function updateCurrentDate() {
   const now = new Date()
   const hours = String(now.getHours()).padStart(2, '0')
@@ -34,30 +45,14 @@ function updateCurrentDate() {
   // 获取当前的日期
   const day = now.getDate()
   const month = now.getMonth() + 1 // 月份从0开始，所以要加1
-  // const year = now.getFullYear()
 
-  const daysOfWeek = [
-    t('deskModule.clock.sun'),
-    t('deskModule.clock.mon'),
-    t('deskModule.clock.tue'),
-    t('deskModule.clock.wed'),
-    t('deskModule.clock.thu'),
-    t('deskModule.clock.fri'),
-    t('deskModule.clock.sat'),
-  ]
-  // const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-  currentDate.value.week = daysOfWeek[now.getDay()]
+  currentDate.value.week = daysOfWeek.value[now.getDay()]
   currentDate.value.date = `${month}-${day}`
 }
 
-const updateClock = () => {
-  updateCurrentDate()
-}
-
-const intervalId = setInterval(updateClock, 1000)
+const intervalId = setInterval(updateCurrentDate, 1000)
 
 onMounted(() => {
-  updateClock()
   updateCurrentDate()
 })
 
@@ -71,7 +66,7 @@ onBeforeUnmount(() => {
     <span class="clock-time text-2xl sm:text-2xl md:text-3xl font-[600]">
       {{ currentDate.time }}
     </span>
-    <div class="hidden sm:hidden md:block">
+    <div class="hidden md:block">
       <span class="clock-date mr-1">
         {{ currentDate.date }}
       </span>

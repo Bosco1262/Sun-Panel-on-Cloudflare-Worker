@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import type { D1Database } from '@cloudflare/workers-types'
 import type { Env } from '../../types'
 import { error, errorByCode, errorByCodeAndMsg, success, successData, successList } from '../../utils/response'
 import { downloadFavicon, getSiteFaviconCandidates, getSiteFaviconUrl } from '../../utils/favicon'
@@ -74,6 +75,28 @@ export function mapIcon(row: IconRow) {
   }
 }
 
+/** onlyName (唯一标识) 的最大长度: 超长直接截断, 避免异常输入写库 */
+const ONLY_NAME_MAX_LENGTH = 50
+
+/**
+ * 归一化唯一标识: 去空白 + 只保留英文/数字/下划线/中划线 + 限长
+ *
+ * 与前端 EditItem 的即时过滤保持一致, 但以服务端为准 —— 导入的数据来自文件, 不可信。
+ */
+function sanitizeOnlyName(raw: unknown): string {
+  if (typeof raw !== 'string')
+    return ''
+  return raw.trim().replace(/[^A-Za-z0-9_-]/g, '').slice(0, ONLY_NAME_MAX_LENGTH)
+}
+
+/** 已占用的唯一标识集合 (软删的不算, 与单条 edit 的判定一致) */
+async function loadTakenOnlyNames(db: D1Database): Promise<Set<string>> {
+  const { results } = await db
+    .prepare('SELECT only_name FROM item_icon WHERE deleted_at IS NULL AND only_name != \'\'')
+    .all<{ only_name: string }>()
+  return new Set(results.map(row => row.only_name))
+}
+
 // 新增/修改图标
 app.post('/itemIcon/edit', authMiddleware(), async (c) => {
   const body = await c.req.json<ItemIconBody>().catch(() => null)
@@ -90,7 +113,7 @@ app.post('/itemIcon/edit', authMiddleware(), async (c) => {
   const lanUrl = body.lanUrl ?? ''
   const description = body.description ?? ''
   const openMethod = body.openMethod ?? 0
-  const onlyName = (body.onlyName ?? '').trim()
+  const onlyName = sanitizeOnlyName(body.onlyName)
 
   // 唯一标识占用校验 (对齐上游 onlyNameExisted)
   if (onlyName) {
@@ -129,7 +152,7 @@ app.post('/itemIcon/edit', authMiddleware(), async (c) => {
   return successData(c, body)
 })
 
-// 批量添加图标
+// 批量添加图标 (导入流程使用: 携带 sort 保真顺序, 携带 onlyName 保真唯一标识)
 app.post('/itemIcon/addMultiple', authMiddleware(), async (c) => {
   const list = await c.req.json<ItemIconBody[]>().catch(() => null)
   if (!Array.isArray(list))
@@ -141,18 +164,38 @@ app.post('/itemIcon/addMultiple', authMiddleware(), async (c) => {
   }
 
   const db = c.env.DB
-  const stmts = list.map((item) => {
+
+  // onlyName 的边界处理 (与单条 edit 的语义对齐):
+  // 归一化 (去空白/剔非法字符/限长) 后, 与库内已占用或本批次内重复的标识一律降级为空串,
+  // 并把被丢弃的标识回给前端提示 —— 导入不应因一个重复标识整体失败, 但也不能写出冲突数据。
+  const taken = await loadTakenOnlyNames(db)
+  const droppedOnlyNames: string[] = []
+  const normalized = list.map((item) => {
+    const onlyName = sanitizeOnlyName(item.onlyName)
+    if (!onlyName)
+      return { ...item, onlyName: '' }
+    if (taken.has(onlyName)) {
+      droppedOnlyNames.push(onlyName)
+      return { ...item, onlyName: '' }
+    }
+    taken.add(onlyName)
+    return { ...item, onlyName }
+  })
+
+  const stmts = normalized.map((item) => {
     const iconJson = JSON.stringify(item.icon ?? {})
+    // sort 由导入流程携带 (用于保真原有顺序); 缺省或非法时用 9999 = 追加到末尾
+    const sort = typeof item.sort === 'number' && Number.isFinite(item.sort) ? item.sort : 9999
     return db
       .prepare(
-        'INSERT INTO item_icon (icon_json, title, url, lan_url, description, open_method, sort, item_icon_group_id) '
-        + 'VALUES (?, ?, ?, ?, ?, ?, 9999, ?)',
+        'INSERT INTO item_icon (icon_json, title, url, lan_url, description, open_method, sort, item_icon_group_id, only_name) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
-      .bind(iconJson, item.title ?? '', item.url ?? '', item.lanUrl ?? '', item.description ?? '', item.openMethod ?? 0, item.itemIconGroupId)
+      .bind(iconJson, item.title ?? '', item.url ?? '', item.lanUrl ?? '', item.description ?? '', item.openMethod ?? 0, sort, item.itemIconGroupId, item.onlyName ?? '')
   })
   await db.batch(stmts)
 
-  return successData(c, list)
+  return successData(c, { list: normalized, droppedOnlyNames })
 })
 
 // 按分组获取图标列表

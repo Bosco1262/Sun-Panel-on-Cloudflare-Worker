@@ -68,6 +68,17 @@ const filteredItemCount = computed(() =>
   filterItems.value.reduce((total, view) => total + (view.items?.length ?? 0), 0),
 )
 
+/** 壁纸样式: 地址为空时不拼 `url()` 空值, 直接交给底层默认背景 */
+const coverStyle = computed(() => {
+  const src = panelState.panelConfig.backgroundImageSrc?.trim()
+  return {
+    filter: `blur(${panelState.panelConfig.backgroundBlur}px)`,
+    ...(src
+      ? { background: `url(${src}) no-repeat`, backgroundSize: 'cover', backgroundPosition: 'center' }
+      : {}),
+  }
+})
+
 function openPage(openMethod: number, url: string, title?: string) {
   switch (openMethod) {
     case 1:
@@ -95,17 +106,15 @@ function handleItemClick(group: ItemGroup, item: Panel.ItemInfo) {
     return
   }
 
-  let jumpUrl = ''
-
-  if (item)
-    jumpUrl = (panelState.networkMode === PanelStateNetworkModeEnum.lan ? item.lanUrl : item.url) as string
-  if (item.lanUrl === '')
-    jumpUrl = item.url
+  // 内网模式下优先 lanUrl, 但 lanUrl 可能为空/未设置 (DB 列可为 null), 必须回退到 url,
+  // 否则 jumpUrl 是 undefined, 会跳到 /undefined
+  const preferLan = panelState.networkMode === PanelStateNetworkModeEnum.lan
+  const jumpUrl = (preferLan ? (item.lanUrl || item.url) : (item.url || item.lanUrl)) || ''
 
   openPage(item.openMethod, jumpUrl, item.title)
 }
 
-function handWindowIframeIdLoad(payload: Event) {
+function handWindowIframeIdLoad(_event: Event) {
   windowIframeIsLoad.value = false
 }
 
@@ -117,9 +126,7 @@ function getList() {
       return
 
     items.value = data.list
-    // 过滤结果由 filterItems 计算属性派生, 无需在此重置
-    // console.log(items)
-  })
+  }).catch(() => ms.error(t('panelHome.getListFail')))
 }
 
 // 从后端获取组下面的图标 (按 id 定位分组, 不依赖数组下标, 过滤时也不会串组)
@@ -139,13 +146,14 @@ function updateItemIconGroupByNet(group: ItemGroup) {
 
 function handleRightMenuSelect(key: string | number) {
   dropdownShow.value = false
-  // console.log(currentRightSelectItem, key)
-  let jumpUrl = panelState.networkMode === PanelStateNetworkModeEnum.lan ? currentRightSelectItem.value?.lanUrl : currentRightSelectItem.value?.url
-  if (currentRightSelectItem.value?.lanUrl === '')
-    jumpUrl = currentRightSelectItem.value.url
+  const target = currentRightSelectItem.value
+  // 同 handleItemClick: 候选地址为空时逐级回退, 避免 window.open(undefined)
+  const preferLan = panelState.networkMode === PanelStateNetworkModeEnum.lan
+  const jumpUrl = (preferLan ? (target?.lanUrl || target?.url) : (target?.url || target?.lanUrl)) || ''
   switch (key) {
     case 'newWindows':
-      window.open(jumpUrl)
+      if (jumpUrl)
+        window.open(jumpUrl, '_blank', 'noopener')
       break
     case 'openWanUrl':
       if (currentRightSelectItem.value)
@@ -174,7 +182,7 @@ function handleRightMenuSelect(key: string | number) {
             else {
               ms.error(`${t('common.deleteFail')}:${msg}`)
             }
-          })
+          }).catch(() => ms.error(t('common.deleteFail')))
         },
       })
 
@@ -200,11 +208,10 @@ function handleContextMenu(e: MouseEvent, group: ItemGroup, item: Panel.ItemInfo
 }
 
 function onClickoutside() {
-  // message.info('clickoutside')
   dropdownShow.value = false
 }
 
-function handleEditSuccess(item: Panel.ItemInfo) {
+function handleEditSuccess(_item: Panel.ItemInfo) {
   getList()
 }
 
@@ -216,12 +223,6 @@ function handleChangeNetwork(mode: PanelStateNetworkModeEnum) {
   else
     ms.success(t('panelHome.changeToWanModelSuccess'))
 }
-
-// 结束拖拽
-// function handleEndDrag(event: any, itemIconGroup: Panel.ItemIconGroup) {
-//   // console.log(event)
-//   // console.log(items.value)
-// }
 
 function handleSaveSort(itemGroup: ItemGroup) {
   const saveItems: Common.SortItemRequest[] = []
@@ -236,12 +237,20 @@ function handleSaveSort(itemGroup: ItemGroup) {
 
     saveSort({ itemIconGroupId: itemGroup.id as number, sortItems: saveItems }).then(({ code, msg }) => {
       if (code === 0) {
+        // 同步本地 sort: 拖拽 key 用 id, 但顺序依赖 sort; 不同步会让下次保存写回旧值
+        itemGroup.items?.forEach((element, i) => {
+          element.sort = i + 1
+        })
         ms.success(t('common.saveSuccess'))
         itemGroup.sortStatus = false
       }
       else {
         ms.error(`${t('common.saveFail')}:${msg}`)
       }
+    }).catch(() => {
+      // 保存失败时刷新回服务端顺序, 避免界面与后端长期不一致
+      ms.error(t('common.saveFail'))
+      getList()
     })
   }
 }
@@ -287,13 +296,18 @@ onMounted(() => {
   updateLocalUserInfo()
   getList()
 
-  // 更新同步云端配置 (含搜索引擎配置)
-  panelState.updatePanelConfigByCloud()
+  // 更新同步云端配置 (含搜索引擎配置); 失败时保留本地缓存配置并提示, 不影响面板渲染
+  panelState.updatePanelConfigByCloud().catch(() => ms.error(t('panelHome.getConfigFail')))
 
   // 设置标题
   if (panelState.panelConfig.logoText)
     setTitle(panelState.panelConfig.logoText)
 })
+
+// NBackTop 的 listen-to 需要稳定引用, 内联箭头函数每次渲染都会重建并重新绑定监听
+function getScrollContainer() {
+  return scrollContainerRef.value
+}
 
 // 系统应用弹窗关闭后刷新分组数据（分组级卡片样式等可能在弹窗中被修改）
 watch(settingModalShow, (show) => {
@@ -375,12 +389,7 @@ function handleAddItem(itemIconGroupId?: number) {
 <template>
   <div class="w-full h-full sun-main">
     <div
-      class="cover wallpaper" :style="{
-        filter: `blur(${panelState.panelConfig.backgroundBlur}px)`,
-        background: `url(${panelState.panelConfig.backgroundImageSrc}) no-repeat`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }"
+      class="cover wallpaper" :style="coverStyle"
     />
     <div class="mask" :style="{ backgroundColor: `rgba(0,0,0,${panelState.panelConfig.backgroundMaskNumber})` }" />
     <div ref="scrollContainerRef" class="absolute w-full h-full overflow-auto">
@@ -455,7 +464,7 @@ function handleAddItem(itemIconGroupId?: number) {
             <div v-if="getGroupCardStyle(view.group) === PanelPanelConfigStyleEnum.info">
               <div v-if="view.group.items">
                 <VueDraggable
-                  v-model="view.group.items" item-key="sort" :animation="300"
+                  v-model="view.group.items" item-key="id" :animation="300"
                   class="icon-info-box"
                   filter=".not-drag"
                   :disabled="!view.group.sortStatus"
@@ -467,7 +476,7 @@ function handleAddItem(itemIconGroupId?: number) {
                       :icon-text-color="getGroupTextColor(view.group)"
                       :icon-text-info-hide-description="getGroupHideDescription(view.group)"
                       :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
-                      :style="0"
+                      :card-style="0"
                       @click="handleItemClick(view.group, item)"
                     />
                   </div>
@@ -479,7 +488,7 @@ function handleAddItem(itemIconGroupId?: number) {
                       :icon-text-color="getGroupTextColor(view.group)"
                       :icon-text-info-hide-description="getGroupHideDescription(view.group)"
                       :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
-                      :style="0"
+                      :card-style="0"
                       @click="handleAddItem(view.group.id)"
                     />
                   </div>
@@ -491,7 +500,7 @@ function handleAddItem(itemIconGroupId?: number) {
             <div v-else>
               <div v-if="view.group.items">
                 <VueDraggable
-                  v-model="view.group.items" item-key="sort" :animation="300"
+                  v-model="view.group.items" item-key="id" :animation="300"
                   class="icon-small-box"
 
                   filter=".not-drag"
@@ -504,7 +513,7 @@ function handleAddItem(itemIconGroupId?: number) {
                       :icon-text-color="getGroupTextColor(view.group)"
                       :icon-text-info-hide-description="getGroupHideDescription(view.group)"
                       :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
-                      :style="1"
+                      :card-style="1"
                       @click="handleItemClick(view.group, item)"
                     />
                   </div>
@@ -516,11 +525,11 @@ function handleAddItem(itemIconGroupId?: number) {
                       :icon-text-color="getGroupTextColor(view.group)"
                       :icon-text-info-hide-description="getGroupHideDescription(view.group)"
                       :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
-                      :style="1"
+                      :card-style="1"
                       @click="handleAddItem(view.group.id)"
                     />
                   </div>
-                </vuedraggable>
+                </VueDraggable>
               </div>
             </div>
 
@@ -590,11 +599,10 @@ function handleAddItem(itemIconGroupId?: number) {
       </NButtonGroup>
 
       <AppStarter v-model:visible="settingModalShow" />
-      <!-- <Setting v-model:visible="settingModalShow" /> -->
     </div>
 
     <NBackTop
-      :listen-to="() => scrollContainerRef"
+      :listen-to="getScrollContainer"
       :right="10"
       :bottom="10"
       style="background-color:transparent;border: none;box-shadow: none;"
@@ -666,8 +674,6 @@ html {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  /* background: url(@/assets/start_sky.jpg) no-repeat; */
-
   transform: scale(1.05);
 }
 

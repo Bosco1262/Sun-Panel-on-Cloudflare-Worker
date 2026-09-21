@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { NCheckbox } from 'naive-ui'
+import { NCheckbox, useMessage } from 'naive-ui'
 import { SearchEngineIcon, SvgIcon } from '@/components/common'
 import { useAuthStore, usePanelState } from '@/store'
 import { VisitMode } from '@/enums/auth'
 import { SearchEngineOpenMethodEnum } from '@/enums/panel'
 import { buildSearchUrl, createDefaultEngines } from '@/utils/searchBox'
+import { t } from '@/locales'
 
 const props = withDefaults(defineProps<{
   background?: string
@@ -23,6 +24,7 @@ const emits = defineEmits(['itemSearch'])
 
 const authStore = useAuthStore()
 const panelState = usePanelState()
+const ms = useMessage()
 
 const searchTerm = ref('')
 const isFocused = ref(false)
@@ -45,15 +47,21 @@ const currentEngine = computed<DeskModule.SearchBox.SearchEngine>(() => {
     ?? list[0]
 })
 
+/** 保存搜索引擎配置 (同一行的面板配置会一并提交); 失败只提示, 不回滚本地选择 */
+function persistSearchEngine() {
+  // 访客模式的临时切换不落库 (本移植版 visitMode 恒为登录模式, 属上游遗留分支)
+  if (isVisitor.value)
+    return
+  panelState.saveSearchEngine().catch(() => ms.error(t('common.saveFail')))
+}
+
 const newWindowOpen = computed({
   get: () => panelState.searchEngine?.openMethod === SearchEngineOpenMethodEnum.newWindow,
   set: (value: boolean) => {
     if (!panelState.searchEngine)
       return
     panelState.searchEngine.openMethod = value ? SearchEngineOpenMethodEnum.newWindow : SearchEngineOpenMethodEnum.currentPage
-    // 访客模式的临时切换不落库
-    if (!isVisitor.value)
-      panelState.saveSearchEngine()
+    persistSearchEngine()
   },
 })
 
@@ -84,8 +92,7 @@ function handleEngineSelect(engine: DeskModule.SearchBox.SearchEngine) {
   panelState.searchEngine.currentEngineId = engine.id
   panelShow.value = false
   panelState.recordState()
-  if (!isVisitor.value)
-    panelState.saveSearchEngine()
+  persistSearchEngine()
 }
 
 function handleSearchClick() {
@@ -99,7 +106,7 @@ function handleSearchClick() {
 
   handleClearSearchTerm()
   if (newWindowOpen.value)
-    window.open(fullUrl)
+    window.open(fullUrl, '_blank', 'noopener')
   else
     window.location.href = fullUrl
 }

@@ -24,8 +24,11 @@ const frontVersion = import.meta.env.VITE_APP_VERSION || 'unknown'
 
 onMounted(() => {
   get<Version>().then((res) => {
-    if (res.code === 0)
+    if (res.code === 0 && res.data?.versionName)
       versionName.value = res.data.versionName
+  }).catch(() => {
+    // 版本号取不到不影响关于页其它内容
+    console.warn('load version info failed')
   })
 })
 </script>
@@ -44,6 +47,11 @@ onMounted(() => {
       </div>
       <div class="mt-2">
         <a href="https://github.com/hslr-s/sun-panel/releases" target="_blank" class="link">{{ $t('apps.about.checkUpdate') }}</a>
+      </div>
+      <!-- 上游链接保留作为致谢, 同时标明本移植版仓库, 避免用户把问题提到上游 -->
+      <div class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+        {{ $t('apps.about.thisProject') }}
+        <a href="https://github.com/Bosco1262/Sun-Panel-on-Cloudflare-Worker" target="_blank" class="link">Sun-Panel-on-Cloudflare-Worker</a>
       </div>
     </div>
 
@@ -83,7 +91,6 @@ onMounted(() => {
         </div>
         <div class="flex items-center mx-[10px]">
           <img class="w-[20px] h-[20px] mr-[5px]" :src="srcBilibili" alt="">
-          <!-- <a href="https://space.bilibili.com/27407696/channel/collectiondetail?sid=2023810" target="_blank" class="link">Bilibili</a> -->
           <a href="https://space.bilibili.com/27407696/channel/collectiondetail?sid=2023810" target="_blank" class="link">Bilibili</a>
         </div>
         <div v-if="appStore.language !== 'zh-CN'" class="flex items-center mx-[10px]">

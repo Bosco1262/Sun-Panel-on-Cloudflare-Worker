@@ -79,14 +79,15 @@ https://www.bing.com/search?q=%s&form=QBLH
 ## 自检脚本
 
 `scratch/` 下有不依赖测试框架的自检脚本，用于验证纯逻辑与后端合并语义
-（在仓库根目录执行）：
+（在仓库根目录执行；**完整脚本清单与命令见
+[improvement-plan.md 附录 C](./improvement-plan.md#附录-c自检脚本与命令)**）。与本页相关的三个：
 
 ```bash
 # 搜索引擎工具函数：占位符替换、模板推导、校验（含校验文案 key 与 locales 对齐）、旧数据归一化
 node_modules/.bin/esbuild scratch/search-engine-util.test.ts \
-  --bundle --platform=node --format=cjs --outfile=scratch/out.cjs \
+  --bundle --platform=node --format=esm --outfile=scratch/search-engine-util.mjs \
   --loader:.svg=text --log-level=warning
-node scratch/out.cjs
+node scratch/search-engine-util.mjs
 
 # userConfig/set 的字段合并语义（内存版 D1 + 真实 HTTP 调用）
 node_modules/.bin/esbuild scratch/user-config-merge.test.ts \
@@ -94,14 +95,13 @@ node_modules/.bin/esbuild scratch/user-config-merge.test.ts \
   --banner:js="import{webcrypto}from'node:crypto';globalThis.crypto??=webcrypto;"
 node scratch/merge.mjs
 
-# i18n key 审计：缺失 key（会直接显示原始 key）/ 中英不齐 / 死文案
+# i18n key 审计：缺失 key（会直接显示原始 key）/ 中英不齐 / 死文案（含动态 key 白名单）
 node_modules/.bin/esbuild scratch/i18n-audit.ts \
-  --bundle --platform=node --format=cjs --outfile=scratch/i18n-audit.cjs --log-level=warning
-node scratch/i18n-audit.cjs
+  --bundle --platform=node --format=esm --outfile=scratch/i18n-audit.mjs --log-level=warning
+node scratch/i18n-audit.mjs
 ```
 
-三个脚本都是自包含的，退出码非 0 表示有用例失败
-（前两个当前实测：`53 passed, 0 failed` 与 `16 passed, 0 failed`）。
+三个脚本都是自包含的，退出码非 0 表示有用例失败（产物 `.mjs` 用完请删除，未加 gitignore）。
 
 ### i18n 审计脚本说明
 

@@ -3,31 +3,17 @@ import { ss } from '@/utils/storage'
 
 const LOCAL_NAME = 'AUTH_TOKEN'
 
-// export function getToken() {
-//   return ss.get(LOCAL_NAME)
-// }
-
-// export function setToken(token: string) {
-//   return ss.set(LOCAL_NAME, token)
-// }
-
-// export function setUserInfo(userInfo: User.Info) {
-//   return ss.set(LOCAL_NAME, userInfo)
-// }
-
-// export function getUserInfo() {
-//   return ss.get(LOCAL_NAME)
-// }
-
 export function setStorage(state: AuthState) {
-  return ss.set(LOCAL_NAME, state)
+  // token 不落盘 (改进计划 §9.4): 会话由 HttpOnly Cookie 承担 ——
+  // localStorage 里的 token 一旦页面存在 XSS (例如自定义 JS) 就会被直接读走。
+  // 内存里仍保留 token, 用于同一会话内 Cookie 不可用时的请求头回退。
+  return ss.set(LOCAL_NAME, { ...state, token: null })
 }
 
-export function getStorage() {
+export function getStorage(): AuthState | null {
   return ss.get(LOCAL_NAME)
 }
 
 export function removeToken() {
-  // ss.clear()
   return ss.remove(LOCAL_NAME)
 }

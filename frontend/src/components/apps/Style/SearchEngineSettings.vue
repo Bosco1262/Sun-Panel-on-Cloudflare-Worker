@@ -166,12 +166,9 @@ function handleResetAll() {
 }
 
 function handleChangeSort() {
-  if (sortStatus.value) {
-    sortStatus.value = false
-    ms.success(t('common.saveSuccess'))
-    return
-  }
-  sortStatus.value = true
+  // 排序结果由父组件 (风格设置) 的防抖保存统一提交并提示,
+  // 这里只切换排序模式, 避免「还没保存就提示保存成功」
+  sortStatus.value = !sortStatus.value
 }
 
 /** 编辑框里粘贴一个能打开的搜索地址时, 自动识别关键词参数并转成模板 */
@@ -222,8 +219,6 @@ function handleSave() {
   else {
     // 保留原位置, 用 splice 维持响应式数组顺序
     list.splice(index, 1, engine)
-    if (searchEngine.value && searchEngine.value.currentEngineId === engine.id)
-      searchEngine.value.currentEngineId = engine.id
   }
 
   editor.show = false
@@ -279,7 +274,7 @@ function handleSave() {
           @click="!sortStatus && handleSelect(item)"
         >
           <span class="mr-[8px] flex items-center">
-            <SvgIcon v-if="sortStatus" class="text-[16px] opacity-60" icon="material-symbols:drag-indicator" />
+            <SvgIcon v-if="sortStatus" class="text-[16px] opacity-60" icon="ri:drag-drop-line" />
             <SearchEngineIcon
               v-else
               :icon-src="item.iconSrc"

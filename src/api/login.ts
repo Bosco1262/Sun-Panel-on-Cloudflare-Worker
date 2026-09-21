@@ -14,6 +14,7 @@ import {
 } from '../utils/settings'
 import { clearFails, ensureLoginAttemptTable, isLocked, nowSeconds, readAttempt, recordFail } from '../utils/loginRate'
 import { bumpAuthEpoch, getAuthEpoch } from '../utils/authEpoch'
+import { clearAuthCookie, setAuthCookie } from '../utils/authCookie'
 import { authMiddleware } from '../middleware/auth'
 
 const app = new Hono<{ Bindings: Env }>()
@@ -140,6 +141,10 @@ app.post('/login', async (c) => {
   }
 
   const token = await signToken(c.env.JWT_SECRET, user, await getAuthEpoch(db))
+
+  // 会话承载在 HttpOnly Cookie 上 (§9.4); 响应体里的 token 保留给脚本/第三方工具使用
+  setAuthCookie(c, token)
+
   return successData(c, {
     ...user,
     status: 1,
@@ -151,12 +156,14 @@ app.post('/login', async (c) => {
 })
 
 // 登出
-// 默认只让前端删掉 token (JWT 无状态); 传 allDevices=true 时递增世代,
-// 让此前签发的所有 token (含当前这个) 立即失效
+// 清掉会话 Cookie (前端也会清本地缓存); 传 allDevices=true 时递增世代,
+// 让此前签发的所有 token (含其它设备上的 Cookie) 立即失效
 app.post('/logout', authMiddleware(), async (c) => {
   const body = await c.req.json<{ allDevices?: boolean }>().catch(() => null)
   if (body?.allDevices)
     await bumpAuthEpoch(c.env.DB)
+
+  clearAuthCookie(c)
 
   return success(c)
 })

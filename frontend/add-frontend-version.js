@@ -5,8 +5,9 @@ const moment = require('moment')
 // git 最新标签
 // const latestTag = execSync('git describe --tags --abbrev=0').toString().trim()
 
-// 设置默认时区为 'Asia/Shanghai'
-const packDate = moment().utc().format('YYYYMMDD')
+// 版本号按北京时间生成 (CI 运行在 UTC, 用 utcOffset 对齐注释里的 'Asia/Shanghai',
+// 否则北京时间 0:00-8:00 构建会生成前一天的日期)
+const packDate = moment().utcOffset(8).format('YYYYMMDD')
 
 // 要追加的内容
 const contentToAppend = `\nVITE_APP_VERSION=${packDate}`

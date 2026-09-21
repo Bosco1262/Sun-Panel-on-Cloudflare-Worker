@@ -11,7 +11,13 @@ interface Prop {
   iconTextColor?: string
   iconTextInfoHideDescription: boolean
   iconTextIconHideTitle: boolean
-  style: PanelPanelConfigStyleEnum
+  /**
+   * 卡片样式: 0=详情图标(长条形) / 1=小图标(正方形)
+   *
+   * 字段名曾为 `style`, 与 Vue 的 style 绑定语义冲突 (调用处必须传字面量,
+   * 动态表达式会被编译成 _normalizeStyle() 变成 undefined), 故改名。
+   */
+  cardStyle: PanelPanelConfigStyleEnum
 }
 
 const props = withDefaults(defineProps<Prop>(), {
@@ -38,7 +44,7 @@ const textColor = computed(() => {
   <div class="app-icon w-full">
     <!-- 详情图标 -->
     <div
-      v-if="style === PanelPanelConfigStyleEnum.info"
+      v-if="cardStyle === PanelPanelConfigStyleEnum.info"
       class="app-icon-info w-full rounded-2xl flex"
       :style="{ 'background': itemInfo?.icon?.backgroundColor || defaultBackground, '--custom-box-shadow-color': itemInfo?.icon?.backgroundColor || defaultBackground }"
     >
@@ -68,7 +74,7 @@ const textColor = computed(() => {
     </div>
 
     <!-- 极简(小)图标（APP） -->
-    <div v-if="style === PanelPanelConfigStyleEnum.icon" class="app-icon-small">
+    <div v-if="cardStyle === PanelPanelConfigStyleEnum.icon" class="app-icon-small">
       <div
         class="app-icon-small-icon overflow-hidden rounded-2xl sunpanel w-[70px] h-[70px] mx-auto"
         :style="{ '--custom-box-shadow-color': itemInfo?.icon?.backgroundColor || defaultBackground }"

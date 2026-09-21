@@ -8,7 +8,6 @@ interface App {
   name: string
   componentName: string
   icon: string
-  auth?: number
 }
 const props = defineProps<{
   visible: boolean
@@ -23,10 +22,12 @@ const collapsed = ref(false)
 const screenWidth = ref(0)
 const isSmallScreen = ref(false)
 const defaultTitle = t('appLauncher.title')
-const title = ref('')
-const height = ref('500px')
+const height = '500px'
+/** 用户在小屏下手动展开过侧栏后, 不再被 resize 强制折叠 */
+const userToggledCollapsed = ref(false)
 
-const apps = ref<App[]>([
+// computed 而非 ref: 语言切换时应用名要跟着变
+const apps = computed<App[]>(() => [
   {
     name: t('apps.userInfo.appName'),
     componentName: 'UserInfo',
@@ -84,13 +85,22 @@ function getScreenWidth() {
 function handleResize() {
   screenWidth.value = getScreenWidth()
   if (screenWidth.value < 640) {
-    collapsed.value = true
+    // 只在首次进入小屏时折叠, 否则每次 resize 都会覆盖用户手动展开的状态
+    if (!isSmallScreen.value && !userToggledCollapsed.value)
+      collapsed.value = true
     isSmallScreen.value = true
   }
   else {
     collapsed.value = false
     isSmallScreen.value = false
+    userToggledCollapsed.value = false
   }
+}
+
+function toggleCollapsed() {
+  collapsed.value = !collapsed.value
+  if (isSmallScreen.value)
+    userToggledCollapsed.value = true
 }
 
 onMounted(() => {
@@ -111,12 +121,12 @@ onUnmounted(() => {
       size="small"
     >
       <template #header>
-        <div class="flex items-center select-none" @click="collapsed = !collapsed">
+        <div class="flex items-center select-none" @click="toggleCollapsed">
           <div class="text-3xl cursor-pointer" style="color:var(--n-color-target)">
             <SvgIcon class=" transition-all duration-500" :icon="collapsed ? 'tabler-layout-sidebar-right-collapse-filled' : 'tabler-layout-sidebar-left-collapse-filled'" />
           </div>
           <div class="ml-1">
-            {{ title === '' ? defaultTitle : title }}
+            {{ defaultTitle }}
           </div>
         </div>
       </template>
@@ -141,8 +151,8 @@ onUnmounted(() => {
                   }"
                 >
                   <div
-                    v-for=" (item, index) in apps"
-                    :key="index"
+                    v-for="item in apps"
+                    :key="item.componentName"
                     :style="{ color: componentName === item.componentName ? 'var(--n-color-target)' : '' }"
                     @click="handleClickApp(item)"
                   >
@@ -155,10 +165,6 @@ onUnmounted(() => {
                         </div>
                         <span class="ml-2">{{ item.name }}</span>
                       </div>
-                    <!-- 更多按钮 -->
-                    <!-- <div class="ml-auto">
-                      <SvgIcon icon="mingcute-more-1-fill" />
-                    </div> -->
                     </div>
                   </div>
                 </div>

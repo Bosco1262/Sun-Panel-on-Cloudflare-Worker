@@ -62,11 +62,9 @@ export default defineConfig((env) => {
       commonjsOptions: {
         ignoreTryCatch: false,
       },
-      terserOptions: {
-        compress: {
-          drop_console: true,
-        },
-      },
+      // 注: 这里曾配置 terserOptions.compress.drop_console, 但未声明 minify: 'terser'
+      // (Vite 4 默认用 esbuild), 该配置完全不生效且需额外安装 terser, 故移除 ——
+      // Worker/浏览器里保留 console.warn/error 也有助于线上排障。
     },
   }
 })

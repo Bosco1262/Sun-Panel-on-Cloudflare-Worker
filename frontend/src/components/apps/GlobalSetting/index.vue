@@ -30,6 +30,9 @@ onMounted(() => {
       customCss.value = data.customCss || ''
       customJs.value = data.customJs || ''
     }
+  }).catch(() => {
+    // 读取失败保持空内容并提示, 避免用户以为自定义代码为空而误覆盖
+    ms.error(t('apps.globalSetting.loadFail'))
   })
 })
 </script>

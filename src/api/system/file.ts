@@ -108,16 +108,36 @@ app.post('/file/getList', authMiddleware(), async (c) => {
   return successList(c, list, list.length)
 })
 
-// 清理未被引用的文件 (R2 + 记录)
-// 图片可能同时被项目图标 / 面板背景 / 头像引用, 所以统一交给 cleanupUploads 做引用检查
+/**
+ * 清理未被引用的文件 (R2 + 记录)
+ *
+ * 图片可能同时被项目图标 / 面板背景 / 头像 / 自定义 CSS/JS 引用, 所以统一交给
+ * cleanupUploads 做引用检查 (字符串包含判定, 偏保守)。
+ *
+ * 分批: Workers 免费版每次调用最多 50 个子请求, 而每个对象要花 1 次 R2 删除 ——
+ * 所以单次最多处理 `limit` 个候选 (默认 30), 返回 remaining 让前端继续调用。
+ */
+const DEFAULT_CLEAN_LIMIT = 30
+const MAX_CLEAN_LIMIT = 60
+
 app.post('/file/cleanUnused', authMiddleware(), async (c) => {
+  const body = await c.req.json<{ limit?: unknown }>().catch(() => null)
+  const limit = typeof body?.limit === 'number' && Number.isFinite(body.limit)
+    ? Math.min(Math.max(Math.floor(body.limit), 1), MAX_CLEAN_LIMIT)
+    : DEFAULT_CLEAN_LIMIT
+
   const { results } = await c.env.DB
     .prepare('SELECT * FROM file WHERE deleted_at IS NULL ORDER BY created_at')
     .all<FileRow>()
 
-  const deleted = await cleanupUploads(c.env.DB, c.env.FILES, results.map(row => normalizeUploadSrc(row.src)))
+  const { deleted, remaining } = await cleanupUploads(
+    c.env.DB,
+    c.env.FILES,
+    results.map(row => normalizeUploadSrc(row.src)),
+    limit,
+  )
 
-  return successData(c, { checked: results.length, deleted })
+  return successData(c, { checked: results.length, deleted, remaining })
 })
 
 // 删除文件 (R2 + 记录)

@@ -1,10 +1,16 @@
+# Language Switch
+
+[English](README.md) | [简体中文](README.zh-CN.md)
+
+---
+
 <div align=center>
 
 <img src="./docs/images/logo.png" width="100" height="100" />
 
-# Sun-Panel on Cloudflare Worker
+# Sun-Panel-on-Cloudflare-Worker
 
-把 [Sun-Panel](https://github.com/hslr-s/sun-panel)（Vue 3 前端 + Go 后端）移植到 **Cloudflare Workers** 的单用户版本。
+A single-user port of [Sun-Panel](https://github.com/hslr-s/sun-panel) (Vue 3 frontend + Go backend) to **Cloudflare Workers**.
 
 Worker (Hono) + D1 + R2 + Vue 3
 
@@ -14,106 +20,143 @@ Worker (Hono) + D1 + R2 + Vue 3
 </div>
 
 > [!NOTE]
-> 本仓库是上游 [hslr-s/sun-panel](https://github.com/hslr-s/sun-panel) 的社区移植版本：
-> 后端由 Go (Gin) + SQLite 改写为 Cloudflare Worker (Hono) + D1/R2，前端沿用上游 Vue 3 代码并做适配。
-> 上游 README 原文见 [docs/upstream/README.md](./docs/upstream/README.md)。
+> This repository is a community port of the upstream project [hslr-s/sun-panel](https://github.com/hslr-s/sun-panel):
+> the backend was rewritten from Go (Gin) + SQLite to Cloudflare Worker (Hono) + D1/R2, while the frontend reuses the
+> upstream Vue 3 code with adaptations.
+> The original upstream README is archived at [docs/upstream/README.md](./docs/upstream/README.md).
+> **In-depth docs are written in Chinese** — enter through [docs/README.md](./docs/README.md) (documentation index).
 
 ![](./docs/images/main-dark.png)
 
-## ☁️ 技术栈
+## ☁️ Tech Stack
 
-| 层 | 实现 |
-|----|------|
-| 后端 | Cloudflare Worker + Hono (TypeScript)，位于根目录 `src/` |
-| 数据库 | Cloudflare D1 (SQLite) |
-| 文件存储 | Cloudflare R2（头像、图片、文件上传，`/uploads/*` 由 Worker 代理） |
-| 登录限流 | Cloudflare D1（同一 IP 10 分钟内最多失败 5 次，滑动窗口；单条 UPSERT 原子计数） |
-| 前端 | Vue 3 + Vite + Naive UI + Pinia（构建产物输出到根目录 `dist/`） |
-| 鉴权 | JWT（jose，无状态，72 小时有效期；`auth_epoch` 世代号支持改密/退出所有设备即刻吊销） |
-| 密码存储 | 默认兼容上游三重 MD5；配置 `PASSWORD_PEPPER` 后使用 PBKDF2-SHA256 + 随机盐 + pepper，旧哈希登录时自动升级 |
+| Layer | Implementation |
+|-------|----------------|
+| Backend | Cloudflare Worker + Hono (TypeScript), in `src/` at the repository root |
+| Database | Cloudflare D1 (SQLite) |
+| File storage | Cloudflare R2 (avatar, images, uploaded files; `/uploads/*` is proxied by the Worker) |
+| Login rate limiting | Cloudflare D1 (max 5 failures per IP within 10 minutes, sliding window, single atomic UPSERT) |
+| Frontend | Vue 3 + Vite + Naive UI + Pinia (build output goes to `dist/` at the repository root) |
+| Authentication | JWT (jose, stateless, 72-hour lifetime; an `auth_epoch` generation number revokes tokens immediately on password change / logout-all-devices). The session is carried by an **HttpOnly Cookie** (`SameSite=Lax`, plus a cross-site check for write requests); the token is no longer written to localStorage. CLI tools may still use the `token` header |
+| Password storage | Triple MD5 for upstream compatibility; with `PASSWORD_PEPPER` set, PBKDF2-SHA256 + random salt + pepper, and old hashes are upgraded on the next successful login |
 
-## 🚀 快速开始
+## 🚀 Quick Start
+
+### Local development
 
 ```bash
-# 1. 安装依赖 (含 frontend workspace)
+# 1. Install dependencies (includes the frontend workspace)
 npm install
 
-# 2. 复制环境变量
+# 2. Create env files (Windows: copy;  macOS / Linux: cp)
 copy frontend\.env.example frontend\.env
 copy .dev.vars.example .dev.vars
 
-# 3. 初始化本地数据库
+# 3. Apply D1 migrations to the local database
 npm run migrations:apply:local
 
-# 4. 启动开发环境
-npm run dev        # 终端 1: Worker + 本地 D1/R2 (http://127.0.0.1:8787)
-npm run dev:web    # 终端 2: 前端热更新 (http://127.0.0.1:1002)
+# 4. Start the dev servers
+npm run dev        # terminal 1: Worker + local D1/R2 (http://127.0.0.1:8787)
+npm run dev:web    # terminal 2: frontend with HMR (http://127.0.0.1:1002)
 ```
 
-默认账号 `admin` / `12345678`，登录后可在「用户信息」中修改。
+Default account: `admin` / `12345678` — change it in "User Info" after signing in.
 
-生产部署（Workers Git 集成 / 本地 wrangler）、常见问题与代码检查见 **[docs/deployment.md](./docs/deployment.md)**。
+### Deploy to Cloudflare (Workers Git integration — recommended)
 
-## 🗂️ 仓库结构
+Connect the repository once, then every `git push` builds, deploys and applies new D1 migrations.
+D1 and R2 are **created automatically** on deploy (wrangler ≥ 4.45 auto resource provisioning), so you
+neither create resources by hand nor install wrangler locally.
+
+1. **Push this repository to your own GitHub account** (fork or import it).
+2. **Connect it in the dashboard**: Cloudflare Dashboard → **Workers & Pages → Create → Import a repository** →
+   choose the repository. Name the Worker `sun-panel-on-cloudflare-worker` (it must match `name` in `wrangler.toml`).
+3. **Fill in the two commands**:
+
+   | Field | Value |
+   |-------|-------|
+   | Build command | `npm run build` |
+   | Deploy command | `npx wrangler deploy && npx wrangler d1 migrations apply sun-panel-on-cloudflare-worker_db --remote` |
+
+   > Do **not** write `npm install && npm run build`: Workers Builds installs dependencies before running the
+   > build command, so installing again only wastes several minutes.
+   > Migrations run **after** `deploy` because D1 is provisioned during deployment; running them first fails with
+   > `Couldn't find an auto-provisioned D1 DB named 'sun-panel'`.
+4. **Set one secret after the first successful deploy**: `JWT_SECRET` (used to sign login tokens; use a random
+   value, e.g. `openssl rand -base64 48`, at least 32 characters) → Worker → **Settings → Variables and Secrets**.
+   Builds cannot create secrets.
+5. Done — from now on a plain `git push` is enough.
+
+> Details (auto provisioning, D1 permissions needed by the migration step, preview builds, the local wrangler
+> workflow, backup/restore and FAQ) live in **[docs/deployment.md](./docs/deployment.md)** (Chinese).
+
+## 🗂️ Repository Structure
 
 ```
-├── src/                     # Worker 后端源码 (Hono)
-│   ├── api/                 # 路由: panel/ 与 system/ 分层，与前端 src/api/ 一一对应
-│   ├── middleware/          # JWT 鉴权中间件
-│   └── utils/               # 响应格式 / 密码 / JWT / 文件 / 系统设置
-├── migrations/              # D1 数据库迁移
-├── frontend/                # Vue 3 前端 (npm workspace)
-├── dist/                    # 前端构建产物 (gitignored, 由 Worker 静态托管)
-├── docs/                    # 项目文档 (部署、迁移计划、待办、上游资料)
-├── reference/               # 上游源码对照副本 (gitignored, 不参与构建)
-├── wrangler.toml            # Worker 配置 (D1/R2/静态资源; 无 assets binding, 见 docs/improvement-plan.md §5.2)
-├── .dev.vars                # 本地开发环境变量 (gitignored, 模板见 .dev.vars.example)
-├── package.json             # 根包: Worker 依赖 + 脚本 + frontend workspace
-└── tsconfig.json            # Worker TypeScript 配置
+├── src/                     # Worker backend (Hono)
+│   ├── api/                 # Routes: panel/ and system/, mirroring the frontend src/api/
+│   ├── middleware/          # JWT auth middleware (+ CSRF check for cookie-authenticated writes)
+│   └── utils/               # Response format / password / JWT / files / settings / favicon
+├── migrations/              # D1 migrations
+├── frontend/                # Vue 3 frontend (npm workspace)
+├── dist/                    # Frontend build output (gitignored, served by the Worker)
+├── docs/                    # Documentation (index: docs/README.md; history/ = archive, upstream/ = upstream material)
+├── reference/               # Upstream source copy for reference (gitignored, not part of the build)
+├── wrangler.toml            # Worker config (D1/R2/static assets; no assets binding, see docs/improvement-plan.md §5.2)
+├── .dev.vars                # Local dev secrets (gitignored, template: .dev.vars.example)
+├── package.json             # Root package: Worker deps + scripts + frontend workspace
+└── tsconfig.json            # Worker TypeScript config
 ```
 
-## 📚 文档
+## 📚 Documentation
 
-| 文档 | 内容 |
-|------|------|
-| [docs/deployment.md](./docs/deployment.md) | 部署与本地开发完整说明 |
-| [docs/improvement-plan.md](./docs/improvement-plan.md) | 改进计划：数据层整理、安全加固、一致性优化与后续候选（§9）；含待办标记与提交拆分 |
-| [docs/storage.md](./docs/storage.md) | 存储与资源说明：D1 各表用途、R2 对象布局与回收、本地 `.wrangler` 状态、结构变更约定 |
-| [docs/search-engine.md](./docs/search-engine.md) | 搜索引擎设置（风格设置管理区）使用说明、占位符规则、数据迁移与自检脚本 |
-| [docs/migration-plan.md](./docs/migration-plan.md) | 从 Go 版迁移到 Worker 的设计与阶段计划（历史文档） |
-| [docs/todo.md](./docs/todo.md) | 移植过程中收集的需求 / 待办清单 |
-| [docs/upstream/README.md](./docs/upstream/README.md) | 上游原版 README（特性、截图、致谢） |
-| [docs/upstream/CHANGELOG.md](./docs/upstream/CHANGELOG.md) | 上游更新日志 |
+| Document | Content |
+|----------|---------|
+| [docs/README.md](./docs/README.md) | **Documentation index**: document map, ownership and maintenance conventions (start here) |
+| [docs/deployment.md](./docs/deployment.md) | Full deployment & local development guide, FAQ, backup and restore |
+| [docs/storage.md](./docs/storage.md) | Data & resources: D1 tables, R2 layout and image reclamation, local `.wrangler` state, **Cloudflare free-tier limits vs. measured usage** |
+| [docs/search-engine.md](./docs/search-engine.md) | Search-engine settings (the management area inside Style Settings) and placeholder rules |
+| [docs/improvement-plan.md](./docs/improvement-plan.md) | Improvement plan: pending candidates (§9), repository-wide audit findings (§10), completed work log and the **self-check script list** (Appendix C) |
+| [docs/history/](./docs/history/) | Archive: migration design (`migration/plan.md`), early requirements (`requirements/early-todo.md`) |
+| [docs/upstream/README.md](./docs/upstream/README.md) | Upstream README (features, screenshots, credits) |
+| [docs/upstream/CHANGELOG.md](./docs/upstream/CHANGELOG.md) | Upstream changelog |
 
-## 🔀 与上游 (Sun-Panel v1.3.0) 的差异
+## 🔀 Differences from Upstream (Sun-Panel v1.3.0)
 
-| 功能 | 说明 |
-|------|------|
-| 单用户 | 无多用户/注册/公开访客模式，账号信息存于 D1 `system_setting` |
-| 系统监控 | 已移除（Worker 无法读取宿主机信息） |
-| 图形验证码/邮件 | 已移除（仅密码登录） |
-| 文件存储 | 本地磁盘 → R2（路径 `/uploads/*` 由 Worker 代理） |
-| 站点图标 | 抓取后下载存至 R2（与手动上传的图标统一存放于 R2） |
-| 鉴权 | 内存 Token → JWT (无状态, 72 小时有效期 + `auth_epoch` 世代可吊销) |
-| 密码存储 | 三重 MD5 → 可选 PBKDF2-SHA256 + 随机盐 + pepper（配了 `PASSWORD_PEPPER` 才启用，登录时自动升级旧哈希） |
-| 登录保护 | 验证码/邮件 → D1 级失败限流 (同一 IP 10 分钟内最多失败 5 次) |
-| 数据库迁移 | `migrations/` 合并为单个 `0001_init.sql` 基线（只对全新库生效，约定见 docs/improvement-plan.md §2.2） |
+| Feature | Notes |
+|---------|-------|
+| Single user | No multi-user / registration / public visitor mode; account data lives in D1 `system_setting` |
+| System monitor | Removed (a Worker cannot read host metrics) |
+| CAPTCHA / e-mail | Removed (password-only login) |
+| File storage | Local disk → R2 (`/uploads/*` is proxied by the Worker) |
+| Site icons | Fetched and stored in R2 (same bucket as manually uploaded icons) |
+| Authentication | In-memory token → JWT (stateless, 72 h + `auth_epoch` revocation) with an HttpOnly Cookie carrying the session |
+| Password storage | Triple MD5 → optional PBKDF2-SHA256 + random salt + pepper (enabled once `PASSWORD_PEPPER` is set; old hashes upgrade on login) |
+| Login protection | CAPTCHA / e-mail → D1-backed failure rate limiting (max 5 failures per IP per 10 minutes) |
+| DB migrations | `migrations/` collapsed into a single `0001_init.sql` baseline (applies to brand-new databases only; see docs/improvement-plan.md §2.2) |
 
-> 「v1.3.0」指本移植版所基于的上游**最后一个开源代码版本**：上游自 v1.4.0 起转为闭源发布
-> （最新发布版本 v1.8.1，2025-12-31），其 README 至今仍写明「目前开源最新版本为 v1.3.0」。
-> 上游完整更新日志见 <https://doc.sun-panel.top/zh_cn/update/update_log.html>。
+> "v1.3.0" is the **last open-source release** of the upstream project: upstream went closed-source from
+> v1.4.0 (latest release v1.8.1, 2025-12-31), while its README still states that v1.3.0 is the newest
+> open-source version. The full upstream changelog: <https://doc.sun-panel.top/zh_cn/update/update_log.html>.
 
-> 前端构建产物统一输出到根目录 `dist/`，由 Worker 静态资源托管；`frontend/` 仅存放源码。
+> The frontend build output always goes to `dist/` at the repository root and is served by the Worker's static
+> assets; `frontend/` only contains source code.
 
-## ⚠️ 已知限制
+## ⚠️ Known Limitations
 
-| 限制 | 说明 |
-|------|------|
-| 多标签页同时改配置 | 面板样式与搜索引擎配置存在 `user_config` 的整份 JSON 里（覆盖写），**请避免多个标签页同时修改**，否则后保存的会覆盖先保存的 |
-| 删除图片后的浏览器缓存 | `/uploads/*` 的上传文件带 `immutable`（最长 24 小时），删掉文件后同一 URL 仍可能命中浏览器缓存，硬刷新即可 |
-| 迁移基线 | `migrations/0001_init.sql` 只对**全新库**生效；已部署库的结构变化需按 `docs/improvement-plan.md` §2.2 的约定处理 |
-| 自定义 JS/CSS | 由管理员自己填写并注入所有页面，等同于给自己开了一个 XSS 入口，请只粘贴可信代码 |
+| Limitation | Notes |
+|------------|-------|
+| Concurrent editing in multiple tabs | Panel style and search-engine config live in one JSON column (`user_config`, whole-value overwrite) — **avoid editing the same settings in two tabs**, the last save wins |
+| Browser cache after deleting an image | `/uploads/*` responses carry `immutable` (up to 24 h), so a deleted file may still be served from the browser cache — hard-refresh to clear it |
+| Migration baseline | `migrations/0001_init.sql` only applies to **brand-new** databases; structural changes on an existing database follow the convention in docs/improvement-plan.md §2.2 |
+| Custom JS/CSS | Injected into every page by the administrator, which is effectively a self-inflicted XSS entry point — only paste code you trust |
+| Session depends on cookies | The session lives in an HttpOnly Cookie, so browsers with cookies disabled (or blocking cross-site requests) cannot log in; CLI scripts can still use the `token` header |
 
 ## 📄 License
 
-[MIT](./LICENSE) © 2023 红烧猎人（上游作者）；本移植版本同样以 MIT 协议发布。
+This project is licensed under the [MIT License](LICENSE).
+
+This repository is a community port of [Sun-Panel](https://github.com/hslr-s/sun-panel); the upstream project and
+its original copyright notice (**© 2023 红烧猎人 / hslr-s**) are retained in [LICENSE](./LICENSE). As required by
+the MIT License, that copyright notice must be preserved in any copy or derivative work — thanks to the upstream
+author for the original design and implementation.

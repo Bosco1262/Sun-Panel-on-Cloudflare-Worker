@@ -29,14 +29,11 @@ export function defaultStatePanelConfig(): Panel.panelConfig {
     marginX: 5,
     footerHtml: defaultFooterHtml,
     netModeChangeButtonShow: true,
-
   }
 }
 
 export function defaultState(): Panel.State {
   return {
-    rightSiderCollapsed: false,
-    leftSiderCollapsed: false,
     networkMode: PanelStateNetworkModeEnum.wan,
     panelConfig: { ...defaultStatePanelConfig() },
     searchEngine: createDefaultSearchEngineConfig(),

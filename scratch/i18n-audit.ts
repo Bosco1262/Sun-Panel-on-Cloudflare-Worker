@@ -66,13 +66,32 @@ const missingInEn = [...used.keys()].filter(k => !en.has(k)).sort()
 const onlyZh = [...zh].filter(k => !en.has(k)).sort()
 const onlyEn = [...en].filter(k => !zh.has(k)).sort()
 
-// 死文案: 两侧都有, 但代码里没有任何引用
-const unused = [...zh].filter(k => !used.has(k)).sort()
+/**
+ * 白名单: 通过「动态 key」使用、静态分析无法解析的文案
+ *
+ * - apiErrorCode.*       → 请求层 t(`apiErrorCode.${code}`)
+ * - searchEngine 校验文案 → validateSearchEngine 返回 key, 调用方 t(result.titleError)
+ *
+ * 这些 key 必须保留, 否则界面会退回显示原始 key (这正是当初引入本脚本要防的问题)。
+ */
+const DYNAMIC_KEY_WHITELIST: RegExp[] = [
+  /^apiErrorCode\./,
+  /^deskModule\.searchEngine\.(engineNameRequired|engineNameTooLong|engineUrlRequired|engineUrlInvalid|engineIconUrlInvalid)$/,
+]
+
+function isWhitelisted(key: string): boolean {
+  return DYNAMIC_KEY_WHITELIST.some(re => re.test(key))
+}
+
+// 死文案: 两侧都有, 但代码里没有任何引用 (排除动态 key 白名单)
+const unusedAll = [...zh].filter(k => !used.has(k)).sort()
+const unused = unusedAll.filter(k => !isWhitelisted(k))
+const whitelisted = unusedAll.filter(isWhitelisted)
 
 // searchBox / searchEngine 两个命名空间的明细
 function ns(prefix: string) {
   const all = [...zh].filter(k => k.startsWith(prefix))
-  const dead = all.filter(k => !used.has(k))
+  const dead = all.filter(k => !used.has(k) && !isWhitelisted(k))
   return { all: all.length, dead }
 }
 const boxNs = ns('deskModule.searchBox.')
@@ -95,9 +114,13 @@ for (const k of onlyZh)
 for (const k of onlyEn)
   console.log(`  en only: ${k}`)
 
-console.log(`\n== 死文案（两侧都有但代码未引用）: ${unused.length} ==`)
+console.log(`\n== 死文案（两侧都有但代码未引用, 已排除白名单）: ${unused.length} ==`)
 for (const k of unused)
   console.log(`  ${k}`)
+
+console.log(`\n== 白名单（动态 key, 视为在用）: ${whitelisted.length} ==`)
+for (const k of whitelisted)
+  console.log(`  keep: ${k}`)
 
 console.log(`\n== 命名空间明细 ==`)
 console.log(`  deskModule.searchBox.*    : 共 ${boxNs.all} 条, 死文案 ${boxNs.dead.length} 条`)

@@ -10,7 +10,6 @@ const props = defineProps<{
 const emit = defineEmits<Emit>()
 interface Emit {
   (e: 'update:show', show: boolean): void
-//   (e: 'done', item: Panel.Info): void// 创建完成
 }
 
 const attrs = useAttrs()
@@ -30,7 +29,7 @@ const showModal = computed({
 </script>
 
 <template>
-  <NModal v-model:show="showModal" preset="card" :size="size" v-bind="bindAttrs" style="border-radius: 1rem;" :style="$parent" :title="title">
+  <NModal v-model:show="showModal" preset="card" :size="size" v-bind="bindAttrs" style="border-radius: 1rem;" :title="title">
     <template #cover>
       <slot name="cover" />
     </template>

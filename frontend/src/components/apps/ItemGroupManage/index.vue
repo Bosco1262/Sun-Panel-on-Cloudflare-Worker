@@ -68,12 +68,17 @@ function handleResetTextColor() {
 const groups = ref<Panel.ItemIconGroup[]>([])
 
 function handleAddGroup() {
-  editModalArg.value.show = !editModalArg.value.show
+  // 必须先重置表单与模式: 否则「编辑某分组 → 关闭 → 点添加」会把旧分组数据当成
+  // 新分组提交, 静默覆盖原分组 (editStatus 也不会切回「添加」)
+  editModalArg.value.model = { ...defaultMNodal }
+  editModalArg.value.editStatus = 1
+  editModalArg.value.show = true
 }
 
 function handleEditGroup(groupInfo: Panel.ItemIconGroup) {
   editModalArg.value.show = true
-  editModalArg.value.model = groupInfo
+  // 浅拷贝: 直接把列表项对象交给表单会让未保存的改动即时反映到列表, 且无法取消
+  editModalArg.value.model = { ...groupInfo }
   editModalArg.value.editStatus = 2
 }
 
@@ -92,13 +97,17 @@ function handleSaveSort() {
   }
   saveSort(saveItems).then(({ code, msg }) => {
     if (code === 0) {
+      // 同步本地 sort: 列表顺序由 sort 决定, 不同步会让下一次拖拽保存写回旧值
+      groups.value.forEach((item, i) => {
+        item.sort = i + 1
+      })
       ms.success(t('common.saveSuccess'))
       sortStatus.value = false
     }
     else {
       ms.error(`${t('common.saveFail')}:${msg}`)
     }
-  })
+  }).catch(() => ms.error(t('common.saveFail')))
 }
 
 function handleDelete(groupInfo: Panel.ItemIconGroup) {
@@ -114,7 +123,7 @@ function handleDelete(groupInfo: Panel.ItemIconGroup) {
             ms.error(t('common.deleteFail'))
           else
             refreshList()
-        })
+        }).catch(() => ms.error(t('common.deleteFail')))
       }
     },
 
@@ -123,24 +132,31 @@ function handleDelete(groupInfo: Panel.ItemIconGroup) {
 
 function handleSaveGroup() {
   formRef.value?.validate((errors) => {
-    if (!errors) {
-      edit(editModalArg.value.model).then(({ code, msg }) => {
-        if (code !== 0)
-          ms.error(msg)
+    if (errors)
+      return
 
-        refreshList()
-        editModalArg.value.show = false
-        editModalArg.value.model = { ...defaultMNodal }
-      })
-    }
-    else { console.log(errors) }
+    edit(editModalArg.value.model).then(({ code, msg }) => {
+      // 失败时保持弹窗打开, 让用户修正后重试 (旧实现失败也关窗+刷新, 改动丢失)
+      if (code !== 0) {
+        ms.error(msg || t('common.saveFail'))
+        return
+      }
+
+      editModalArg.value.show = false
+      editModalArg.value.model = { ...defaultMNodal }
+      editModalArg.value.editStatus = 1
+      refreshList()
+    }).catch(() => ms.error(t('common.saveFail')))
   })
 }
 
 function refreshList() {
-  getList<Common.ListResponse<Panel.ItemIconGroup[]>>().then(({ data }) => {
-    groups.value = data.list
-  })
+  getList<Common.ListResponse<Panel.ItemIconGroup[]>>().then(({ code, data, msg }) => {
+    if (code === 0 && data?.list)
+      groups.value = data.list
+    else if (code !== 0)
+      ms.error(`${t('apps.itemGroupManage.getListFail')}:${msg}`)
+  }).catch(() => ms.error(t('apps.itemGroupManage.getListFail')))
 }
 
 onMounted(() => {
@@ -182,10 +198,10 @@ onMounted(() => {
     <div class="flex-1 min-h-0 overflow-auto">
       <VueDraggable
         v-model="groups"
-        item-key="sort" :animation="300"
+        item-key="id" :animation="300"
         :disabled="!sortStatus"
       >
-        <div v-for="(item, index) in groups" :key="index" class="w-full">
+        <div v-for="item in groups" :key="item.id" class="w-full">
           <NCard size="small" class="group-card" :class="sortStatus ? 'cursor-move' : ''">
             <div class="flex items-center gap-3">
               <span class="shrink-0 text-[20px]">

@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { defaultState, defaultStatePanelConfig, getLocalState, removeLocalState, setLocalState } from './helper'
-import { router } from '@/router'
 import type { PanelStateNetworkModeEnum } from '@/enums'
 import { get as getUserConfig, set as setUserConfig } from '@/api/panel/userConfig'
 import {
@@ -30,16 +29,6 @@ export const usePanelState = defineStore('panel', {
   },
 
   actions: {
-    setLeftSiderCollapsed(Collapsed: boolean) {
-      this.leftSiderCollapsed = Collapsed
-      // this.recordState()
-    },
-
-    setRightSiderCollapsed(Collapsed: boolean) {
-      this.rightSiderCollapsed = Collapsed
-      // this.recordState()
-    },
-
     setNetworkMode(mode: PanelStateNetworkModeEnum) {
       this.networkMode = mode
       this.recordState()
@@ -55,27 +44,40 @@ export const usePanelState = defineStore('panel', {
         this.panelConfig = { ...defaultStatePanelConfig(), ...res.data.panel }
         this.searchEngine = normalizeSearchEngineConfig(res.data.searchEngine)
         this.recordState()
+        return
       }
-      else {
-        this.resetPanelConfig() // 重置恢复默认
+
+      // 只有「云端尚无记录」(-1) 才重置为默认。
+      // 其它错误码 (1200 数据库错误等) 必须保留本地缓存配置 —— 旧实现会把用户配置
+      // 连同本地缓存一起清掉, 并抛给调用方以便提示
+      if (res.code === -1) {
+        this.resetPanelConfig()
         this.recordState()
+        return
       }
+
+      throw new Error(res.msg || 'get user config failed')
+    },
+
+    /**
+     * 面板配置与搜索引擎配置同属 user_config 一行数据, 任何保存都要一起提交,
+     * 否则未提交字段可能被覆盖 (见 src/api/panel/userConfig.ts 的保留逻辑)
+     */
+    async persistUserConfig() {
+      return await setUserConfig({
+        panel: this.panelConfig,
+        searchEngine: this.searchEngine,
+      })
     },
 
     /** 保存搜索引擎配置 (与面板配置一并提交, 避免互相覆盖) */
     async saveSearchEngine() {
-      return await setUserConfig({
-        panel: this.panelConfig,
-        searchEngine: this.searchEngine,
-      })
+      return await this.persistUserConfig()
     },
 
     /** 保存面板配置 (与搜索引擎配置一并提交, 避免互相覆盖) */
     async savePanelConfig() {
-      return await setUserConfig({
-        panel: this.panelConfig,
-        searchEngine: this.searchEngine,
-      })
+      return await this.persistUserConfig()
     },
 
     /** 重置搜索引擎为内置默认值 (含名称/地址/图标/顺序/当前选中项) */
@@ -87,17 +89,6 @@ export const usePanelState = defineStore('panel', {
 
     resetPanelConfig() {
       this.panelConfig = defaultStatePanelConfig()
-    },
-
-    // async refreshSpaceNoteList(spaceId: string) {
-    //   await getListBySpaceNoteId<Common.ListResponse<SNote.InfoTree[]>>(spaceId).then((res) => {
-    //     this.notesList = res.data.list
-    //   })
-    // },
-
-    async reloadRoute(id?: number) {
-      // this.recordState()
-      await router.push({ name: 'AppletDialog', params: { aiAppletId: id } })
     },
 
     recordState() {

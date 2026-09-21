@@ -9,7 +9,8 @@
 > - 计划系统设置存 KV，实际存 D1 的 `system_setting` 表（见 `src/utils/settings.ts`、`migrations/0001_init.sql`）
 > - 计划网站图标「仅返回 favicon URL」，实际会下载并存入 R2（见 `src/api/panel/itemIcon.ts` 的 `getSiteFavicon`）
 >
-> 当前结构与部署方式以 [README](../README.md) 和 [deployment.md](./deployment.md) 为准。
+> 当前结构与部署方式以根 [README](../../../README.md)（中文版：[README.zh-CN](../../../README.zh-CN.md)）和 [deployment.md](../../deployment.md) 为准；
+> 文档索引见 [docs/README.md](../../README.md)。
 
 ## 项目现状分析
 

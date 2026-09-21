@@ -1,16 +1,26 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { UploadFileInfo } from 'naive-ui'
-import { NButton, NCard, NColorPicker, NGrid, NGridItem, NInput, NInputGroup, NPopconfirm, NSelect, NSlider, NSwitch, NUpload, NUploadDragger, useMessage } from 'naive-ui'
+import { NButton, NCard, NColorPicker, NGrid, NGridItem, NInput, NInputGroup, NInputNumber, NPopconfirm, NSelect, NSlider, NSwitch, NUpload, NUploadDragger, useMessage } from 'naive-ui'
 import SearchEngineSettings from './SearchEngineSettings.vue'
 import { useAuthStore, usePanelState } from '@/store'
 import { PanelPanelConfigStyleEnum } from '@/enums/panel'
 import { t } from '@/locales'
+import { apiRespErrMsg } from '@/utils/request/apiMessage'
 
 const authStore = useAuthStore()
 const panelState = usePanelState()
 const ms = useMessage()
 const showWallpaperInput = ref(false)
+
+// 上传接口跟随统一 API 基址 (硬编码 /api 在子路径/独立域名部署时会失效)
+const uploadAction = `${import.meta.env.VITE_GLOB_API_URL || '/api'}/file/uploadImg`
+
+// 壁纸地址为空时不要拼 `url()` 空值, 直接不设置背景 (回退为容器底色)
+const backgroundPreviewStyle = computed(() => {
+  const src = panelState.panelConfig.backgroundImageSrc?.trim()
+  return src ? { background: `url(${src}) no-repeat`, backgroundSize: 'cover' } : {}
+})
 
 const isSaveing = ref(false)
 // 保存期间又发生改动时置为 true, 保存结束后再补一次, 避免丢失最后一次修改
@@ -69,9 +79,23 @@ function handleUploadBackgroundFinish({
   file: UploadFileInfo
   event?: ProgressEvent
 }) {
-  const res = JSON.parse((event?.target as XMLHttpRequest).response)
-  panelState.panelConfig.backgroundImageSrc = res.data.imageUrl
+  try {
+    const res = JSON.parse((event?.target as XMLHttpRequest).response)
+    if (res.code === 0 && res.data?.imageUrl)
+      panelState.panelConfig.backgroundImageSrc = res.data.imageUrl
+    else
+      apiRespErrMsg(res)
+  }
+  catch {
+    // 响应不是 JSON (网关错误页等): 必须提示, 否则用户以为上传成功了
+    ms.error(t('common.uploadFail'))
+  }
   return file
+}
+
+/** 上传请求本身失败 (网络/HTTP 错误) 时 NUpload 触发 error 事件 */
+function handleUploadError() {
+  ms.error(t('common.uploadFail'))
 }
 
 function uploadCloud() {
@@ -85,8 +109,9 @@ function uploadCloud() {
 }
 
 function resetPanelConfig() {
+  // 重置会整体替换 panelConfig 并触发下面的 deep watch, 由它统一做防抖保存;
+  // 这里再调一次 uploadCloud 会导致同一次重置写库两次
   panelState.resetPanelConfig()
-  uploadCloud()
 }
 </script>
 
@@ -213,19 +238,18 @@ function resetPanelConfig() {
         {{ $t('apps.baseSettings.wallpaper') }}
       </div>
       <NUpload
-        action="/api/file/uploadImg"
+        :action="uploadAction"
         :show-file-list="false"
         name="imgfile"
-        :headers="{
-          token: authStore.token as string,
-        }"
+        :headers="authStore.token ? { token: authStore.token } : {}"
         :directory-dnd="true"
         @finish="handleUploadBackgroundFinish"
+        @error="handleUploadError"
       >
         <NUploadDragger style="width: 100%;">
           <div
             class="h-[200px] w-full border bg-slate-100 flex justify-center items-center cursor-pointer rounded-[10px]"
-            :style="{ background: `url(${panelState.panelConfig.backgroundImageSrc}) no-repeat`, backgroundSize: 'cover' }"
+            :style="backgroundPreviewStyle"
           >
             <div class="text-shadow text-white">
               {{ $t('apps.baseSettings.uploadOrDragText') }}

@@ -12,13 +12,12 @@ function goHome() {
 
 <template>
   <div class="flex h-full dark:bg-neutral-800">
-    <div class="px-4 m-auto space-y-4 text-center max-[400px]">
+    <div class="px-4 m-auto space-y-4 text-center max-w-[400px]">
       <header class="space-y-2">
         <h2 class="text-2xl font-bold text-center text-slate-800 dark:text-neutral-200">
           500
         </h2>
         <p class="text-base text-center text-slate-500 dark:text-slate-500">
-          <!-- Server error -->
           服务器错误
         </p>
         <div class="flex items-center justify-center text-center">
@@ -26,7 +25,6 @@ function goHome() {
         </div>
       </header>
       <NButton type="primary" @click="goHome">
-        <!-- Go to Home -->
         返回首页
       </NButton>
     </div>

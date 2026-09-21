@@ -1,20 +1,12 @@
 # 部署与本地开发
 
-> 本文承接根 [README](../README.md) 的「🚀 快速开始」章节，是部署与本地开发的完整说明。
+> 本文承接根 [README.zh-CN](../README.zh-CN.md) / [README](../README.md) 的「🚀 快速开始」章节，是部署与本地开发的完整说明。
 > 目标形态：**单个 Cloudflare Worker 同时提供 API 与前端静态资源**。
 
 ## 技术栈
 
-| 层 | 实现 |
-|----|------|
-| 后端 | Cloudflare Worker + Hono (TypeScript)，位于根目录 `src/` |
-| 数据库 | Cloudflare D1 (SQLite) |
-| 文件存储 | Cloudflare R2（头像、图片、文件上传） |
-| 登录限流 | Cloudflare D1（同一 IP 10 分钟内最多失败 5 次，滑动窗口；单条 UPSERT 原子计数） |
-| 前端 | `frontend/` 下的 Vue 3 前端，构建产物输出到根目录 `dist/`，由 Worker 静态资源托管 |
-| 鉴权 | JWT（jose，无状态，72 小时有效期；`auth_epoch` 世代号支持改密/退出所有设备即刻吊销） |
-| 密码存储 | 默认兼容上游的三重 MD5；配置 `PASSWORD_PEPPER` 后使用 PBKDF2-SHA256 + 随机盐 + pepper，旧哈希在登录成功后自动升级 |
-| 默认账号 | `admin` / `12345678`（登录后可在「用户信息」中修改） |
+技术栈与「与上游的差异」集中在根 [README 的技术栈表](../README.zh-CN.md#️-技术栈)（单一事实来源，避免两处重复维护）。
+部署时需要知道的只有一件事：**默认账号 `admin` / `12345678`**（首次登录后请立即在「用户信息」里修改）。
 
 ## 仓库结构
 
@@ -26,8 +18,8 @@
 ├── migrations/              # D1 数据库迁移
 ├── frontend/                # Vue 3 前端 (npm workspace)
 ├── dist/                    # 前端构建产物 (gitignored, 由 Worker 静态托管)
-├── docs/                    # 项目文档 (部署、搜索引擎、迁移计划、待办、上游资料)
-├── scratch/                 # 自检脚本 (搜索引擎工具函数 / userConfig 合并语义)
+├── docs/                    # 项目文档 (索引见 docs/README.md; history/ 为历史存档, upstream/ 为上游资料)
+├── scratch/                 # 自检脚本 (14 个: 密码/限流/上传/图标/过滤/引擎/Cookie/i18n 等, 见 improvement-plan 附录 C)
 ├── reference/               # 上游源码对照副本 (gitignored, 不参与构建)
 ├── wrangler.toml            # Worker 配置 (D1/R2/静态资源)
 ├── .dev.vars                # 本地开发环境变量 (gitignored, 模板见 .dev.vars.example)
@@ -53,18 +45,18 @@
 无需手动创建 D1/R2，也无需本地安装 wrangler：
 
 1. 进入 Cloudflare Dashboard → **Workers & Pages → Create → Import a repository**，
-   选择本仓库（Worker 名称需与 `wrangler.toml` 中的 `name = "sun-panel"` 一致）
+   选择本仓库（Worker 名称需与 `wrangler.toml` 中的 `name = "sun-panel-on-cloudflare-worker"` 一致）
 2. **Build command**: `npm run build`
    > 不要写成 `npm install && npm run build`：Workers Builds 在执行构建命令前会**自动安装依赖**
    > （官方文档中可用 `SKIP_DEPENDENCY_INSTALL` 关闭这一行为），再装一遍依赖会让构建白白多花几分钟
    > （实测 install 阶段约 8 分钟）。
 3. **Deploy command**:
    ```bash
-   npx wrangler deploy && npx wrangler d1 migrations apply sun-panel --remote
+   npx wrangler deploy && npx wrangler d1 migrations apply sun-panel-on-cloudflare-worker_db --remote
    ```
    - 先 `deploy` 后迁移：`wrangler.toml` 里没有 `database_id` 时，D1 是在部署阶段由自动资源供应
      创建的，迁移命令只能作用于已存在的库（顺序颠倒会报
-     `Couldn't find an auto-provisioned D1 DB named 'sun-panel' for binding 'DB'. Run 'wrangler deploy' to provision it...`）
+     `Couldn't find an auto-provisioned D1 DB named 'sun-panel-on-cloudflare-worker_db' for binding 'DB'. Run 'wrangler deploy' to provision it...`）
    - 部署时 wrangler (>= 4.45) 检测到配置中的 D1/R2 资源不存在会**自动创建**并绑定
      ([自动资源供应](https://developers.cloudflare.com/changelog/post/2025-10-24-automatic-resource-provisioning/), Open Beta)
    - `wrangler deploy` 用构建环境注入的 API token 就能完成；但 Workers Builds 自动创建的 token
@@ -91,10 +83,10 @@
 
 ```bash
 # 1. 创建 D1 数据库
-npx wrangler d1 create sun-panel
+npx wrangler d1 create sun-panel-on-cloudflare-worker_db
 
 # 2. 创建 R2 存储桶
-npx wrangler r2 bucket create sun-panel-files
+npx wrangler r2 bucket create sun-panel-on-cloudflare-worker-files
 ```
 
 手动创建后需自行把输出的 `database_id` 加到 `wrangler.toml` 的 `[[d1_databases]]`
@@ -135,7 +127,7 @@ npm run migrations:apply
 > 先执行 `npm run migrations:apply` 会因为找不到数据库而失败。
 > 已按上一节手动创建过 D1 的话，先迁移再部署也可以。
 
-部署完成后访问输出的 URL（如 `https://sun-panel.xxx.workers.dev`），
+部署完成后访问输出的 URL（如 `https://sun-panel-on-cloudflare-worker.xxx.workers.dev`），
 使用默认账号 `admin` / `12345678` 登录。
 
 > 也可执行 `npm run deploy:all` 一步完成「构建前端 + 部署」（迁移仍需单独执行）。
@@ -182,17 +174,17 @@ npm run build   # 构建前端 (输出到 dist/)
 ### D1（业务数据）
 
 ```bash
-# 导出为 SQL（默认输出到当前目录，文件名形如 sun-panel-<时间>.sql）
-npx wrangler d1 export sun-panel --remote --output=backup/$(date +%Y%m%d)-sun-panel.sql
+# 导出为 SQL（默认输出到当前目录，文件名形如 <库名>-<时间>.sql）
+npx wrangler d1 export sun-panel-on-cloudflare-worker_db --remote --output=backup/$(date +%Y%m%d)-db.sql
 
 # 只导数据（不含建表语句）: 目标库已有结构时用这个
-npx wrangler d1 export sun-panel --remote --no-schema --output=backup/data.sql
+npx wrangler d1 export sun-panel-on-cloudflare-worker_db --remote --no-schema --output=backup/data.sql
 ```
 
-恢复：对一个空库执行导出的 SQL 即可（`npx wrangler d1 execute sun-panel --remote --file=backup/xxx.sql`），
+恢复：对一个空库执行导出的 SQL 即可（`npx wrangler d1 execute sun-panel-on-cloudflare-worker_db --remote --file=backup/xxx.sql`），
 恢复后记得按 [storage.md §5](./storage.md#5-结构变更约定单文件基线) 的约定确认结构与当前代码匹配。
 
-> D1 的 Time Travel 也能救急：控制台或 `npx wrangler d1 time-travel info sun-panel` 查看可回滚的时间点
+> D1 的 Time Travel 也能救急：控制台或 `npx wrangler d1 time-travel info sun-panel-on-cloudflare-worker_db` 查看可回滚的时间点
 > （默认保留 30 天，付费版 30 天 / 免费版 7 天，以官方文档为准）。
 
 ### R2（图片与文件）
@@ -201,14 +193,14 @@ R2 没有「导出成单文件」的命令，两种做法：
 
 ```bash
 # 方案 A: rclone（推荐，支持增量同步）—— 先用 rclone config 配好 S3 兼容端点
-rclone sync r2:sun-panel-files ./backup/r2 --progress
+rclone sync r2:sun-panel-on-cloudflare-worker-files ./backup/r2 --progress
 
 # 方案 B: 逐个对象下载（对象不多时够用）
-npx wrangler r2 object get sun-panel-files/<key> --file=./backup/r2/<key>
+npx wrangler r2 object get sun-panel-on-cloudflare-worker-files/<key> --file=./backup/r2/<key>
 ```
 
 对象 key 的两种形态见 [storage.md §3](./storage.md#3-r2-对象布局与回收)；
-恢复时把对象按相同 key 传回桶里即可（`rclone sync ./backup/r2 r2:sun-panel-files`）。
+恢复时把对象按相同 key 传回桶里即可（`rclone sync ./backup/r2 r2:sun-panel-on-cloudflare-worker-files`）。
 
 > 注意：`file` 表里记录的是 `./uploads/<key>`，所以「D1 + R2」要一起备份/恢复，只恢复一边会出现列表有记录但图片 404，或图片在但列表看不到。
 
@@ -245,7 +237,7 @@ Workers Builds 在执行构建命令前会自动安装依赖，Build command 再
 **本地/首次部署时 `npm run migrations:apply` 报找不到数据库**
 
 ```
-Couldn't find an auto-provisioned D1 DB named 'sun-panel' for binding 'DB'.
+Couldn't find an auto-provisioned D1 DB named 'sun-panel-on-cloudflare-worker_db' for binding 'DB'.
 Run 'wrangler deploy' to provision it, or add 'database_name' / 'database_id' to your config.
 ```
 
@@ -257,22 +249,10 @@ Run 'wrangler deploy' to provision it, or add 'database_name' / 'database_id' to
 自动创建的构建 token 不含 D1 权限。在 Worker → **Settings → Build → API token**
 换成带 D1 编辑权限的 token 后重新构建。
 
-## 与上游 (Sun-Panel v1.3.0) 的差异
+## 与上游的差异
 
-| 功能 | 说明 |
-|------|------|
-| 单用户 | 无多用户/注册/公开访客模式，账号信息存于 D1 `system_setting` |
-| 系统监控 | 已移除（Worker 无法读取宿主机信息） |
-| 图形验证码/邮件 | 已移除（仅密码登录） |
-| 文件存储 | 本地磁盘 → R2（路径 `/uploads/*` 由 Worker 代理） |
-| 站点图标 | 抓取后下载存至 R2（与手动上传的图标统一存放于 R2） |
-| 鉴权 | 内存 Token → JWT (无状态, 72 小时有效期 + `auth_epoch` 世代可吊销) |
-| 登录保护 | 验证码/邮件 → D1 级失败限流 (同一 IP 10 分钟内最多失败 5 次) |
-| 密码存储 | 三重 MD5 → 可选 PBKDF2-SHA256 + 随机盐 + pepper（配了 `PASSWORD_PEPPER` 才启用，登录时自动升级旧哈希） |
-| 文件校验 | 上传扩展名白名单；站点图标校验 Content-Type 必须是图片；`/uploads/*` 带 `nosniff`、非图片强制下载、SVG 加 `sandbox` CSP |
-
-> 「v1.3.0」指本移植版所基于的上游**最后一个开源代码版本**：上游自 v1.4.0 起转为闭源发布
-> （最新发布版本 v1.8.1，2025-12-31），其 README 至今仍写明「目前开源最新版本为 v1.3.0」。
-> 上游完整更新日志见 <https://doc.sun-panel.top/zh_cn/update/update_log.html>。
+见根 [README 的「与上游 (Sun-Panel v1.3.0) 的差异」表与「已知限制」](../README.zh-CN.md#-与上游-sun-panel-v130-的差异)（含 v1.3.0 的版本口径说明）。
 
 > 前端构建产物统一输出到根目录 `dist/`，由 Worker 静态资源托管；`frontend/` 仅存放源码。
+
+> 数据存在哪、能不能删、免费层额度够不够 —— 见 [storage.md](./storage.md)（含 2026-09-21 的实测用量）。

@@ -8,6 +8,9 @@
 --   详见 docs/improvement-plan.md §2.2。
 -- 历史: module_config / notice 两张表已随死代码清理从本文件移除 (见 docs/improvement-plan.md §5.1);
 --   已部署库里的这两张空表保留不动 (代码不再访问, 无害)。
+-- 历史: system_application / disclaimer / web_about_description 三个设置项的种子已移除
+--   (它们只被已删除的 /openness/* 接口读取, 见 docs/improvement-plan.md §10.5);
+--   已部署库里残留的这三行同样无害。
 --
 -- 单用户模式: 无 user 表, 管理员账号信息存于 system_setting
 
@@ -93,10 +96,7 @@ INSERT OR IGNORE INTO system_setting (config_name, config_value) VALUES
   ('admin_username', 'admin'),
   ('admin_password', '579646aad11fae4dd295812fb4526245'),
   ('admin_name', 'admin'),
-  ('admin_head_image', ''),
-  ('system_application', '{"loginCaptcha":false,"register":{"emailSuffix":"","openRegister":false},"webSiteUrl":""}'),
-  ('disclaimer', ''),
-  ('web_about_description', '');
+  ('admin_head_image', '');
 
 -- 默认分组: 首次访问 getList 时若无分组会自动创建, 这里预置以保证体验
 INSERT OR IGNORE INTO item_icon_group (created_at, updated_at, icon, title, description, sort)

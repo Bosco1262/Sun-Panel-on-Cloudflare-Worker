@@ -1,46 +1,56 @@
 <script setup lang="ts">
-import { NButton, NInput, NRadioButton, NRadioGroup, NUpload } from 'naive-ui'
+import { NButton, NInput, NRadioButton, NRadioGroup, NUpload, useMessage } from 'naive-ui'
 import type { UploadFileInfo } from 'naive-ui'
-import { computed, ref } from 'vue'
+import { ref, watch } from 'vue'
 import GalleryPicker from './GalleryPicker.vue'
 import { SvgIcon } from '@/components/common'
 import { useAuthStore } from '@/store'
 import { apiRespErrMsg } from '@/utils/request/apiMessage'
+import { t } from '@/locales'
 
 const props = defineProps<{
   itemIcon: Panel.ItemIcon | null
 }>()
 const emit = defineEmits<{
-  (e: 'update:itemIcon', visible: Panel.ItemIcon): void // 定义修改父组件（prop内）的值的事件
+  (e: 'update:itemIcon', itemIcon: Panel.ItemIcon): void
 }>()
 const authStore = useAuthStore()
+const ms = useMessage()
 
 const initData: Panel.ItemIcon = {
   itemType: 2,
   backgroundColor: '#2a2a2a6b',
 }
 
-const itemIconInfo = computed({
-  get() {
-    const v = {
-      ...initData,
-      ...props.itemIcon,
-      backgroundColor: props.itemIcon?.backgroundColor || initData.backgroundColor,
-    }
-    return v
-  },
-  set() {
-    handleChange()
-  },
+// 上传接口跟随统一 API 基址 (硬编码 /api 在子路径/独立域名部署时会失效)
+const uploadAction = `${import.meta.env.VITE_GLOB_API_URL || '/api'}/file/uploadImg`
+
+/** 补齐默认值与背景色 (空背景色回退默认) */
+function normalizeItemIcon(icon: Panel.ItemIcon | null | undefined): Panel.ItemIcon {
+  return {
+    ...initData,
+    ...icon,
+    backgroundColor: icon?.backgroundColor || initData.backgroundColor,
+  }
+}
+
+// 本地编辑态 + 显式 commit。
+// 旧实现是「往 computed 返回的临时对象上写值, 靠 computed 缓存不失效」, 一旦 computed
+// 依赖变化或被改成普通函数, 图标类型/地址就会静默丢失
+const itemIconInfo = ref<Panel.ItemIcon>(normalizeItemIcon(props.itemIcon))
+
+// 切换编辑对象时重新同步
+watch(() => props.itemIcon, (v) => {
+  itemIconInfo.value = normalizeItemIcon(v)
 })
+
+function commit() {
+  emit('update:itemIcon', { ...itemIconInfo.value })
+}
 
 function handleIconTypeChange(type: number) {
   itemIconInfo.value.itemType = type
-  handleChange()
-}
-
-function handleChange() {
-  emit('update:itemIcon', itemIconInfo.value || null)
+  commit()
 }
 
 // 图库选择 (对齐上游: 选中后自动切换为图片模式并填充地址)
@@ -50,7 +60,7 @@ function handleGallerySelected(file: File.Info) {
   if (file && file.src) {
     itemIconInfo.value.itemType = 2
     itemIconInfo.value.src = file.src
-    handleChange()
+    commit()
   }
 }
 
@@ -61,17 +71,27 @@ const handleUploadFinish = ({
   file: UploadFileInfo
   event?: ProgressEvent
 }) => {
-  const res = JSON.parse((event?.target as XMLHttpRequest).response)
-  if (res.code === 0) {
-    const imageUrl = res.data.imageUrl
-    itemIconInfo.value.src = imageUrl
-    emit('update:itemIcon', itemIconInfo.value || null)
+  try {
+    const res = JSON.parse((event?.target as XMLHttpRequest).response)
+    if (res.code === 0 && res.data?.imageUrl) {
+      itemIconInfo.value.src = res.data.imageUrl
+      commit()
+    }
+    else {
+      apiRespErrMsg(res)
+    }
   }
-  else {
-    apiRespErrMsg(res)
+  catch {
+    // 响应不是 JSON (网关错误页等): 必须提示, 否则用户以为图标已上传
+    ms.error(t('common.uploadFail'))
   }
 
   return file
+}
+
+/** 上传请求本身失败 (网络/HTTP 错误) 时 NUpload 触发 error 事件 */
+function handleUploadError() {
+  ms.error(t('common.uploadFail'))
 }
 </script>
 
@@ -108,7 +128,7 @@ const handleUploadFinish = ({
           show-count
           :maxlength="10"
           clearable
-          @input="handleChange"
+          @input="commit"
         />
       </div>
 
@@ -124,7 +144,7 @@ const handleUploadFinish = ({
             type="text"
             clearable
             :placeholder="$t('iconItem.inputIconName')"
-            @input="handleChange"
+            @input="commit"
           />
           <NButton quaternary type="info">
             <a target="_blank" href="https://icon-sets.iconify.design/">{{ $t('iconItem.onlineIconLibrary') }}</a>
@@ -145,7 +165,7 @@ const handleUploadFinish = ({
             style="width: 300px;"
             clearable
             :placeholder="$t('iconItem.inputIconUrlOrUpload')"
-            @input="handleChange"
+            @input="commit"
           />
           <span @click="galleryShow = true">
             <NButton size="small" type="success" ghost>
@@ -156,13 +176,12 @@ const handleUploadFinish = ({
             </NButton>
           </span>
           <NUpload
-            action="/api/file/uploadImg"
+            :action="uploadAction"
             :show-file-list="false"
             name="imgfile"
-            :headers="{
-              token: authStore.token as string,
-            }"
+            :headers="authStore.token ? { token: authStore.token } : {}"
             @finish="handleUploadFinish"
+            @error="handleUploadError"
           >
             <NButton size="small">
               <template #icon>

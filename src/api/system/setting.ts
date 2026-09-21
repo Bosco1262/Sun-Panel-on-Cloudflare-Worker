@@ -2,12 +2,16 @@ import { Hono } from 'hono'
 import type { Env } from '../../types'
 import { errorByCode, success, successData } from '../../utils/response'
 import { authMiddleware } from '../../middleware/auth'
-import { SETTING_AUTO_CLEAN_UNUSED, getAutoCleanUnused, getSetting, setSetting } from '../../utils/settings'
+import {
+  SETTING_AUTO_CLEAN_UNUSED,
+  SETTING_CUSTOM_CSS,
+  SETTING_CUSTOM_JS,
+  getAutoCleanUnused,
+  getSetting,
+  setSetting,
+} from '../../utils/settings'
 
 const app = new Hono<{ Bindings: Env }>()
-
-const SETTING_CUSTOM_CSS = 'custom_css'
-const SETTING_CUSTOM_JS = 'custom_js'
 
 // 获取自定义 CSS/JS (公开接口: 前端在所有页面注入, 包括公开模式的只读视图)
 app.post('/getCustomCode', async (c) => {

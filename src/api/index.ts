@@ -1,7 +1,6 @@
 import { Hono } from 'hono'
 import type { Env } from '../types'
-// 公开 / 登录 (顶层路由)
-import openness from './openness'
+// 登录 (顶层路由)
 import login from './login'
 // 面板管理 (对应前端 src/api/panel/)
 import itemIcon from './panel/itemIcon'
@@ -14,9 +13,6 @@ import systemSetting from './system/setting'
 import user from './system/user'
 
 const app = new Hono<{ Bindings: Env }>()
-
-// 开放接口
-app.route('/openness', openness)
 
 // 登录/登出/版本
 app.route('/', login)

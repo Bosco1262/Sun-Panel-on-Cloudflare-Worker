@@ -72,12 +72,15 @@ function makeDb() {
           const name = String(args[0] ?? '')
           if (name === 'storage_auto_clean_unused')
             return state.autoClean === null ? null : { v: state.autoClean }
+          // 多键查询 (自定义 CSS/JS 的引用检查) 走 all(): 这里返回空结果集,
+          // 与真实 D1 的 { results } 契约一致 (返回 null 会让调用方解构时抛错)
+          if (mode === 'all')
+            return { results: [] }
           return null // auth_epoch / admin_head_image 等
         }
+        // 活着的项目图标: 项目被软删后这条查询就不再命中它 (清理流程正是靠这个前提)
         if (sql.includes('SELECT icon_json FROM item_icon'))
-          return { results: items }
-        if (sql.includes('SELECT 1 AS x FROM item_icon'))
-          return null // 没有别的项目引用这张图
+          return { results: state.itemDeleted ? [] : items }
         if (sql.includes('FROM user_config'))
           return null
         if (sql.startsWith('UPDATE item_icon SET deleted_at')) {

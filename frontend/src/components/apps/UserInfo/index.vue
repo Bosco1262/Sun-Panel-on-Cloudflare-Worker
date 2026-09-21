@@ -91,7 +91,7 @@ async function logoutApi() {
   userStore.resetUserInfo()
   authStore.removeToken()
   panelState.removeState()
-  appStore.removeToken()
+  appStore.resetAppSetting()
   ms.success(t('settingUserInfo.logoutSuccess'))
   // router.push({ path: '/login' })
   location.reload()// 强制刷新一下页面
@@ -115,8 +115,11 @@ function handleUpdatePassword(e: MouseEvent) {
       updatePasswordModalState.value.form.password,
     ).then(({ code, msg }) => {
       if (code === 0) {
-        // 成功
+        // 成功: 清空表单, 避免密码明文残留在组件状态里 (改用户名那边也是这么做的)
         updatePasswordModalState.value.show = false
+        updatePasswordModalState.value.form.oldPassword = ''
+        updatePasswordModalState.value.form.password = ''
+        updatePasswordModalState.value.form.confirmPassword = ''
         updateLocalUserInfo()
         ms.success(t('common.success'))
       }
@@ -229,7 +232,7 @@ function handleChangeTheme(value: Theme) {
           {{ $t('common.language') }}
         </div>
         <div class="max-w-[200px]">
-          <NSelect v-model:value="languageValue" :options="languageOptions" @update-value="handleChangeLanuage" />
+          <NSelect v-model:value="languageValue" :options="languageOptions" @update:value="handleChangeLanuage" />
         </div>
       </div>
 
@@ -238,7 +241,7 @@ function handleChangeTheme(value: Theme) {
           {{ $t('apps.userInfo.theme') }}
         </div>
         <div class="max-w-[200px]">
-          <NSelect v-model:value="themeValue" :options="themeOptions" @update-value="handleChangeTheme" />
+          <NSelect v-model:value="themeValue" :options="themeOptions" @update:value="handleChangeTheme" />
         </div>
       </div>
 

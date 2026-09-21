@@ -4,12 +4,6 @@ declare namespace Common {
         count:number
     }
 
-    interface ListRequest{	
-        limit:number
-        page:number
-        keyword?:string
-    }
-
     interface InfoBase{	
         createTime?:string
         updateTime?:string

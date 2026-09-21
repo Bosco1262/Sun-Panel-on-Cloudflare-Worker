@@ -14,13 +14,6 @@ export function edit<T>(req: Panel.ItemInfo) {
   })
 }
 
-// export function getInfo<T>(id: number) {
-//   return post<T>({
-//     url: '/aiApplet/getInfo',
-//     data: { id },
-//   })
-// }
-
 export function getListByGroupId<T>(itemIconGroupId: number | undefined) {
   return post<T>({
     url: '/panel/itemIcon/getListByGroupId',
@@ -39,13 +32,6 @@ export function saveSort<T>(data: Panel.ItemIconSortRequest) {
   return post<T>({
     url: '/panel/itemIcon/saveSort',
     data,
-  })
-}
-
-export function getSiteFavicon<T>(url: string) {
-  return post<T>({
-    url: '/panel/itemIcon/getSiteFavicon',
-    data: { url },
   })
 }
 

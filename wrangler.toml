@@ -1,4 +1,4 @@
-name = "sun-panel"
+name = "sun-panel-on-cloudflare-worker"
 main = "src/index.ts"
 compatibility_date = "2025-12-01"
 
@@ -12,10 +12,10 @@ directory = "dist"
 # (自动资源供应, Open Beta: https://developers.cloudflare.com/changelog/post/2025-10-24-automatic-resource-provisioning/)
 [[d1_databases]]
 binding = "DB"
-database_name = "sun-panel"
+database_name = "sun-panel-on-cloudflare-worker_db"
 migrations_dir = "migrations"
 
 # R2 存储 (部署时自动创建)
 [[r2_buckets]]
 binding = "FILES"
-bucket_name = "sun-panel-files"
+bucket_name = "sun-panel-on-cloudflare-worker-files"

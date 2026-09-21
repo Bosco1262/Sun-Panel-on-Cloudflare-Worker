@@ -1,11 +1,15 @@
-# 改进计划（数据层整理 · 安全加固 · 一致性）
+# 改进计划（待办 · 已结项记录 · 自检）
 
-> 本文件是当前仓库**后续改动的唯一计划来源**，落地后回填状态列。
-> 与 [migration-plan.md](./migration-plan.md) 区分：那份是 Go → Cloudflare Worker 的**历史**迁移计划，本文件是面向现状的改进计划。
+> 本文件是当前仓库**改动计划的唯一来源**，落地后回填状态列。
+> 历史设计（Go → Worker 迁移期）见 [history/migration/plan.md](./history/migration/plan.md)，早期需求清单见 [history/requirements/early-todo.md](./history/requirements/early-todo.md)（归档判定标准见 [history/README.md](./history/README.md)）。
 >
-> **执行状态：§2 ~ §6 全部结项**（§2.5 按决策 D5 取消、§5.3 按决策不做，其余均已完成并验证）。
-> 收尾验证：11 个自检脚本全过、`tsc` / `vue-tsc` / `eslint` 通过、i18n 审计缺失 0 / 中英不齐 0、`vite build` 重建 `dist/` 成功。
-> 结项后追加：§9.0 图片回收开关（决策 D8）+ [storage.md](./storage.md) §3.1 的功能文档；其余未执行项集中在 §9「后续候选详细计划」。
+> **怎么读**：
+> - 想找**还没做的事** → §9「后续候选」（9.10~9.12 待明确需求）与 §10.3「仍待处理」；
+> - 想找**本轮修了什么** → §10.1 / §10.2 与 §10.5；
+> - 想找**当时的验证证据** → §1~§8 各节的「落地结果」与附录 C 的自检脚本清单。
+>
+> **当前状态**：§2 ~ §6 全部结项（§2.5 按决策 D5 取消、§5.3 按决策不做）；§9 中 9.0 ~ 9.5、9.8、9.9 已完成，9.6 待确认（运维侧可选）、9.7 待执行、9.10 ~ 9.12 待明确需求。
+> 收尾验证：**14 个自检脚本全过**、`npm run check`（tsc + vue-tsc + eslint）**0 error / 0 warning**、i18n 审计缺失 0 / 中英不齐 0 / 死文案 0、`vite build` 重建 `dist/` 成功。
 
 **状态图例**：`已完成` / `待执行` / `进行中` / `待确认`
 
@@ -348,8 +352,8 @@ CREATE INDEX IF NOT EXISTS idx_login_attempt_window ON login_attempt (window_sta
 | 引擎设置按钮同行 | 「添加搜索引擎 / 排序 / 恢复内置引擎」合并为一行，窄屏自动换行；破坏性「重置」仍单独置底 | `frontend/src/components/apps/Style/SearchEngineSettings.vue` |
 | 过滤缺陷修复（方案 A） | 过滤视图改为携带**原始分组对象**；交互回调由「下标」改为「分组对象」；`filterItems` 改为 `computed`；`:key` 用稳定 id；新增过滤提示与「无结果」提示；过滤中禁用排序并在进入过滤时退出排序模式 | `frontend/src/utils/panelFilter/index.ts`（新）、`frontend/src/views/home/index.vue`、两个 locale、`scratch/panel-filter.test.ts`（27 passed） |
 
-**收尾状态**：`dist/` 已随 §9 改动重建（§6.3、§9.1 / §9.2 落地结果）；前端建议按「不过滤 → 过滤 → 清空关键词」做一次手动回归（hover 按钮、排序、拖拽保存、右键、跳转、「+」落到正确分组）。
-**未提交**：§2 ~ §9 的**全部改动**（含 §9.0 / 9.1 / 9.2 / 9.5 本轮落地）仍在工作区，部署前需要 commit + push（或本地 `npm run deploy:all`）；范围与拆分建议见 §9.7。
+**收尾状态**：§2 ~ §9 的改动**已全部提交**（当前基线见 git log）；`dist/` 随各轮改动重建；后续增量见 §10「全仓库排查结论（本轮）」。
+**部署提醒**：`dist/` 已 gitignore，线上产物由构建流程生成 —— 本地 `npm run deploy:all` 或在 Cloudflare Workers Builds 里 `npm run build`。
 
 ---
 
@@ -376,13 +380,16 @@ CREATE INDEX IF NOT EXISTS idx_login_attempt_window ON login_attempt (window_sta
 > **本节变更（按用户指示）**：新增 **9.2「获取图标弹窗选一张」**；**移除**原 9.4（PBKDF2 迭代数提升）与
 > 原 9.7（仓库原有待确认需求）；编号已重新连续化，9.0 为已完成的回收开关。
 >
-> **执行进度（本轮）**：9.1 / 9.2 / 9.5 已完成；9.3 / 9.7 待执行；9.4 / 9.6 / 9.8 / 9.9 待确认。
+> **执行进度**：9.0 ~ 9.5、9.8、9.9 已完成；9.6 待确认（运维侧可选）；9.7 待执行（提交拆分与手动回归）；9.10 ~ 9.12 为待明确需求。
 >
 > **待用户操作（不阻塞开发，详见 [deployment.md](./deployment.md)）**：
 > ① 配置 secrets（`JWT_SECRET` 必填；建议配 `PASSWORD_PEPPER`，**配后勿改勿删**）；
 > ② `npm run build` + `wrangler deploy`（新库再跑 `wrangler d1 migrations apply DB --remote`）；
 > ③ 首次登录确认旧密码哈希已自动升级（`system_setting.admin_password` 变为 `pbkdf2$…`）；
-> ④ 可选：删除云端孤儿 KV namespace（§2.4 移除 KV 后的遗留）。
+> ④ 可选：删除云端孤儿 KV namespace（§2.4 移除 KV 后的遗留）；
+> ⑤ **旧资源清理**：命名基线为 Worker `sun-panel-on-cloudflare-worker`、D1 `sun-panel-on-cloudflare-worker_db`、
+> R2 `sun-panel-on-cloudflare-worker-files`；按此部署并验证通过后，把不再使用的旧 Worker（`sun-panel`）、
+> 旧 D1（`sun-panel`）、旧 R2（`sun-panel-files`）与孤儿 KV 从控制台删除。
 
 ### 9.0 图片回收开关（**已实现**，决策 D8，作为格式参照）
 
@@ -467,7 +474,10 @@ CREATE INDEX IF NOT EXISTS idx_login_attempt_window ON login_attempt (window_sta
   ② 按命名空间分批删除 `zh-CN.json` / `en-US.json` 中两侧都无引用的 key；③ 每批跑一次审计确认「缺失 0 / 不齐 0」。
 - **验证**：审计输出「死文案 0（白名单 N）」；`vue-tsc` 通过（locale 是 JSON，类型来自 key 字面量，删错会立刻在页面上显示原始 key，所以手动点几页）。
 - **风险**：中（删错会让界面显示原始 key）。建议按命名空间小步提交，便于回滚。
-- **状态**：待执行。
+- **状态**：已完成。
+- **落地结果（本轮实测）**：`scratch/i18n-audit.ts` 增加 `DYNAMIC_KEY_WHITELIST`（`apiErrorCode.*` 15 条 + `deskModule.searchEngine` 的 5 条校验文案，均由动态 key 使用），输出改为「死文案（已排除白名单）+ 白名单明细」；
+  两个 locale 各删除 **36 条**真正无引用的文案（`adminSettingUsers.*` 12、`common.*` 21、`apps.baseSettings.*` 4 等），并清理因此产生的空对象；文案量 298 → 262 条（两侧齐平）。
+  复跑审计：**缺失 0 / 中英不齐 0 / 死文案 0（白名单 20）**；`npm run check`（tsc + vue-tsc + eslint）通过。
 
 ### 9.4 token 从 localStorage 迁到 HttpOnly Cookie — 量级 L
 
@@ -482,7 +492,13 @@ CREATE INDEX IF NOT EXISTS idx_login_attempt_window ON login_attempt (window_sta
 - **涉及文件**：`src/api/login.ts`、`src/middleware/auth.ts`、`frontend/src/utils/request/index.ts`、`frontend/src/store/modules/auth/*`、`docs/deployment.md`（本地 dev 的 cookie 说明）。
 - **验证**：登录后 `document.cookie` 读不到 token；带 cookie 的请求正常；跨站来源的 POST 被拒（可用 `curl -H 'Origin: https://evil.example'` 验证）；改密/退出所有设备后旧 cookie 失效（1001）。
 - **风险**：中高。注意本地 `wrangler dev`（http://127.0.0.1）上 `Secure` cookie 的行为、以及 workers.dev 与自定义域混用时的 cookie 作用域。
-- **状态**：待确认（需求优先级未定）。
+- **状态**：**已完成**。
+- **落地结果（本轮实测）**：
+  - 新增 `src/utils/authCookie.ts`：`setAuthCookie` / `clearAuthCookie` / `readAuthToken`；属性 `Path=/; HttpOnly; SameSite=Lax; Max-Age=259200`（与 JWT 的 72h 一致），**`Secure` 仅在 https 下添加**（本地 dev 是 http，加了浏览器会丢弃该 Cookie）。
+  - `src/middleware/auth.ts`：读取顺序改为 **Cookie → `token` 头 → `Authorization: Bearer`**；用 Cookie 认证时对写操作（POST/PUT/PATCH/DELETE）做跨站校验 —— 优先看 `Sec-Fetch-Site`，缺失时退回「Origin 与 Host 的**主机名**比较」（Cookie 不区分端口，比较主机名才能让本地 Vite 代理 :1002 → :8787 正常工作）。
+  - `src/api/login.ts`：登录成功下发 Cookie；`/logout` 清除 Cookie（`allDevices` 仍递增世代，其它设备上的 Cookie 一并失效）。
+  - 前端：`store/modules/auth/helper.ts` 的 `setStorage` **不再把 token 落盘**（localStorage 只剩用户信息与 visitMode）；请求头仅在内存里有 token 时才补发；登录响应体里的 `token` 保留给命令行脚本使用。
+  - 自检 `scratch/auth-cookie.test.ts`：**17 passed**（Cookie 认证 / 跨站写 1005 / 跨站读放行 / 头认证兼容 / 无凭证 1000 / 世代过期 1001 / 同主机不同端口放行 / Cookie 属性 + http 下无 Secure）。
 
 ### 9.5 `JWT_SECRET` 强度提示 — 量级 S
 
@@ -506,7 +522,7 @@ CREATE INDEX IF NOT EXISTS idx_login_attempt_window ON login_attempt (window_sta
 
 ### 9.7 工程收尾 — 量级 S
 
-- **提交拆分建议**（当前所有改动仍未提交）：PR-A（§2 数据层）→ PR-B（§3.1）→ PR-C（§3.2）→ PR-D（§3.3）→ PR-E（§4）→ PR-F（§5）→ PR-G（§6 文档）→ PR-H（§9.0 开关 + 配套文档）→ PR-I（§9.1 / §9.2 / §9.5 本轮落地，已完成）。
+- **提交拆分建议**（§2 ~ §9.5 已提交；本轮 §10 的改动建议单独成一个 PR，见 §10.4）：PR-A（§2 数据层）→ PR-B（§3.1）→ PR-C（§3.2）→ PR-D（§3.3）→ PR-E（§4）→ PR-F（§5）→ PR-G（§6 文档）→ PR-H（§9.0 开关 + 配套文档）→ PR-I（§9.1 / §9.2 / §9.5 / §9.3 / §9.8）。
   每批提交前跑 `npm run check`（根 typecheck + 前端 type-check + lint）；`dist/` 已 gitignore，无需提交。
 - **手动回归清单**（浏览器，脚本覆盖不到交互）：① 登录 / 改密 / 退出所有设备；② 首页「不过滤 → 过滤 → 清空关键词」三步（hover 按钮、排序、拖拽保存、右键、跳转、「+」落到正确分组）；
   ③ 引擎设置三个按钮是否在同行；④ 上传文件管理：开关切换、清理未引用文件；⑤ 同一站点连点两次「获取图标」应复用同一 URL；
@@ -521,7 +537,11 @@ CREATE INDEX IF NOT EXISTS idx_login_attempt_window ON login_attempt (window_sta
 - **涉及文件**：`src/utils/uploadRefs.ts`（+ 常量从 `src/api/system/setting.ts` 提升到 `src/utils/settings.ts` 以免循环依赖）、`scratch/upload-refs.test.ts`。
 - **验证**：自检增断言；端到端：把某张图的 URL 写进自定义 JS → `cleanUnused` 返回 `deleted=0`。
 - **风险**：极低（多一次查询、判定更保守）。
-- **状态**：待确认（我上轮提议，你尚未表态）。
+- **状态**：**已完成**。
+- **落地结果（本轮实测）**：`SETTING_CUSTOM_CSS` / `SETTING_CUSTOM_JS` 常量从 `src/api/system/setting.ts` 提升到 `src/utils/settings.ts`（避免 utils ↔ api 循环依赖）；
+  `isUploadSrcReferenced()` 增加一次 `config_name IN (?, ?)` 查询，命中即保留；顶部注释与 [storage.md](./storage.md) §3.1 的判定清单同步为 4 项。
+  `scratch/upload-refs.test.ts` 增加 3 条断言（CSS 引用保留 / JS 引用保留 / 清空后不再保留），**25 passed**（原 22）；
+  `scratch/upload-clean-setting.test.ts` 的内存版 D1 补齐 `.all()` 契约，**23 passed**。
 
 ### 9.9 清理流程的子请求优化（图库变大后的稳定性）— 量级 S/M（**待确认**）
 
@@ -532,7 +552,83 @@ CREATE INDEX IF NOT EXISTS idx_login_attempt_window ON login_attempt (window_sta
 - **涉及文件**：`src/utils/uploadRefs.ts`、`src/api/system/file.ts`（可选加 `limit` 参数）、`UploadFileManager/index.vue`（可选循环）、`scratch/upload-refs.test.ts`。
 - **验证**：自检覆盖「引用集合构建 + 批量更新」；端到端用 20 张图跑一次清理，核对 `checked/deleted` 与耗时。
 - **风险**：低（纯内部重构），但必须保持「可能被引用 → 保留」的保守语义不变。
-- **状态**：待确认（我上轮提议，你尚未表态）。
+- **状态**：**已完成**。
+- **落地结果（本轮实测）**：`src/utils/uploadRefs.ts` 重构为「一次性读取 + 内存比对」：
+  - `loadReferenceTexts()` 固定 **3 次查询**（活着的 `item_icon.icon_json`、`user_config.panel_json`、`system_setting` 的头像 + 自定义 CSS/JS 三键），与候选数量**无关**；
+  - `isSrcReferenced()` 纯函数做字符串包含判定（保守语义不变），`isUploadSrcReferenced()` 复用它（站点图标换扩展名的单点场景同样只 3 次查询）；
+  - `file` 行改为**分片批量 UPDATE**（每片 90 个绑定参数，D1 上限 100）；
+  - 新增 `limit` 参数与 `remaining` 返回值：`/file/cleanUnused` 默认每次最多处理 **30** 个候选（免费版每次调用只有 50 个子请求，删对象各占 1 个），前端「清理未引用文件」循环调用直到 `remaining === 0`（上限 50 轮兜底）。
+  - 自检 `scratch/upload-refs.test.ts`：**35 passed**，其中断言「2 个候选与 24 个候选的语句数都是 4 条」（旧实现是 4N 级别）以及分批语义（limit=2 时 2/3 → 2/1 → 1/0）。
+
+### 9.10 「我的信息」合并登录信息 — 量级 S（**待明确需求**）
+
+- **背景**：原需求是「账号区放用户名（合并原『账号』与『昵称』、去掉『编辑』按钮）→ 分隔线 → 修改登录信息（弹窗顶部加用户名输入且不能为空）」。
+  当前实现仍是「修改用户名」「修改密码」两个独立入口，密码弹窗里没有用户名输入，「昵称」也不再展示。
+- **需要确认**：是否把两个弹窗合并为一个「修改登录信息」表单（用户名 + 当前密码 + 新密码 + 确认新密码，留空表示不修改该项）？「昵称」是否恢复展示与编辑（后端 `admin_name` 与 `/user/updateInfo` 都还在）？
+- **涉及**：`frontend/src/components/apps/UserInfo/index.vue`；后端 `/user/updateUsername`、`/user/updatePassword`（若合并接口，需保持 `auth_epoch` 递增语义不变）。
+
+### 9.11 上传文件管理的图片背景（棋盘格）透明度 — 量级 S（**待明确需求**）
+
+- **背景**：需求为「图片背景太花，减少 50% 透明度」。当前棋盘格为 `rgba(0, 0, 0, 0.03)`（`frontend/src/components/apps/UploadFileManager/index.vue` 的 `.transparent-grid`），上游是 `#f0f0f0` / 16px。
+- **需要确认**：目标值取 `rgba(0, 0, 0, 0.015)`（严格减半）还是改成更中性的浅灰（例如 `#f7f7f7`）？给一句结论即可落地。
+
+### 9.12 「新建」布局调整 — 量级 ?（**需求待明确**）
+
+- **背景**：原需求只有「调整新建的布局」一句，无法判断指哪个界面（分组管理的「新建分组」弹窗？首页的「新增项目」弹窗？启动器布局？）。
+- **需要确认**：具体界面 + 期望效果（截图或文字描述均可）。
+
+---
+
+## 10. 全仓库排查结论（本轮）
+
+> 触发：对整个仓库做一次「缺陷 / 异常处理 / 性能 / 弃用内容」的系统排查，并按类别逐条评估后分批落地。
+> 本节只记录**结论与裁决**，逐条证据与评估表见当时产出的排查报告（不在仓库内）。
+
+### 10.1 已落地的修复（按批次）
+
+| 批次 | 内容 |
+|------|------|
+| P0 高危 | `Style/index.vue` 补 `NInputNumber` 导入（「面板最大宽度」输入框原本不可用）；`ImportExport` 导入失败不再用「成功」提示、部分失败不再谎报成功；`ItemGroupManage` 点「添加」前重置表单（原本会静默覆盖正在编辑的分组）、编辑改为浅拷贝；`zh-CN` 的 `common.saveFail` 文案由「保存成功」改为「保存失败」 |
+| P1 健壮性 | 首页 `jumpUrl` 空值回退（原本可能跳 `/undefined`）；拖拽 `item-key` 改 `id` 并在保存后同步本地 `sort`；`RoundCardModal` 去掉 `:style="$parent"`；导入 JSON 顶层非对象时给出提示（不再静默失败）；请求层 `failHandler` 修正类型并显示服务端 msg（错误弹窗 50s → 8s）、GET 也带 headers；`updatePanelConfigByCloud` 补 catch 且只在 `code -1` 时重置、保存动作合并为一个入口；删除指向不存在路由的 `reloadRoute`；拖拽手柄改用本地存在的图标（原本空白）；`getFileList` 补 code/异常/loading 复位；设置壁纸等待结果、失败回滚；导出失败不再静默丢数据；上传回调补 `JSON.parse` 保护与 `@error`；搜索框保存补 catch；`max-[400px]` → `max-w-[400px]`；登录页内联样式补单位；`add-frontend-version.js` 版本日期改北京时间口径；`AppIcon` 的 `style` prop 改名 `cardStyle`；`IconEditor` 去掉「靠 computed 缓存传值」的脆弱实现；`useLanguage` 改为 watch 驱动；`AppStarter` 应用列表改 computed（语言切换即时生效）且不再强制覆盖折叠状态 |
+| P2 清理 | 删除 15 个整文件死代码（`utils/is`、`utils/format`、`utils/functions`、`utils/crypto` 等）与 3 个空目录；清理约 20 处注释残留；删除 8 个未使用 SVG 图标与 4 张未使用大图（≈620 KB，保留 `avatar.png`）；`store/modules/app`、`panel`、`auth` 的死 action/字段/类型一并移除 |
+| P3 依赖 | 移除 `vuedraggable`（零引用）与 `rimraf`；`axios` / `crypto-js` / `@iconify/vue` / `markdown-it-link-attributes` 从 devDependencies 移入 dependencies；删除未生效的 `terserOptions.drop_console`；补 `VITE_APP_VERSION` 类型声明并移除未使用的 env 变量 |
+| P4 文档 | 「未提交」等过时说明修正；`scratch/` 描述与自检命令统一；`/about` 版本号改为读根 `package.json`（消除三处硬编码）；关于页补本仓库链接 |
+| P5 附加 | §9.3 死文案清理（36 条）+ 审计脚本白名单；§9.8 自定义 CSS/JS 纳入引用检查；后端 `addMultiple` 接受传入 `sort`（导入顺序保真）；删除 `ImportExport` 恒不显示的调试 UI 与「样式配置」死复选框 |
+
+### 10.2 评估后判定「不改」的项（避免误伤）
+
+- `apiMessage` 里调用 `useOsTheme()` **不存在**监听器泄漏（naive-ui 内部以 `usedCount` 计数，根组件已持有实例）。
+- 请求层 `code === -1` 保持静默：各调用方已各自提示，统一弹窗会造成重复提示。
+- 首页/文件列表的虚拟滚动、面板/引擎两个 deep watch：当前规模（<100 项 + 1s 防抖）下收益不足。
+- `1001` 只清 auth store：显式登出已清全部 store，被动失效保留缓存反而体验更好。
+- 限流/抓取 fail-open、前端 role 只作展示拦截：均为有意取舍，注释与文档已说明。
+- `github-markdown.less` / `highlight.less` / markdown 系依赖**暂不删除**（保留将来做 markdown 渲染的余地，且自定义 CSS 可能引用 `.markdown-body` / `.hljs`）。
+
+### 10.3 仍待处理（需决策或属运维动作）
+
+| 项 | 说明 |
+|----|------|
+| 本地残留 | 已清理 `.wrangler/state/v3/kv`、8 月的孤儿 D1 文件（4 KB，仅含种子数据）与 5 个空目录；**仅剩根目录 `.dev-web.log` / `.dev-worker.log`** 两个开发日志（工具的安全删除被拒，需手动删；已被 `.gitignore` 覆盖） |
+| 云端残留 | 孤儿 KV namespace `sun-panel-login-rate` —— 实测 **0 个 key**，纯清理项（Dashboard 手动删即可）；线上 D1 仍有 `module_config` / `notice` 两张历史表，其中 **`module_config` 有 1 行历史数据**（旧版搜索框配置，代码已不再读取），删表前建议先备份 |
+| §9.6 | `/uploads/*` 边缘缓存（运维侧可选，取舍见 §9.6） |
+| §9.10 ~ 9.12 | 三条待明确需求（详见 §9 末尾） |
+
+### 10.4 提交建议
+
+本轮改动跨前后端与文档，建议按 P0+P1（行为修复）→ P2+P3（清理与依赖）→ P4+P5（文档与附加项）→ P6（本轮第二批，见 §10.5）拆四个提交；
+每批提交前跑 `npm run check` 与附录 C 的全部自检脚本；`dist/` 已 gitignore，部署前由构建流程生成。
+
+### 10.5 本轮第二批（排查结论落地后追加）
+
+> 触发：用户要求「核对未被使用的 openness 接口 → 清除；补 `onlyName` 的导入导出；评估并优化 §9.4 / §9.9；整理 docs/」。
+
+| 主题 | 结论与落地 |
+|------|-----------|
+| **openness 接口清除** | 全仓库核对（含 `-SimpleMatch` 误用导致的漏检复核）确认零使用后删除：前端 `api/openness.ts`、类型 `typings/openness/openness.d.ts`、后端 `src/api/openness.ts` 与其在 `src/api/index.ts` 的挂载；连带移除只被它使用的 `SETTING_SYSTEM_APPLICATION` / `SETTING_DISCLAIMER` / `SETTING_WEB_ABOUT_DESCRIPTION`、`getSettingJson` / `setSettingJson`，以及 `0001_init.sql` 里对应的三行种子（**只影响全新库**；线上库残留的三行设置与两张历史表保留无害，见 §10.3） |
+| **`onlyName` 导入导出** | 导出结构 `Icon` 增加可选 `onlyName`（向后兼容旧文件）；导出时带上、导入时提交；后端 `addMultiple` 归一化（去空白/剔非法字符/截断 50）并对「库内已占用 + 批内重复」降级为空串，把被丢弃的标识回报给前端提示；单条 `edit` 复用同一套归一化（原本只在服务端查重、不校验字符集）。自检 `scratch/only-name-import.test.ts`：**8 passed** |
+| **§9.4 Cookie** | 见 §9.4 落地结果（HttpOnly + SameSite=Lax + 写操作跨站校验；持久化层不再存 token） |
+| **§9.9 子请求** | 见 §9.9 落地结果（固定 3 次读取 + 分片批量更新 + `limit`/`remaining` 分批）。额外发现：**免费版每次调用只有 50 个子请求**（官方限制），因此大批量清理必须分批 —— 这正是 `limit` 与前端循环的由来 |
+| **docs/ 整理** | `history/` 收纳迁移设计与早期需求清单（`migration-plan.md`、`todo.md`）；`docs/README.md` 重写为「文档地图 + 职责表 + 维护约定」；`deployment.md` 去掉与根 README 重复的技术栈/差异表；`storage.md` 新增「Cloudflare 资源与免费层额度」实测章节；待明确需求集中到 §9.10~9.12 |
 
 ---
 
@@ -546,16 +642,19 @@ CREATE INDEX IF NOT EXISTS idx_login_attempt_window ON login_attempt (window_sta
 --                        card_style(原 0002), text_color(原 0002), hide_description(原 0002)
 -- 表 3 user_config       单行 id=1(CHECK), created_at, updated_at, panel_json, search_engine_json
 -- 表 4 system_setting    id, config_name(UNIQUE), config_value
---                        （键: 管理员账号/密码/昵称/头像、system_application、disclaimer、
---                          web_about_description、custom_css、custom_js、auth_epoch、
---                          storage_auto_clean_unused）
+--                        （键: 管理员账号/密码/昵称/头像、custom_css、custom_js、auth_epoch、
+--                          storage_auto_clean_unused —— 除账号四项外都是按需写入, 不在基线里预置；
+--                          system_application / disclaimer / web_about_description 已随 /openness 接口删除, 见 §10.5）
 -- 表 5 file              id, created_at, updated_at, deleted_at, src, file_name, method, ext
 -- 表 6 login_attempt     ip(PK), fail_count, window_start   index: idx_login_attempt_window
--- 种子  system_setting ×7（admin_username/admin_password/admin_name/admin_head_image/
---                        system_application/disclaimer/web_about_description）
+-- 种子  system_setting ×4（admin_username/admin_password/admin_name/admin_head_image）
 -- 种子  item_icon_group ×1（默认分组 APP）
 -- 已移除（不再创建）: module_config、notice —— 见 §5.1；已部署库里的空表保留不动
 ```
+
+> **线上实例实测（2026-09-21，`wrangler d1 execute --remote`）**：11 张表（6 张业务表 + `d1_migrations` + `sqlite_sequence` + `_cf_KV` + 历史遗留的 `module_config` / `notice`），
+> `system_setting` 7 行（旧的 3 个已废弃键仍在）、`module_config` 1 行历史数据、`notice` 0 行、`item_icon` 1 / `item_icon_group` 2 / `file` 2 / `login_attempt` 0。
+> 也就是说：**这个库建于 2026-09-04**，早于 §5.1（不再建表）与本轮（不再种入 3 个设置键），所以历史表与废弃键都还在 —— 代码已不访问，属于无害残留。
 
 ## 附录 B：登录限流 SQL
 
@@ -605,10 +704,25 @@ node_modules/.bin/esbuild scratch/favicon-candidates.test.ts --bundle --platform
 node_modules/.bin/esbuild scratch/i18n-audit.ts --bundle --platform=node --format=esm \
   --outfile=scratch/i18n-audit.mjs --log-level=warning && node scratch/i18n-audit.mjs
 # 注意: CJS 格式不支持顶层 await, 统一用 esm + .mjs; 产物用完请删除 (未加 gitignore)
+# 唯一例外: search-engine-util 需要 --loader:.svg=text 处理内置图标 (esm / cjs 均可)
+node_modules/.bin/esbuild scratch/search-engine-util.test.ts --bundle --platform=node --format=esm \
+  --outfile=scratch/search-engine-util.mjs --loader:.svg=text --log-level=warning && node scratch/search-engine-util.mjs
+# 会话 Cookie / CSRF 防线 (§9.4)
+node_modules/.bin/esbuild scratch/auth-cookie.test.ts --bundle --platform=node --format=esm \
+  --outfile=scratch/auth-cookie.mjs --log-level=warning \
+  --banner:js="import{webcrypto}from'node:crypto';globalThis.crypto??=webcrypto;" && node scratch/auth-cookie.mjs
 # 后端路由级自检 (含浏览器/加密全局垫片):
 node_modules/.bin/esbuild scratch/user-config-merge.test.ts --bundle --platform=node --format=esm \
   --outfile=scratch/merge.mjs --log-level=warning \
   --banner:js="import{webcrypto}from'node:crypto';globalThis.crypto??=webcrypto;" && node scratch/merge.mjs
+node_modules/.bin/esbuild scratch/only-name-import.test.ts --bundle --platform=node --format=esm \
+  --outfile=scratch/only-name.mjs --log-level=warning \
+  --banner:js="import{webcrypto}from'node:crypto';globalThis.crypto??=webcrypto;" && node scratch/only-name.mjs
+
+# 结果速查 (最近一次实测): panel-filter 27 · login-rate 18 · upload-validate 55 · password-hash 29 ·
+# auth-epoch 23 · auth-cookie 17 · upload-refs 35 · group-with-items 15 · upload-clean-setting 23 ·
+# favicon-candidates 48 · user-config-merge 16 · only-name-import 8 · search-engine-util 50 ·
+# i18n-audit 缺失 0 / 不齐 0 / 死文案 0（白名单 20）
 
 # 迁移与新库校验
 npm run migrations:apply:local          # 新库: 期望一次建全 8 张业务表(含 login_attempt) + 全部列
@@ -648,3 +762,7 @@ npm run deploy:all # 构建 + 部署
 | 本轮（计划调整 + 文档） | 按用户指示调整 §9：**新增 9.2「获取图标弹窗选一张」**（含后端候选解析/两个新接口、前端 `FaviconPicker.vue`、i18n、自检与端到端验证步骤）、**移除原 9.4（PBKDF2 迭代数）与原 9.7（仓库原有待确认需求）**、编号重新连续化；[storage.md](./storage.md) 新增 **§3.1「图片回收：两个入口、判定规则与开关」**（开关默认值/失败方向/按钮链路/场景对照/盲区） |
 | 本轮（A1+A2+B1 落地） | 完成 §9.1（`apiErrorCode.1009` 中英各一条，登录页可见密码配置异常）、§9.5（`JWT_SECRET` 弱密钥一次性告警 + 部署文档补 `openssl rand -base64 48`）、§9.2（`extractIconCandidates` + 候选/保存两个接口 + `FaviconPicker.vue` 弹窗，旧接口保留；新增自检 `scratch/favicon-candidates.test.ts` **48 passed**）；`npm run check` 与 i18n 审计通过，`dist/` 重建 |
 | 本轮（待办标记补全） | §9 顶部新增「待用户操作」清单（secrets / 部署 / 首登确认 / 可选清理）；§7 收尾的「未提交」提示更新为覆盖 §2 ~ §9 全部改动；§9.7 的 PR-I 更新为「§9.1 / §9.2 / §9.5 已完成」并补手动回归第 ⑥ 条（多候选弹窗） |
+| 本轮（全仓库排查） | 新增 §10：一次系统排查后按 P0~P5 分批落地 —— 4 项高危修复（`NInputNumber` 缺失、导入导出假成功、分组静默覆盖、`saveFail` 文案）、约 25 项健壮性修复、15 个死文件与约 620 KB 未使用资源清理、依赖与配置整理（-2 依赖、4 个移入 dependencies）、文档同步与版本号统一；同时完成 §9.3（删 36 条死文案 + 审计白名单）与 §9.8（自定义 CSS/JS 纳入引用检查）；12 个自检脚本全绿，`npm run check` 0 error / 0 warning |
+| 本轮（第二批） | 新增 §10.5：清除未被使用的 `/openness/*` 三个接口及其设置键、种子（前端封装与类型一并删）；`onlyName` 贯通导入导出并在后端做归一化/去重（新增 `scratch/only-name-import.test.ts` 8 断言）；§9.4 完成（HttpOnly Cookie + SameSite=Lax + 写操作跨站校验 + token 不再落盘，新增 `scratch/auth-cookie.test.ts` 17 断言）；§9.9 完成（固定 3 次引用读取 + 分片批量更新 + `limit`/`remaining` 分批，`upload-refs` 扩到 35 断言）；`docs/` 重组（`history/` 归档、索引重写、storage 增免费层额度章节、deployment 去重）；共 14 个自检脚本全绿 |
+| 本轮（第四批·资源改名） | 命名基线更新：Worker → `sun-panel-on-cloudflare-worker`，D1 → `sun-panel-on-cloudflare-worker_db`，R2 → `sun-panel-on-cloudflare-worker-files`（**实测约束**：R2 桶名不允许下划线，故用连字符）；`wrangler.toml` 与 deployment.md（导入说明、访问 URL、创建与迁移命令、备份恢复）、storage.md（资源表、免费层实测）、双语 README 全部同步；`wrangler deploy --dry-run` 校验通过（`env.DB` / `env.FILES` 均正确解析） |
+| 本轮（第三批·文档与双语） | 根 README 拆为双语对：`README.md`（英文）与 `README.zh-CN.md`（中文），两者顶部带语言切换入口、许可证段落分别按 `This project is licensed under the [MIT License](LICENSE).` / `本项目采用 [MIT License](LICENSE)。` 撰写并补上游作者署名说明；**部署章节改写为 Workers Git 集成流程**（连接仓库 → 两条命令 → 补 `JWT_SECRET` → `git push` 自动部署），详细说明仍指向 deployment.md；`docs/history/` 按主题重组为 `migration/plan.md` 与 `requirements/early-todo.md` 并新增归档判定标准（`history/README.md`）；`improvement-plan.md` 经判定**保留在 `docs/` 根下**（§9/§10 仍是活跃待办且被多处按锚点引用）；`docs/README.md` 增双语同步约定与链接层级说明；12 份文档相对链接校验通过 |

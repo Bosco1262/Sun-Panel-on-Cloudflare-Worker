@@ -3,7 +3,6 @@ import { NAlert, NButton, NButtonGroup, NCard, NEllipsis, NGrid, NGridItem, NIma
 import { onMounted, ref } from 'vue'
 import { cleanUnused, deletes, getList } from '@/api/system/file'
 import { getStorageSettings, saveStorageSettings } from '@/api/system/setting'
-import { set as savePanelConfig } from '@/api/panel/userConfig'
 import { RoundCardModal, SvgIcon } from '@/components/common'
 import { copyToClipboard, timeFormat } from '@/utils/cmn'
 import { t } from '@/locales'
@@ -31,9 +30,20 @@ const infoModalState = ref<InfoModalState>({
 
 async function getFileList() {
   loading.value = true
-  const { data } = await getList<Common.ListResponse<File.Info[]>>()
-  imageList.value = data.list
-  loading.value = false
+  try {
+    const { code, data, msg } = await getList<Common.ListResponse<File.Info[]>>()
+    if (code === 0 && data?.list)
+      imageList.value = data.list
+    else if (code !== 0)
+      ms.error(`${t('common.failed')}:${msg}`)
+  }
+  catch {
+    ms.error(t('common.failed'))
+  }
+  finally {
+    // 必须复位: 旧实现在请求失败时会让 loading 永远为 true, 页面一直转圈
+    loading.value = false
+  }
 }
 
 async function copyImageUrl(text: string) {
@@ -94,14 +104,24 @@ function handleCleanUnused() {
 async function cleanUnusedImages() {
   cleaning.value = true
   try {
-    const { code, msg, data } = await cleanUnused<{ checked: number; deleted: number }>()
-    if (code === 0) {
-      ms.success(t('apps.uploadsFileManager.cleanUnusedDone', { count: data?.deleted ?? 0 }))
-      getFileList()
+    let deletedTotal = 0
+
+    // 后端每次只处理一批 (免费版单次调用子请求有限), 这里循环到没有剩余;
+    // 上限 50 轮是防御性兜底, 避免异常情况下无限循环
+    for (let round = 0; round < 50; round++) {
+      const { code, msg, data } = await cleanUnused<{ checked: number; deleted: number; remaining: number }>()
+      if (code !== 0) {
+        ms.error(`${t('common.failed')}:${msg}`)
+        return
+      }
+
+      deletedTotal += data?.deleted ?? 0
+      if (!data?.remaining)
+        break
     }
-    else {
-      ms.error(`${t('common.failed')}:${msg}`)
-    }
+
+    ms.success(t('apps.uploadsFileManager.cleanUnusedDone', { count: deletedTotal }))
+    getFileList()
   }
   catch {
     ms.error(t('common.failed'))
@@ -111,9 +131,25 @@ async function cleanUnusedImages() {
   }
 }
 
-function handleSetWallpaper(imgSrc: string) {
+async function handleSetWallpaper(imgSrc: string) {
+  const previous = panelStore.panelConfig.backgroundImageSrc
   panelStore.panelConfig.backgroundImageSrc = imgSrc
-  savePanelConfig({ panel: panelStore.panelConfig })
+  try {
+    const { code, msg } = await panelStore.persistUserConfig()
+    if (code === 0) {
+      panelStore.recordState()
+      ms.success(t('apps.uploadsFileManager.setWallpaperSuccess'))
+      return
+    }
+
+    // 失败回滚, 否则界面显示新壁纸但云端仍是旧的
+    panelStore.panelConfig.backgroundImageSrc = previous
+    ms.error(`${t('common.failed')}:${msg}`)
+  }
+  catch {
+    panelStore.panelConfig.backgroundImageSrc = previous
+    ms.error(t('common.failed'))
+  }
 }
 
 // 删除项目/分组时是否自动回收未引用的图片
@@ -210,7 +246,7 @@ onMounted(() => {
       </div>
       <NImageGroup v-else>
         <NGrid cols="2 300:2 600:4 900:6 1100:9" :x-gap="5" :y-gap="5">
-          <NGridItem v-for=" item, index in imageList" :key="index">
+          <NGridItem v-for=" item in imageList" :key="item.id">
             <NCard size="small" style="border-radius: 5px;" :bordered="true">
               <template #cover>
                 <div class="card transparent-grid">

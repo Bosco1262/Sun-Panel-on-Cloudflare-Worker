@@ -1,11 +1,12 @@
 import type { App } from 'vue'
 import { createI18n } from 'vue-i18n'
 import enUS from './en-US.json'
-// import koKR from './ko-KR'
 import zhCN from './zh-CN.json'
-// import ruRU from './ru-RU'
 
-const defaultLocale = 'zh-CN'
+/** 当前支持的语言 (新增语言时需同步 naive-ui 的 locale 映射与 languageOptions) */
+export type Locale = 'zh-CN' | 'en-US'
+
+const defaultLocale: Locale = 'zh-CN'
 
 const i18n = createI18n({
   locale: defaultLocale,
@@ -13,18 +14,14 @@ const i18n = createI18n({
   allowComposition: true,
   messages: {
     'en-US': enUS,
-    // 'ko-KR': koKR,
     'zh-CN': zhCN,
-    // 'zh-TW': zhTW,
-    // 'ru-RU': ruRU,
   },
 })
 
 export const t = i18n.global.t
 
-// 避免循环依赖appstore(authstore)language此处暂时先使用any
-// 后面有时间调整
-export function setLocale(locale: any) {
+// 这里刻意不引 store, 避免与 store 形成循环依赖
+export function setLocale(locale: Locale) {
   i18n.global.locale = locale
 }
 

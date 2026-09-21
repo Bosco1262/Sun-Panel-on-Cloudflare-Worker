@@ -35,7 +35,6 @@ onMounted(() => {
   <div class="h-full">
     <NSpin :show="loading" style="height: 100%;" content-style="height: 100%;" :delay="500" description="loading...">
       <component :is="dynamicComponent" v-if="dynamicComponent" />
-      <!-- <component :is="getComponent(componentName || '')" v-if="dynamicComponent" /> -->
       <div
         v-else-if="!dynamicComponent"
       >

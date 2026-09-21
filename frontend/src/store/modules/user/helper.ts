@@ -1,22 +1,16 @@
 import { ss } from '@/utils/storage'
-// import userDefaultAvatar from '@/assets/userDefaultAvatar.png'
 
 const LOCAL_NAME = 'userStorage'
 
-export interface UserInfo extends User.Info {
-  // name: string
-  // description: string
-}
-
 export interface UserState {
-  userInfo: UserInfo
+  userInfo: User.Info
 }
 
 export function defaultSetting(): UserState {
   return {
     userInfo: {
-      // headImage: userDefaultAvatar,
-      name: '-- --',
+      // 昵称在拉取到用户信息前保持空, 由 UI 决定回退展示 (旧实现是 '-- --' 占位)
+      name: '',
     },
   }
 }

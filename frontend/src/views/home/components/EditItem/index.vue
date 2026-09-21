@@ -247,37 +247,39 @@ async function saveFavicon(candidate: Panel.FaviconCandidate, pageUrl: string): 
 }
 
 watch(() => props.visible, (newValue) => {
-  if (newValue === true) {
-    model.value = props.itemInfo ? { ...props.itemInfo } : { ...restoreDefault }
-    if (props.itemGroupId)
-      model.value.itemIconGroupId = props.itemGroupId
-  }
+  // 只在打开时初始化/拉取数据; 旧实现在关闭弹窗时也会多发一次分组列表请求
+  if (newValue !== true)
+    return
+
+  model.value = props.itemInfo ? { ...props.itemInfo } : { ...restoreDefault }
+  if (props.itemGroupId)
+    model.value.itemIconGroupId = props.itemGroupId
 
   getGroupListOptions()
 })
 
 function getGroupListOptions() {
   getGroupList<Common.ListResponse<Panel.ItemIconGroup[]>>().then(({ data, code, msg }) => {
-    if (code === 0) {
-      itemIconGroupOptions.value = []
-
-      for (let i = 0; i < data.list.length; i++) {
-        const element = data.list[i]
-        if (i === 0 && !model.value.itemIconGroupId) {
-          model.value.itemIconGroupId = element.id
-          restoreDefault.itemIconGroupId = element.id
-        }
-
-        itemIconGroupOptions.value.push({
-          value: element.id as number,
-          label: element.title as string,
-        })
-      }
+    if (code !== 0 || !data?.list) {
+      if (code !== 0)
+        ms.error(`${t('iconItem.getGroupFail')}:${msg}`)
+      return
     }
-    else {
-      ms.error(`${t('iconItem.getGroupFail')}:${msg}`)
+
+    itemIconGroupOptions.value = []
+
+    for (let i = 0; i < data.list.length; i++) {
+      const element = data.list[i]
+      // 未指定分组时默认落到第一个分组 (不再回写模块级 restoreDefault, 避免副作用)
+      if (i === 0 && !model.value.itemIconGroupId)
+        model.value.itemIconGroupId = element.id
+
+      itemIconGroupOptions.value.push({
+        value: element.id as number,
+        label: element.title as string,
+      })
     }
-  })
+  }).catch(() => ms.error(t('iconItem.getGroupFail')))
 }
 </script>
 
@@ -300,12 +302,12 @@ function getGroupListOptions() {
       >
         <div class="flex justify-center p-2">
           <div class="w-[210px] mr-4 z-[-1]">
-            <!-- style 必须传字面量（0=长条形/1=正方形），动态表达式会被 Vue 编译为 _normalizeStyle() 导致数字变成 undefined -->
+            <!-- cardStyle: 0=长条形(详情) / 1=正方形(小图标) -->
             <AppIcon
               :item-info="previewItemInfo"
               :icon-text-info-hide-description="false"
               :icon-text-icon-hide-title="false"
-              :style="0"
+              :card-style="0"
             />
           </div>
           <div class="z-[-1]">
@@ -314,7 +316,7 @@ function getGroupListOptions() {
               icon-text-color="#000"
               :icon-text-info-hide-description="false"
               :icon-text-icon-hide-title="false"
-              :style="1"
+              :card-style="1"
             />
           </div>
         </div>

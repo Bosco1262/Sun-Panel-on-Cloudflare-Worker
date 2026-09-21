@@ -1,31 +1,24 @@
-import { computed } from 'vue'
+import { ref, watch } from 'vue'
 import { enUS, zhCN } from 'naive-ui'
-// import { enUS, koKR, zhCN, zhTW } from 'naive-ui'
 import { useAppStore } from '@/store'
 import { setLocale } from '@/locales'
 
 export function useLanguage() {
   const appStore = useAppStore()
+  const language = ref(zhCN)
 
-  const language = computed(() => {
-    switch (appStore.language) {
-      case 'en-US':
-        setLocale('en-US')
-        return enUS
-      // case 'ko-KR':
-      //   setLocale('ko-KR')
-      //   return koKR
-      case 'zh-CN':
-        setLocale('zh-CN')
-        return zhCN
-      // case 'zh-TW':
-      //   setLocale('zh-TW')
-      //   return zhTW
-      default:
-        setLocale('zh-CN')
-        return zhCN
+  // 用 watch 而非 computed: computed 应保持纯函数, 在求值里做 setLocale 副作用会
+  // 依赖「谁先读它」的时机 (没人读就不会切换语言)
+  watch(() => appStore.language, (lang) => {
+    if (lang === 'en-US') {
+      setLocale('en-US')
+      language.value = enUS
+      return
     }
-  })
+
+    setLocale('zh-CN')
+    language.value = zhCN
+  }, { immediate: true })
 
   return { language }
 }

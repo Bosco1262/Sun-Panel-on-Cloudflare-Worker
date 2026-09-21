@@ -14,18 +14,22 @@ onMounted(() => {
   getCustomCode<{ customCss: string; customJs: string }>().then(({ code, data }) => {
     if (code !== 0 || !data)
       return
-    if (data.customCss) {
+    // 幂等: 重复注入会执行两次自定义 JS (例如开发态热更新重新挂载)
+    if (data.customCss && !document.getElementById('custom-global-css')) {
       const style = document.createElement('style')
       style.id = 'custom-global-css'
       style.textContent = data.customCss
       document.head.appendChild(style)
     }
-    if (data.customJs) {
+    if (data.customJs && !document.getElementById('custom-global-js')) {
       const script = document.createElement('script')
       script.id = 'custom-global-js'
       script.textContent = data.customJs
       document.body.appendChild(script)
     }
+  }).catch(() => {
+    // 自定义代码读取失败不影响页面渲染, 仅记录日志
+    console.warn('load custom css/js failed')
   })
 })
 </script>

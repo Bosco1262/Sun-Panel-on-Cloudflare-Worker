@@ -20,4 +20,7 @@ async function bootstrap() {
   app.mount('#app')
 }
 
-bootstrap()
+bootstrap().catch((err) => {
+  // 引导失败 (路由/挂载异常) 至少留下日志, 方便定位白屏原因
+  console.error('app bootstrap failed:', err)
+})

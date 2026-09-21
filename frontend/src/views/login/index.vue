@@ -9,7 +9,6 @@ import { t } from '@/locales'
 import { languageOptions } from '@/utils/defaultData'
 import type { Language } from '@/store/modules/app/helper'
 
-// const userStore = useUserStore()
 const authStore = useAuthStore()
 const appStore = useAppStore()
 const ms = useMessage()
@@ -40,9 +39,9 @@ const loginPost = async () => {
     }
   }
   catch (error) {
+    // 网络/服务端异常已由请求层统一提示
     loading.value = false
-    // 请检查网络或者服务器错误
-    console.log(error)
+    console.error('login failed:', error)
   }
 }
 
@@ -62,10 +61,10 @@ function handleChangeLanuage(value: Language) {
     <NCard class="login-card" style="border-radius: 20px;">
       <div class="mb-5 flex items-center justify-end">
         <div class="mr-2">
-          <SvgIcon icon="ion-language" style="width: 20;height: 20;" />
+          <SvgIcon icon="ion-language" style="width: 20px;height: 20px;" />
         </div>
         <div class="min-w-[100px]">
-          <NSelect v-model:value="languageValue" size="small" :options="languageOptions" @update-value="handleChangeLanuage" />
+          <NSelect v-model:value="languageValue" size="small" :options="languageOptions" @update:value="handleChangeLanuage" />
         </div>
       </div>
 

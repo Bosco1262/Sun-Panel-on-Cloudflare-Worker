@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { NButton, NCard, NEllipsis, NEmpty, NFlex, NImage, NInput, NModal, NSpin, useMessage } from 'naive-ui'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { getList } from '@/api/system/file'
 import { t } from '@/locales'
 
@@ -105,6 +105,14 @@ watch(keyword, () => {
   keywordTimer = setTimeout(() => {
     currentPage.value = 1
   }, 500)
+})
+
+onBeforeUnmount(() => {
+  // 组件卸载后定时器仍会触发, 属于泄漏
+  if (scrollTimer)
+    clearTimeout(scrollTimer)
+  if (keywordTimer)
+    clearTimeout(keywordTimer)
 })
 
 function handleSelect(item: File.Info) {

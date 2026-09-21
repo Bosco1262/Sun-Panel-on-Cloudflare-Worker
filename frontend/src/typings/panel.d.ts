@@ -42,8 +42,6 @@ declare namespace Panel {
     }
 
     interface State {
-        rightSiderCollapsed: boolean
-        leftSiderCollapsed: boolean
         networkMode:PanelStateNetworkModeEnum | null
         panelConfig:panelConfig
         searchEngine:DeskModule.SearchBox.SearchEngineConfig

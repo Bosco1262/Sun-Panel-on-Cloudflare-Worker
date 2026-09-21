@@ -6,9 +6,8 @@ export enum PanelStateNetworkModeEnum {
 }
 
 export enum PanelPanelConfigStyleEnum {
-  'icon' = 1, // 图标风格
-  'info' = 0, // 详情风格
-  'small' = 1, // 同icon
+  'icon' = 1, // 图标风格 (小图标/正方形)
+  'info' = 0, // 详情风格 (长条形)
 }
 
 // 搜索框结果打开方式

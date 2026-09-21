@@ -33,8 +33,6 @@ const routes: RouteRecordRaw[] = [
     name: 'notFound',
     redirect: '/404',
   },
-
-  // adminRouter,
 ]
 
 export const router = createRouter({
