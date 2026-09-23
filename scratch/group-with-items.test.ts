@@ -3,6 +3,16 @@ import { signToken } from '../src/utils/jwt'
 import itemIconGroupApp from '../src/api/panel/itemIconGroup'
 
 /**
+ * Self-check for the home page's "groups + items in one call" (§4.2)
+ *
+ * The old flow took 1+N Worker requests (query the groups, then query the items of each group). This verifies
+ * with an in-memory D1:
+ * - grouping is correct and orphan items (whose group_id points at a non-existent group) are not attached anywhere;
+ * - on an empty database the default group is created and orphan items are "claimed" before the items are queried —
+ *   the reverse order loses those items;
+ * - the number of SQL statements is fixed at 3 (1 epoch + 2 data queries) and does not grow with the group count.
+ *
+ *
  * 首页「分组 + 项目一次返回」自检 (§4.2)
  *
  * 旧流程是 1+N 次 Worker 请求 (先查分组, 再逐个分组查项目)。这里用内存版 D1 验证:
@@ -132,6 +142,7 @@ const SECRET = 'group-test-secret'
 const token = await signToken(SECRET, { id: 1, username: 'admin', name: 'admin', headImage: '', role: 1 }, 1)
 
 function request(db: unknown) {
+  // Call the sub-app directly; the path has no /panel prefix (same as the user-config-merge self-check)
   // 直接调用子应用, 路径不带 /panel 前缀 (与 user-config-merge 自检一致)
   return itemIconGroupApp.fetch(
     new Request('http://test/itemIconGroup/getListWithItems', {

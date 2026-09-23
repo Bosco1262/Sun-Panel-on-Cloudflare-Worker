@@ -11,6 +11,16 @@ import {
 } from '../src/utils/password'
 
 /**
+ * Self-check for the password hash upgrade (§3.2)
+ *
+ * Key properties:
+ * 1. the old Go triple-MD5 hash must still verify (existing users must not be locked out);
+ * 2. with a pepper configured, a new hash must not verify without that pepper (so a D1 leak cannot be
+ *    brute-forced offline);
+ * 3. a missing or replaced pepper must produce a distinguishable failure reason instead of pretending the
+ *    password is wrong.
+ *
+ *
  * 密码哈希升级自检 (§3.2)
  *
  * 关键性质:
@@ -36,7 +46,9 @@ function eq(label: string, actual: unknown, expected: unknown) {
 }
 
 const PEPPER = 'test-pepper-value'
-const LEGACY_FIXTURE = '579646aad11fae4dd295812fb4526245' // 12345678 的三重 MD5 (与 migrations 种子一致)
+// Triple MD5 of 12345678 (the same value as the migrations seed)
+// 12345678 的三重 MD5 (与 migrations 种子一致)
+const LEGACY_FIXTURE = '579646aad11fae4dd295812fb4526245'
 
 console.log('== 旧版兼容 ==')
 eq('三重 MD5 夹具', passwordEncryption('12345678'), LEGACY_FIXTURE)

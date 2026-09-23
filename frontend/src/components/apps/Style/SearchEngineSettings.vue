@@ -24,16 +24,28 @@ const ms = useMessage()
 const dialog = useDialog()
 const { searchEngine } = storeToRefs(panelState)
 
-/** 用于推导地址模板的示例关键词 */
+/**
+ * Sample keyword used to deduce the URL template
+ *
+ * 用于推导地址模板的示例关键词
+ */
 const SAMPLE_KEYWORD = 'sun panel'
 
 const sortStatus = ref(false)
 
-/** 编辑弹窗状态 */
+/**
+ * Edit-dialog state
+ *
+ * 编辑弹窗状态
+ */
 const editor = reactive({
   show: false,
   isEdit: false,
-  /** 编辑时记录原 id, 保存后要同步当前选中项 */
+  /**
+   * The original id is recorded while editing, so the current selection can be updated after saving
+   *
+   * 编辑时记录原 id, 保存后要同步当前选中项
+   */
   editingId: '',
   engine: createEmptyEngine(),
   titleError: '',
@@ -42,6 +54,7 @@ const editor = reactive({
 })
 
 const engineList = computed({
+  // Return the store array directly: drag sorting and add/remove mutate it in place and the watch below saves the change automatically
   // 直接返回 store 里的数组: 拖拽排序与增删都原地修改, 改动会被下面的 watch 自动保存
   get: () => searchEngine.value?.engineList ?? [],
   set: (value: DeskModule.SearchBox.SearchEngine[]) => {
@@ -72,6 +85,7 @@ const previewUrl = computed(() => {
   return buildSearchUrl(url, SAMPLE_KEYWORD)
 })
 
+// Site icon candidates per engine: tried in order when the user's icon fails, so no broken image is shown
 // 每个引擎的站点图标候选: 用户填的图标失效时按顺序回退, 避免破图
 const listIconCandidates = computed<Record<string, string[]>>(() => {
   const map: Record<string, string[]> = {}
@@ -129,6 +143,7 @@ function handleDelete(engine: DeskModule.SearchBox.SearchEngine) {
       if (index === -1)
         return
       list.splice(index, 1)
+      // When the deleted engine was the current one, move to the next one in the same position / back to the first
       // 删掉的是当前项时, 顺延到同位置的下一项 / 第一项
       if (searchEngine.value && searchEngine.value.currentEngineId === engine.id)
         searchEngine.value.currentEngineId = list[Math.min(index, list.length - 1)]?.id ?? ''
@@ -143,6 +158,7 @@ function handleRestoreBuiltin() {
     const existed = engineList.value.some(item => item.url.trim().toLowerCase() === engine.url.trim().toLowerCase())
     if (existed)
       continue
+    // Use a new id so it cannot clash with an existing entry
     // 换一个 id, 避免与已有项冲突
     searchEngine.value?.engineList.push({ ...engine, id: generateEngineId() })
   }
@@ -166,12 +182,19 @@ function handleResetAll() {
 }
 
 function handleChangeSort() {
+  // The sorted result is submitted and reported by the parent's (Style Settings) debounced save; this only toggles
+  // sort mode, so the UI never claims "saved" before the save actually happens
+  //
   // 排序结果由父组件 (风格设置) 的防抖保存统一提交并提示,
   // 这里只切换排序模式, 避免「还没保存就提示保存成功」
   sortStatus.value = !sortStatus.value
 }
 
-/** 编辑框里粘贴一个能打开的搜索地址时, 自动识别关键词参数并转成模板 */
+/**
+ * Pasting a working search URL into the form detects the keyword parameter automatically and turns it into a template
+ *
+ * 编辑框里粘贴一个能打开的搜索地址时, 自动识别关键词参数并转成模板
+ */
 function handleUrlBlur() {
   const url = editor.engine.url.trim()
   if (!url || hasPlaceholder(url))
@@ -212,11 +235,13 @@ function handleSave() {
   const index = list.findIndex(item => item.id === engine.id)
   if (index === -1) {
     list.push(engine)
+    // A newly added engine becomes the current one straight away
     // 新增的引擎直接设为当前使用
     if (searchEngine.value)
       searchEngine.value.currentEngineId = engine.id
   }
   else {
+    // Keep the original position; splice preserves the order of the reactive array
     // 保留原位置, 用 splice 维持响应式数组顺序
     list.splice(index, 1, engine)
   }
@@ -228,6 +253,7 @@ function handleSave() {
 
 <template>
   <div class="w-full">
+    <!-- Action area: the three buttons share one row and wrap on narrow windows; the destructive "Reset" sits at the bottom on its own -->
     <!-- 操作区: 三个按钮排在同一行, 窗口过窄时自动换行; 破坏性的「重置」单独放到底部 -->
     <div class="flex items-center flex-wrap gap-[8px]">
       <NButton v-if="!sortStatus" size="small" type="success" @click="handleAdd">
@@ -248,6 +274,7 @@ function handleSave() {
       </template>
     </div>
 
+    <!-- Empty list: the search box still uses the built-in default engine, which is explained here -->
     <!-- 列表为空: 搜索框仍在用内置默认引擎, 这里给出说明 -->
     <div v-if="engineList.length === 0" class="mt-[10px] text-[13px] text-slate-500 dark:text-slate-400">
       {{ $t('deskModule.searchEngine.emptyTip') }}
@@ -322,6 +349,7 @@ function handleSave() {
       </NCheckbox>
     </div>
 
+    <!-- The destructive action sits at the bottom on its own, clearly separated from the buttons above -->
     <!-- 破坏性操作单独放到底部, 与上方按钮拉开距离 -->
     <div class="mt-[12px] pt-[12px] border-t border-slate-200 dark:border-zinc-700">
       <NButton size="small" quaternary type="error" @click="handleResetAll">

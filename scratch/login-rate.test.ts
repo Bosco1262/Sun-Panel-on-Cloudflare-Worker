@@ -9,6 +9,14 @@ import {
 } from '../src/utils/loginRate'
 
 /**
+ * Self-check for login rate limiting
+ *
+ * This drives the real call sequence and bind order through an **in-memory D1 emulator**: the emulator only
+ * understands the statements in loginRate.ts and throws on anything else — so changing the SQL without
+ * updating the semantics immediately fails the self-check. The real SQL is verified end-to-end against a local
+ * `wrangler dev` (six wrong logins in a row; the sixth must return 1008).
+ *
+ *
  * 登录限流自检
  *
  * 这里用一个**内存版 D1 模拟器**跑真实的调用序列与绑定顺序: 模拟器只认 loginRate.ts 里
@@ -32,6 +40,7 @@ function eq(label: string, actual: unknown, expected: unknown) {
   }
 }
 
+// ===================== In-memory D1 =====================
 // ===================== 内存版 D1 =====================
 
 interface Row { fail_count: number, window_start: number }
@@ -59,6 +68,7 @@ function execute(sql: string, args: unknown[]) {
       table.set(ip, { fail_count: 1, window_start: now })
     }
     else {
+      // Same as the CASE WHEN in the SQL: an expired window restarts the count
       // 与 SQL 里的 CASE WHEN 一致: 窗口过期则重新计数
       row.fail_count = row.window_start < cutoff ? 1 : row.fail_count + 1
       row.window_start = now
@@ -100,6 +110,7 @@ const db = {
   },
 } as never
 
+// ===================== isLocked (pure function) =====================
 // ===================== isLocked (纯函数) =====================
 
 const NOW = 1_700_000_000
@@ -111,6 +122,7 @@ eq(`失败 ${LOGIN_MAX_ATTEMPTS} 次 -> 锁`, isLocked({ fail_count: LOGIN_MAX_A
 eq('窗口刚好到期 -> 不锁', isLocked({ fail_count: 9, window_start: NOW - LOGIN_WINDOW_SECONDS }, NOW), false)
 eq('窗口到期前 1 秒 -> 锁', isLocked({ fail_count: 9, window_start: NOW - LOGIN_WINDOW_SECONDS + 1 }, NOW), true)
 
+// ===================== Call sequence =====================
 // ===================== 调用序列 =====================
 
 console.log('== 限流序列 ==')
@@ -123,17 +135,20 @@ eq('同一 isolate 内不重复建表', createTableCount, 1)
 
 eq('初始无记录', await readAttempt(db, ip), null)
 
+// Failures 1~4: further attempts are still allowed
 // 第 1~4 次失败: 仍可继续尝试
 for (let i = 1; i < LOGIN_MAX_ATTEMPTS; i++)
   await recordFail(db, ip, NOW, () => 0.9)
 
 eq(`失败 ${LOGIN_MAX_ATTEMPTS - 1} 次后不锁`, isLocked(await readAttempt(db, ip), NOW), false)
 
+// Failure 5: the next login request is rejected with 1008
 // 第 5 次失败: 下一次登录请求会被 1008 拒绝
 await recordFail(db, ip, NOW, () => 0.9)
 eq('fail_count 累加到上限', (await readAttempt(db, ip))?.fail_count, LOGIN_MAX_ATTEMPTS)
 eq('达到上限 -> 锁', isLocked(await readAttempt(db, ip), NOW), true)
 
+// Counting restarts once the window expires
 // 窗口过期后重新计数
 const LATER = NOW + LOGIN_WINDOW_SECONDS + 1
 eq('窗口过期 -> 解锁', isLocked(await readAttempt(db, ip), LATER), false)
@@ -141,6 +156,7 @@ await recordFail(db, ip, LATER, () => 0.9)
 eq('过期后失败计数重置为 1', (await readAttempt(db, ip))?.fail_count, 1)
 eq('window_start 刷新', (await readAttempt(db, ip))?.window_start, LATER)
 
+// Cleared after a successful login
 // 登录成功清除
 await clearFails(db, ip)
 eq('登录成功后记录被清除', await readAttempt(db, ip), null)
@@ -149,10 +165,12 @@ console.log('== 概率清理 ==')
 await recordFail(db, 'old.example', NOW, () => 0.9)
 await recordFail(db, 'new.example', LATER, () => 0.9)
 
+// random=0.9 -> the sweep is not triggered, expired rows stay
 // random=0.9 -> 不触发清理, 过期行保留
 await recordFail(db, 'new.example', LATER, () => 0.9)
 eq('未触发清理时过期行仍在', (await readAttempt(db, 'old.example'))?.fail_count, 1)
 
+// random=0 -> the sweep runs and only removes rows outside the window
 // random=0 -> 触发清理, 只删窗口外的行
 await recordFail(db, 'new.example', LATER, () => 0)
 eq('触发清理后过期行被删', await readAttempt(db, 'old.example'), null)

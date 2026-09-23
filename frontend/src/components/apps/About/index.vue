@@ -27,6 +27,7 @@ onMounted(() => {
     if (res.code === 0 && res.data?.versionName)
       versionName.value = res.data.versionName
   }).catch(() => {
+    // A missing version number does not affect the rest of the about page
     // 版本号取不到不影响关于页其它内容
     console.warn('load version info failed')
   })
@@ -48,6 +49,7 @@ onMounted(() => {
       <div class="mt-2">
         <a href="https://github.com/hslr-s/sun-panel/releases" target="_blank" class="link">{{ $t('apps.about.checkUpdate') }}</a>
       </div>
+      <!-- Keep the upstream link as credit while pointing at this port's repository, so issues are not filed upstream -->
       <!-- 上游链接保留作为致谢, 同时标明本移植版仓库, 避免用户把问题提到上游 -->
       <div class="mt-2 text-sm text-slate-500 dark:text-slate-400">
         {{ $t('apps.about.thisProject') }}

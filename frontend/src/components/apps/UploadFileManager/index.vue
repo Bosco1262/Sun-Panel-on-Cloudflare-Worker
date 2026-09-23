@@ -19,7 +19,11 @@ const dialog = useDialog()
 const panelStore = usePanelState()
 const loading = ref(false)
 const cleaning = ref(false)
-/** 删除项目/分组时是否自动回收未引用图片 (默认开, 与接口默认值一致) */
+/**
+ * Whether deleting an item/group automatically reclaims unreferenced images (on by default, matching the endpoint default)
+ *
+ * 删除项目/分组时是否自动回收未引用图片 (默认开, 与接口默认值一致)
+ */
 const autoCleanUnused = ref(true)
 const savingSetting = ref(false)
 const infoModalState = ref<InfoModalState>({
@@ -41,6 +45,7 @@ async function getFileList() {
     ms.error(t('common.failed'))
   }
   finally {
+    // It must be reset: the old implementation left loading true forever when the request failed, so the page spun forever
     // 必须复位: 旧实现在请求失败时会让 loading 永远为 true, 页面一直转圈
     loading.value = false
   }
@@ -88,6 +93,7 @@ function handleInfoClick(fileInfo: File.Info) {
   infoModalState.value.show = true
 }
 
+// Cleans up unreferenced files: after deleting an item/group its images become orphans (an object in R2 plus a row in the list)
 // 清理未被引用的文件: 删除项目/分组后, 对应的图片会变成孤儿 (R2 里有对象、列表里还有记录)
 function handleCleanUnused() {
   dialog.warning({
@@ -106,6 +112,9 @@ async function cleanUnusedImages() {
   try {
     let deletedTotal = 0
 
+    // The backend handles one batch per call (the free plan caps subrequests per invocation), so loop until nothing is left;
+    // the 50-round cap is a defensive backstop against an endless loop in a bad state
+    //
     // 后端每次只处理一批 (免费版单次调用子请求有限), 这里循环到没有剩余;
     // 上限 50 轮是防御性兜底, 避免异常情况下无限循环
     for (let round = 0; round < 50; round++) {
@@ -142,6 +151,7 @@ async function handleSetWallpaper(imgSrc: string) {
       return
     }
 
+    // Roll back on failure, otherwise the UI shows the new wallpaper while the cloud still has the old one
     // 失败回滚, 否则界面显示新壁纸但云端仍是旧的
     panelStore.panelConfig.backgroundImageSrc = previous
     ms.error(`${t('common.failed')}:${msg}`)
@@ -152,9 +162,13 @@ async function handleSetWallpaper(imgSrc: string) {
   }
 }
 
+// Whether deleting an item/group automatically reclaims unreferenced images
+// When off, the images stay in the list for reuse and "Clean unused files" is there for manual work
+//
 // 删除项目/分组时是否自动回收未引用的图片
 // 关掉后图片保留在列表里可复用, 需要时再手动点「清理未引用文件」
 async function handleAutoCleanChange(value: boolean) {
+  // Ignore repeat triggers while saving, and skip the request when the value did not change
   // 保存中忽略重复触发, 值未变化时不请求
   if (savingSetting.value || value === autoCleanUnused.value)
     return
@@ -181,6 +195,7 @@ async function handleAutoCleanChange(value: boolean) {
   }
 }
 
+// Clicking the explanatory text is equivalent to clicking the switch
 // 点击文字说明区与点击开关等效
 function handleToggleAutoCleanUnused() {
   handleAutoCleanChange(!autoCleanUnused.value)
@@ -193,6 +208,7 @@ async function loadStorageSettings() {
       autoCleanUnused.value = data.autoCleanUnused
   }
   catch {
+    // A failed read keeps the default (on), matching the endpoint's default
     // 读取失败保持默认(开), 与接口侧默认值一致
   }
 }
@@ -209,6 +225,7 @@ onMounted(() => {
       {{ $t('apps.uploadsFileManager.alertText') }}
     </NAlert>
 
+    <!-- Toolbar: automatic-cleanup settings on the left (clicking the text toggles the switch), the manual cleanup button on the right -->
     <!-- 工具栏: 左侧自动清理设置(点击文字同开关), 右侧手动清理按钮 -->
     <div class="shrink-0 flex items-center flex-wrap gap-x-4 gap-y-2 px-3 py-2 bg-white dark:bg-zinc-800 rounded-xl">
       <div class="flex flex-1 items-center gap-2 min-w-0">
@@ -236,6 +253,7 @@ onMounted(() => {
       </NButton>
     </div>
 
+    <!-- File list: flex-1 fills the remaining height and scrolls internally -->
     <!-- 文件列表: flex-1 自适应剩余高度, 内部滚动 -->
     <div class="flex-1 min-h-0 overflow-auto">
       <div v-if="loading" class="h-full flex items-center justify-center">

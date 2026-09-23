@@ -12,6 +12,12 @@ interface Prop {
   iconTextInfoHideDescription: boolean
   iconTextIconHideTitle: boolean
   /**
+   * Card style: 0 = detail icon (bar) / 1 = small icon (square)
+   *
+   * The field used to be called `style`, which clashed with Vue's style binding semantics (call sites had to pass a
+   * literal; a dynamic expression was compiled into _normalizeStyle() and became undefined), hence the rename.
+   *
+   *
    * 卡片样式: 0=详情图标(长条形) / 1=小图标(正方形)
    *
    * 字段名曾为 `style`, 与 Vue 的 style 绑定语义冲突 (调用处必须传字面量,
@@ -42,12 +48,14 @@ const textColor = computed(() => {
 
 <template>
   <div class="app-icon w-full">
+    <!-- Detail icon -->
     <!-- 详情图标 -->
     <div
       v-if="cardStyle === PanelPanelConfigStyleEnum.info"
       class="app-icon-info w-full rounded-2xl flex"
       :style="{ 'background': itemInfo?.icon?.backgroundColor || defaultBackground, '--custom-box-shadow-color': itemInfo?.icon?.backgroundColor || defaultBackground }"
     >
+      <!-- Icon -->
       <!-- 图标 -->
       <div class="app-icon-info-icon w-[70px] h-[70px]">
         <div class="w-[70px] h-full flex items-center justify-center ">
@@ -55,7 +63,9 @@ const textColor = computed(() => {
         </div>
       </div>
 
+      <!-- Text -->
       <!-- 文字 -->
+      <!-- Pure white or a missing colour makes the font colour black or white automatically, based on the background brightness (aligned with upstream) -->
       <!-- 如果为纯白色或未传入颜色，将自动根据背景的明暗计算字体的黑白色 (对齐上游) -->
       <div class="text-white flex items-center" :style="{ color: (!iconTextColor || iconTextColor === '#ffffff') ? textColor : iconTextColor, maxWidth: 'calc(100% - 80px)' }">
         <div class="app-icon-info-text-box w-full">
@@ -73,6 +83,7 @@ const textColor = computed(() => {
       </div>
     </div>
 
+    <!-- Minimal (small) icon (APP) -->
     <!-- 极简(小)图标（APP） -->
     <div v-if="cardStyle === PanelPanelConfigStyleEnum.icon" class="app-icon-small">
       <div
@@ -94,7 +105,8 @@ const textColor = computed(() => {
 </template>
 
 <style scoped>
-/* 对齐上游: 悬浮阴影颜色跟随卡片背景色 + 毛玻璃 + 0.3s 过渡 */
+/* Aligned with upstream: the hover shadow colour follows the card background, plus frosted glass and a 0.3s transition
+   对齐上游: 悬浮阴影颜色跟随卡片背景色 + 毛玻璃 + 0.3s 过渡 */
 .app-icon-info,
 .app-icon-small-icon {
   transition-property: all;

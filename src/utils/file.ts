@@ -1,5 +1,6 @@
 import { md5Hex } from '../utils/password'
 
+// R2 file key: yyyy/M/d/<md5>.<ext> (same directory layout as the Go version)
 // R2 文件 key: yyyy/M/d/<md5>.<ext> (与 Go 版目录结构一致)
 export function buildR2Key(fileName: string, ext: string): string {
   const now = new Date()
@@ -8,6 +9,12 @@ export function buildR2Key(fileName: string, ext: string): string {
 }
 
 /**
+ * Site icon key: `icons/<md5(host)>.<ext>`
+ *
+ * Stable per site — fetching the icon of the same site again overwrites the same object instead of pushing another
+ * copy into R2 on every click (the old key contained Date.now(), so it always created a new object).
+ *
+ *
  * 站点图标 key: `icons/<md5(host)>.<ext>`
  *
  * 按站点稳定 —— 同一个站点重复「获取图标」会覆盖同一个对象, 不再像以前那样
@@ -17,11 +24,16 @@ export function buildIconKey(host: string, ext: string): string {
   return `icons/${md5Hex(host)}${ext}`
 }
 
-/** 站点图标的 key 前缀 (用来查同一站点已有的对象 / file 行) */
+/**
+ * Key prefix of a site icon (used to find the existing object / file row of the same site)
+ *
+ * 站点图标的 key 前缀 (用来查同一站点已有的对象 / file 行)
+ */
 export function buildIconKeyPrefix(host: string): string {
   return `icons/${md5Hex(host)}.`
 }
 
+// file record src -> R2 key (the Go version's src looks like "./uploads/2026/1/5/xxx.png")
 // 文件记录 src -> R2 key (Go 版 src 形如 "./uploads/2026/1/5/xxx.png")
 export function r2KeyFromSrc(src: string): string {
   return src.replace(/^\.\/(uploads\/)?/, '')
@@ -65,6 +77,12 @@ export function isImageExt(ext: string): boolean {
 }
 
 /**
+ * Whitelist of extensions that may be uploaded
+ *
+ * Kept in sync with the contentTypeFromExt mapping: only these types get a definite Content-Type, everything else
+ * is rejected (otherwise it would be stored in R2 as application/octet-stream and later served from our own origin).
+ *
+ *
  * 允许上传的扩展名白名单
  *
  * 与 contentTypeFromExt 的映射保持一致: 只有这些类型能拿到确定的 Content-Type,
@@ -76,7 +94,11 @@ export function isAllowedExt(ext: string): boolean {
   return ALLOWED_EXTS.includes((ext ?? '').toLowerCase())
 }
 
-/** 允许作为站点图标存储的 Content-Type */
+/**
+ * Content types allowed when storing a site icon
+ *
+ * 允许作为站点图标存储的 Content-Type
+ */
 const ICON_CONTENT_TYPES = [
   'image/png',
   'image/jpeg',
@@ -88,6 +110,14 @@ const ICON_CONTENT_TYPES = [
 ]
 
 /**
+ * Normalises the Content-Type of a fetched icon
+ *
+ * Non-image content always returns '' (the caller then discards it): otherwise a third-party page could push HTML
+ * or script into R2 and have it served same-origin from our domain (a stored-XSS stepping stone).
+ * A few sites label their icon as application/octet-stream, which is accepted only when the URL extension is
+ * unambiguously an image.
+ *
+ *
  * 归一化抓取到的图标 Content-Type
  *
  * 非图片内容一律返回 '' (由调用方丢弃): 否则第三方页面可以把 HTML/脚本塞进 R2,
@@ -109,6 +139,15 @@ export function normalizeIconContentType(contentType: string, url: string): stri
 }
 
 /**
+ * Key validation for /uploads/<key>
+ *
+ * Two shapes are allowed:
+ * - `yyyy/M/d/<32-char md5>[.ext]`  (uploads; the extension is optional for compatibility with early extension-less objects)
+ * - `icons/<32-char md5>.<ext>`     (site icons, stable per site)
+ *
+ * Escapes such as `/` and `..` are rejected — R2 keys are flat, so this stops paths like `/uploads/../` from reading other objects.
+ *
+ *
  * /uploads/<key> 的 key 校验
  *
  * 允许两种形态:

@@ -1,70 +1,90 @@
-# 改进计划（待办 · 已结项记录 · 自检）
+---
+title: Improvement Plan
+status: current
+audience: developer
+last_verified: 2026-09-23
+---
 
-> 本文件是当前仓库**改动计划的唯一来源**，落地后回填状态列。
-> 历史设计（Go → Worker 迁移期）见 [history/migration/plan.md](./history/migration/plan.md)，早期需求清单见 [history/requirements/early-todo.md](./history/requirements/early-todo.md)（归档判定标准见 [history/README.md](./history/README.md)）。
+# Improvement Plan (backlog · completed work · self-checks)
+
+[English](improvement-plan.md) | [简体中文](improvement-plan.zh-CN.md)
+
+> This file is the **single source of truth for planned changes** in this repository; status columns are filled in
+> once work lands.
+> Historical designs (from the Go → Worker migration) are in [history/migration/plan.md](./history/migration/plan.md),
+> the early requirement list in [history/requirements/early-todo.md](./history/requirements/early-todo.md) (archiving
+> criteria: [history/README.md](./history/README.md)).
 >
-> **怎么读**：
-> - 想找**还没做的事** → §9「后续候选」（9.10~9.12 待明确需求）与 §10.3「仍待处理」；
-> - 想找**本轮修了什么** → §10.1 / §10.2 与 §10.5；
-> - 想找**当时的验证证据** → §1~§8 各节的「落地结果」与附录 C 的自检脚本清单。
+> **How to read it**:
+> - looking for **work that is not done yet** → §9 "candidate backlog" (9.10~9.12 need clarification) and §10.3 "still open";
+> - looking for **what a round fixed** → §10.1 / §10.2 and §10.5;
+> - looking for **the evidence of that time** → the "outcome" paragraphs of §1~§8 and the self-check script list in Appendix C.
 >
-> **当前状态**：§2 ~ §6 全部结项（§2.5 按决策 D5 取消、§5.3 按决策不做）；§9 中 9.0 ~ 9.5、9.8、9.9 已完成，9.6 待确认（运维侧可选）、9.7 待执行、9.10 ~ 9.12 待明确需求。
-> 收尾验证：**14 个自检脚本全过**、`npm run check`（tsc + vue-tsc + eslint）**0 error / 0 warning**、i18n 审计缺失 0 / 中英不齐 0 / 死文案 0、`vite build` 重建 `dist/` 成功。
+> **Current state**: §2 ~ §6 are all closed (§2.5 cancelled by decision D5, §5.3 decided against); in §9, 9.0 ~ 9.5, 9.8
+> and 9.9 are done, 9.6 awaits confirmation (optional, operations side), 9.7 awaits execution and 9.10 ~ 9.12 need
+> clarified requirements.
+> Closing verification: **all 14 self-check scripts pass**, `npm run check` (tsc + vue-tsc + eslint) reports
+> **0 error / 0 warning**, the i18n audit reports 0 missing / 0 zh-en mismatches / 0 dead strings, and `vite build`
+> rebuilt `dist/` successfully.
 
-**状态图例**：`已完成` / `待执行` / `进行中` / `待确认`
-
----
-
-## 0. 决策记录（本轮确认）
-
-| # | 决策 | 直接后果 |
-|---|------|----------|
-| **D1** | `migrations/` 合并为单个 `0001_init.sql` | 目录只剩一个文件；**代价**：已部署库的结构变化必须走一次性升级脚本（见 2.2） |
-| **D2** | 登录限流由 KV 改为 D1（单语句原子 UPSERT） | 消除「读-改-写丢计数」与 KV 读滞后导致的限流绕过 |
-| **D3** | KV 不再被使用 → 删除 KV 绑定、类型、代码与文档 | `wrangler.toml` 少一个绑定；云端自动创建的 namespace 变为可清理的孤儿 |
-| **D4** | 「搜索栏搜索项目」过滤缺陷采用方案 A 修复 | 已完成，见 §7 |
-| **D5** | **跳过老库一次性升级脚本**：已部署库所需的 `login_attempt` 表由代码里的**惰性建表兜底**创建（每个 isolate 生命周期执行一次 `CREATE TABLE IF NOT EXISTS`） | `docs/sql/` 目录不再需要；旧库与新库都无需手工 SQL，见 §2.3 |
-| **D6** | **密码 pepper 可选、不设即不升级**；PBKDF2 迭代数默认 5000（实测 ≈2.6ms，免费版 CPU 上限 10ms），可用 `PASSWORD_PBKDF2_ITERATIONS` 覆盖 | 设置 `PASSWORD_PEPPER` 之前系统行为与旧版一致，不会把自己锁死；设置后登录自动升级哈希，见 §3.2 |
-| **D7** | **不做 Worker 侧边缘缓存**（`caches.default`），只保留浏览器缓存头：日期哈希 key 用 `immutable`，站点图标用普通 `max-age` | 实测发现边缘缓存会让「已删除的图片」继续命中最长 24 小时；需要边缘缓存的话改为在 Cloudflare 配 Cache Rule，并接受同样的删除延迟，见 §4.3 |
-| **D8** | **新增「删除项目/分组时自动回收未引用图片」开关，默认开**（`system_setting.storage_auto_clean_unused`，上传文件管理页切换） | 想保留图片以便日后复用的用户可以关掉自动回收：删除只软删 D1、不动 R2，需要时手动点「清理未引用文件」。读取设置失败按「关」处理（偏保守），见 §9.0 |
-
-> D8 是计划结项后按用户需求追加的一项（原计划未包含），已实现并验证，详见 §9.0。
-
-> D2 与 D3 是同一件事的两半：限流迁走之后 KV 在本项目里再无用途（已全仓库确认 `LOGIN_RATE` 只出现在 `src/api/login.ts` 与 `src/types.ts`），因此一并移除。
+**Status legend**: `done` / `to do` / `in progress` / `to confirm`
 
 ---
 
-## 1. 阶段总览
+## 0. Decision log (confirmed this round)
 
-> 编号 = 章节号（阶段一在 §2、阶段二在 §3、阶段三在 §4、阶段四在 §5、阶段五在 §6）。
+| # | Decision | Immediate consequences |
+|---|----------|------------------------|
+| **D1** | Collapse `migrations/` into a single `0001_init.sql` | the directory keeps one file only; **cost**: structural changes on an already-deployed database must go through one-off scripts (see 2.2) |
+| **D2** | Move login rate limiting from KV to D1 (single atomic UPSERT) | removes both the "read-modify-write drops counts" race and rate-limit bypasses caused by KV read lag |
+| **D3** | KV is no longer used → delete the binding, types, code and documentation | one binding less in `wrangler.toml`; the automatically created cloud namespace becomes a deletable orphan |
+| **D4** | Fix the "search bar searches panel items" filtering defect with option A | done, see §7 |
+| **D5** | **Skip one-off upgrade scripts for old databases**: the `login_attempt` table needed by deployed databases is created by a **lazy table-creation fallback** in code (one `CREATE TABLE IF NOT EXISTS` per isolate lifetime) | the `docs/sql/` directory is no longer needed; neither old nor new databases need manual SQL, see §2.3 |
+| **D6** | **The password pepper is optional: no pepper, no upgrade**; PBKDF2 iterations default to 5000 (≈2.6 ms measured; the free plan allows 10 ms CPU) and can be overridden with `PASSWORD_PBKDF2_ITERATIONS` | behaviour is identical to the old version until `PASSWORD_PEPPER` is set, so nobody locks themselves out; once set, logins upgrade hashes automatically, see §3.2 |
+| **D7** | **No Worker-side edge cache** (`caches.default`), browser cache headers only: date-hashed keys use `immutable`, site icons a normal `max-age` | measurements showed the edge cache keeps serving deleted images for up to 24 hours; if an edge cache is needed, configure a Cloudflare Cache Rule and accept the same deletion delay, see §4.3 |
+| **D8** | **Add an "automatically reclaim unreferenced images when deleting items/groups" switch, on by default** (`system_setting.storage_auto_clean_unused`, toggled in the upload-file manager page) | users who want to keep images for later can turn automatic reclamation off: deletion then only soft-deletes D1 and leaves R2 alone, and the "Clean unused files" button is there for manual work. A failed settings read counts as "off" (conservative), see §9.0 |
 
-| 阶段 | 项目 | 目标 | 量级 | 依赖 | 状态 |
-|------|------|------|------|------|------|
-| 一 | **2.1** migrations 合并为单文件 | 目录整洁 + 新库一次建全 | S | 前置校验（§2.1.2） | 已完成 |
-| 一 | **2.3** 登录限流迁 D1 | 原子计数、行为不变 | M | §2.1 | 已完成 |
-| 一 | **2.4** 移除 KV | 去掉无用绑定与文档描述 | S | §2.3 | 已完成 |
-| 二 | **3.1** 上传/抓取校验 | 堵住「非图片入库 + 同源返回」 | S | — | 已完成 |
-| 二 | **3.2** 密码哈希升级 | 加盐 + pepper，登录时自动重哈希 | M | 需新增 secret | 已完成 |
-| 二 | **3.3** JWT 可吊销 | 改密即全端下线 + 缩短有效期 | M | §3.2 | 已完成 |
-| 三 | **4.1** R2 ↔ `file` 一致性 | 消除孤儿对象、重复 favicon | M | — | 已完成 |
-| 三 | **4.2** 首页 getListWithItems | 去掉 N+1 请求 | M | — | 已完成 |
-| 三 | **4.3** `/uploads/*` 缓存 | 减少 R2 穿透 | S | — | 已完成（决策 D7：仅浏览器缓存） |
-| 四 | **5.1** 死存储清理 | 删 `module_config` / `notice` | M | §2.1（新库不建表） | 已完成 |
-| 四 | **5.2** `ASSETS` 绑定 | 删掉未使用的 binding 声明 | S | — | 已完成 |
-| 四 | **5.3** `user_config` 乐观锁 | 防多标签互相覆盖 | S | — | 已决定不做（改为文档提示） |
-| 五 | **6.1** 备份章节 | D1 + R2 备份/恢复文档 | S | — | 已完成 |
-| 五 | **6.2** 存储说明文档 | 表/绑定/本地 WAL 三件套说明 | S | §2.1 | 已完成 |
-| 五 | **6.3** 重建 `dist/` | 让前端改动生效 | S | §7 | 已完成 |
+> D8 was added on user request after the plan had been closed (it was not part of the original plan); it is implemented
+> and verified, see §9.0.
+
+> D2 and D3 are two halves of one change: once rate limiting moved, KV had no purpose left in this project (a
+> repository-wide check confirmed `LOGIN_RATE` only appeared in `src/api/login.ts` and `src/types.ts`), so both were
+> removed together.
 
 ---
 
-## 2. 阶段一：数据层整理
+## 1. Stage overview
 
-### 2.1 `migrations/` 合并为单个 `0001_init.sql` ✅ 已完成
+> The numbers are section numbers (stage one lives in §2, stage two in §3, stage three in §4, stage four in §5, stage
+> five in §6).
 
-#### 2.1.1 为什么必须「保留同名」
+| Stage | Item | Goal | Size | Depends on | Status |
+|-------|------|------|------|------------|--------|
+| 1 | **2.1** collapse migrations into one file | tidy directory + a new database built in one pass | S | pre-check (§2.1.2) | done |
+| 1 | **2.3** move login rate limiting to D1 | atomic counting, unchanged behaviour | M | §2.1 | done |
+| 1 | **2.4** remove KV | drop an unused binding and its documentation | S | §2.3 | done |
+| 2 | **3.1** upload/fetch validation | close the "non-image stored + served same-origin" hole | S | — | done |
+| 2 | **3.2** password hash upgrade | salt + pepper, automatic re-hash on login | M | needs a new secret | done |
+| 2 | **3.3** revocable JWT | password change logs out every device + shorter lifetime | M | §3.2 | done |
+| 3 | **4.1** R2 ↔ `file` consistency | no orphan objects, no duplicate favicons | M | — | done |
+| 3 | **4.2** home page `getListWithItems` | remove the N+1 queries | M | — | done |
+| 3 | **4.3** `/uploads/*` caching | fewer R2 round-trips | S | — | done (decision D7: browser cache only) |
+| 4 | **5.1** dead storage cleanup | delete `module_config` / `notice` | M | §2.1 (new databases skip the tables) | done |
+| 4 | **5.2** `ASSETS` binding | remove the unused binding declaration | S | — | done |
+| 4 | **5.3** `user_config` optimistic lock | prevent tabs overwriting each other | S | — | decided against (documented instead) |
+| 5 | **6.1** backup section | D1 + R2 backup/restore documentation | S | — | done |
+| 5 | **6.2** storage documentation | tables/bindings/local WAL trio explained | S | §2.1 | done |
+| 5 | **6.3** rebuild `dist/` | make frontend changes live | S | §7 | done |
 
-D1 的记账表只记**文件名**，没有内容哈希（本地库实测）：
+---
+
+## 2. Stage one: tidying the data layer
+
+### 2.1 `migrations/` collapsed into a single `0001_init.sql` ✅ done
+
+#### 2.1.1 Why the file name must stay the same
+
+D1's bookkeeping table records **file names only**, with no content hash (measured on a local database):
 
 ```sql
 CREATE TABLE "d1_migrations"(
@@ -74,614 +94,903 @@ CREATE TABLE "d1_migrations"(
 )
 ```
 
-`wrangler d1 migrations apply` 的判定逻辑是「本地存在的文件名 − 已记录的名字」= 待应用。因此：
+`wrangler d1 migrations apply` decides with "file names present locally − names already recorded" = pending. Therefore:
 
-| 做法 | 已部署库 | 全新库 | 结论 |
-|------|----------|--------|------|
-| 内容并进**仍叫 `0001_init.sql`** 的文件，删除 0002/0003 | 名字已记录 → 跳过，零影响 | 一次建全 | ✅ 采用 |
-| 合并后改名（如 `0001_init_full.sql`） | 视为新迁移 → `ALTER TABLE ADD COLUMN` 报 duplicate column → **部署失败** | 可行 | ❌ |
-| 保留 0002/0003 同时把列写进 0001 | 三个都跳过 | 0001 建列后又跑 0002 → duplicate column | ❌ |
+| Approach | Deployed database | Brand-new database | Verdict |
+|----------|-------------------|--------------------|---------|
+| Merge the content into the file **still called `0001_init.sql`** and delete 0002/0003 | name is already recorded → skipped, zero impact | everything is created in one pass | ✅ chosen |
+| Merge and rename (e.g. `0001_init_full.sql`) | treated as a new migration → `ALTER TABLE ADD COLUMN` fails with duplicate column → **deployment fails** | works | ❌ |
+| Keep 0002/0003 and also write the columns into 0001 | all three are skipped | 0001 creates the columns, then 0002 runs → duplicate column | ❌ |
 
-#### 2.1.2 前置校验（必须先做）
+#### 2.1.2 Pre-check (must be done first)
 
 ```bash
-# 远端必须已记录三个迁移名，否则不能删 0002/0003
+# The remote database must already record all three migration names, otherwise 0002/0003 must not be deleted
 npx wrangler d1 migrations list DB --remote
-# 期望输出包含：0001_init.sql / 0002_item_icon_group_style.sql / 0003_item_only_name.sql
+# Expected output includes: 0001_init.sql / 0002_item_icon_group_style.sql / 0003_item_only_name.sql
 ```
 
-若某个环境只应用过 0001（例如很久没部署过的实例），**先在该环境执行 `wrangler d1 migrations apply DB --remote` 把 0002/0003 补上再合并**，否则它的表会缺 `card_style` / `text_color` / `hide_description` / `only_name`，运行时报错。
+If an environment only ever applied 0001 (e.g. an instance that has not been deployed for a long time), **run
+`wrangler d1 migrations apply DB --remote` there first to catch up on 0002/0003 before merging**, otherwise its tables
+lack `card_style` / `text_color` / `hide_description` / `only_name` and runtime errors follow.
 
-#### 2.1.3 合并内容
+#### 2.1.3 What was merged
 
-- **折叠列定义**：`card_style` / `text_color` / `hide_description` 直接写进 `item_icon_group` 的 `CREATE TABLE`，`only_name` 写进 `item_icon`，不再保留 ALTER（新库一次建好，语义更清楚）。
-- 保留原有的两个索引与种子数据（`INSERT OR IGNORE`）。
-- 本轮新增 `login_attempt` 表（见 2.3）直接进 0001。
-- 文件头保留**合并历史注释**，说明「本文件由 0001 + 0002 + 0003 合并而来，0002/0003 的内容已折叠进建表语句」，避免后人以为历史被抹掉。
-- 结构清单见 [附录 A](#附录-a0001_initsql-结构)。
+- **Column definitions folded in**: `card_style` / `text_color` / `hide_description` are written directly into the
+  `CREATE TABLE` of `item_icon_group`, and `only_name` into `item_icon`, with no ALTER left behind (a new database is
+  created in one pass and the semantics are clearer).
+- The two existing indexes and the seed data (`INSERT OR IGNORE`) are kept.
+- The new `login_attempt` table of this round (see 2.3) goes straight into 0001.
+- The file header keeps a **merge-history comment** explaining that "this file merges 0001 + 0002 + 0003, whose content
+  is folded into the CREATE statements", so nobody later thinks the history was erased.
+- The schema inventory is in [Appendix A](#appendix-a-state-of-0001_initsql-after-51).
 
-#### 2.1.4 执行步骤
+#### 2.1.4 Steps
 
-1. 完成 2.1.2 的远端校验；
-2. 重写 `migrations/0001_init.sql`（内容 = 附录 A）；
-3. 删除 `migrations/0002_item_icon_group_style.sql`、`migrations/0003_item_only_name.sql`；
-4. **本地验证（新库路径）**：把本地 D1 状态目录挪走 → `npm run migrations:apply:local` → 断言 8 张业务表与全部列存在（命令见 [附录 C](#附录-c自检脚本与命令)）；
-5. **本地验证（老库路径）**：把状态目录挪回来 → 再跑一次 `npm run migrations:apply:local` → 期望输出「No migrations to apply」，且无报错；
-6. 提交；CI 的 `wrangler d1 migrations apply --remote` 对已部署库将是空操作（见 2.2 的约定）。
+1. Complete the remote pre-check of 2.1.2;
+2. rewrite `migrations/0001_init.sql` (content = Appendix A);
+3. delete `migrations/0002_item_icon_group_style.sql` and `migrations/0003_item_only_name.sql`;
+4. **local verification (new-database path)**: move the local D1 state directory aside → `npm run migrations:apply:local`
+   → assert that the 8 business tables and all columns exist (commands in [Appendix C](#appendix-c-self-check-scripts-and-commands));
+5. **local verification (old-database path)**: move the state directory back → run `npm run migrations:apply:local`
+   again → expect "No migrations to apply" and no error;
+6. commit; CI's `wrangler d1 migrations apply --remote` becomes a no-op for deployed databases (see the policy in 2.2).
 
-#### 2.1.5 回滚
+#### 2.1.5 Rollback
 
-纯文件改动：`git revert` 即可，**数据库无需回滚**（老库压根没执行新内容）。
+Pure file change: `git revert` is enough, **no database rollback needed** (old databases never executed the new content).
 
-#### 2.1.6 落地结果（本轮实测）
+#### 2.1.6 Outcome (measured this round)
 
-| 验证 | 命令 | 结果 |
-|------|------|------|
-| 新库一次建全 | `wrangler d1 migrations apply DB --local --persist-to scratch/.tmp-d1-fresh` | `0001_init.sql ✅`，**14 commands executed successfully**；8 张业务表 + `only_name`/`card_style`/`text_color`/`hide_description` + `login_attempt` 索引 + 种子数据全部就位 |
-| 老库 no-op | `wrangler d1 migrations apply DB --local`（现有状态） | `✅ No migrations to apply!`，**未因 0002/0003 文件被删除而报错** |
+| Verification | Command | Result |
+|--------------|---------|--------|
+| A new database is built in one pass | `wrangler d1 migrations apply DB --local --persist-to scratch/.tmp-d1-fresh` | `0001_init.sql ✅`, **14 commands executed successfully**; the 8 business tables + `only_name`/`card_style`/`text_color`/`hide_description` + the `login_attempt` index + seed data all present |
+| An old database is a no-op | `wrangler d1 migrations apply DB --local` (existing state) | `✅ No migrations to apply!`, **no error from the deleted 0002/0003 files** |
 
-产物：`migrations/` 现在只有 `0001_init.sql`（5.5 KB），另两个文件已删除；`wrangler.toml` 的 `migrations_dir` 不变。
+Artefacts: `migrations/` now holds only `0001_init.sql` (5.5 KB) and the other two files are gone; `migrations_dir` in
+`wrangler.toml` is unchanged.
 
-### 2.2 单文件策略下的长期约定（重要）
+### 2.2 Long-term policy under the single-file baseline (important)
 
-> **规则**：`0001_init.sql` 永远描述「此刻的最终结构」，只对**全新库**生效；**已部署库**因为 `0001_init.sql` 这个名字已被记录，结构变化需另行处理：
+> **Rule**: `0001_init.sql` always describes the **final schema as of now** and only applies to **brand-new
+> databases**; because the name `0001_init.sql` is already recorded, a **deployed database** needs a different route for
+> structural change:
 >
-> | 变化类型 | 已部署库怎么办 |
-> |----------|----------------|
-> | **新增表** | 可在代码里做**惰性建表兜底**（`CREATE TABLE IF NOT EXISTS`，每个 isolate 一次），无需手工 SQL —— 本轮 `login_attempt` 即采用此法（决策 D5） |
-> | **改已有表**（加列/改约束/删表） | 没有运行时兜底，必须写 `docs/sql/<日期>_<用途>.sql` 一次性脚本，并在**部署代码之前**执行 |
+> | Kind of change | What to do for a deployed database |
+> |----------------|------------------------------------|
+> | **New table** | a **lazy creation fallback** in code works (`CREATE TABLE IF NOT EXISTS`, once per isolate) and needs no manual SQL — `login_attempt` does exactly that this round (decision D5) |
+> | **Changing an existing table** (add column / change constraint / drop table) | there is no runtime fallback: write a one-off `docs/sql/<date>_<purpose>.sql` and run it **before deploying the code** |
 
-推论（请接受这个代价，否则应回到 append-only）：
+Consequences (accept the trade-off, otherwise go back to append-only):
 
-- CI 里的 `wrangler d1 migrations apply` 从此基本是空操作，真正的结构升级靠「惰性建表」或 `docs/sql/` 脚本；
-- 一次性脚本一律写成幂等形式（`CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`），允许重复执行；
-- 建议**每次大版本「重基线」**：把历史变化折进 `0001_init.sql`，已执行脚本移入 `docs/sql/archive/`，避免 0001 与脚本账本长期分叉。
+- `wrangler d1 migrations apply` in CI is essentially a no-op from now on; real schema upgrades happen through lazy
+  table creation or `docs/sql/` scripts;
+- write one-off scripts idempotently (`CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`) so they can be
+  re-run;
+- **re-baseline on every major version**: fold historical changes into `0001_init.sql`, move executed scripts into
+  `docs/sql/archive/`, so that 0001 and the script ledger do not drift apart.
 
-### 2.3 登录限流迁到 D1（原 0-2）✅ 已完成
+### 2.3 Moving login rate limiting to D1 (formerly 0-2) ✅ done
 
-**行为保持**：同一 IP **10 分钟内失败 5 次**即锁定，滑动窗口（自最后一次失败起算），错误码保持 `1003`（凭据错）/ `1008`（已锁定），前端无需改动。
+**Behaviour preserved**: the same IP is locked after **5 failures within 10 minutes**, sliding window (counted from the
+last failure), error codes unchanged (`1003` wrong credentials / `1008` locked), no frontend change needed.
 
-**表结构**（进 `0001_init.sql`）
+**Table structure** (goes into `0001_init.sql`)
 
 ```sql
 CREATE TABLE IF NOT EXISTS login_attempt (
   ip           TEXT PRIMARY KEY,
   fail_count   INTEGER NOT NULL DEFAULT 0,
-  window_start INTEGER NOT NULL DEFAULT 0   -- Unix 秒: 最近一次失败时间
+  window_start INTEGER NOT NULL DEFAULT 0   -- Unix seconds: time of the most recent failure
 );
 CREATE INDEX IF NOT EXISTS idx_login_attempt_window ON login_attempt (window_start);
 ```
 
-**三条语句**（完整写法见 [附录 B](#附录-b登录限流-sql)）
+**Three statements** (the full text is in [Appendix B](#appendix-b-login-rate-limit-sql))
 
-| 时机 | 语句 | 说明 |
-|------|------|------|
-| 请求开始（校验前） | `SELECT fail_count, window_start FROM login_attempt WHERE ip = ?` | 命中「窗口未过期且 `fail_count >= 5`」→ 直接 `1008` |
-| 凭据错误 | 单条 `INSERT … ON CONFLICT(ip) DO UPDATE SET fail_count = CASE WHEN login_attempt.window_start < ? THEN 1 ELSE login_attempt.fail_count + 1 END, window_start = ?` | **原子**，并发不会丢计数（这是替换 KV 的核心收益） |
-| 登录成功 | `DELETE FROM login_attempt WHERE ip = ?` | 与现行为一致 |
+| Timing | Statement | Notes |
+|--------|-----------|-------|
+| start of the request (before verification) | `SELECT fail_count, window_start FROM login_attempt WHERE ip = ?` | a hit on "window not expired and `fail_count >= 5`" → return `1008` immediately |
+| wrong credentials | a single `INSERT … ON CONFLICT(ip) DO UPDATE SET fail_count = CASE WHEN login_attempt.window_start < ? THEN 1 ELSE login_attempt.fail_count + 1 END, window_start = ?` | **atomic**, concurrent requests cannot lose counts (the core gain over KV) |
+| successful login | `DELETE FROM login_attempt WHERE ip = ?` | same as the existing behaviour |
 
-**清理策略**：D1 没有 TTL，所以在「记录失败」时**按 1/50 概率**顺带执行 `DELETE FROM login_attempt WHERE window_start < ?`（滑动窗口外即过期），用 `db.batch` 两条语句一次提交，保证表有界；备选是加 Cron Trigger 每天清一次（会多一个 handler 与配置，非必要不引入）。
+**Cleanup strategy**: D1 has no TTL, so when recording a failure a `DELETE FROM login_attempt WHERE window_start < ?`
+is run **with probability 1/50** (anything outside the sliding window is expired), submitting both statements in one
+`db.batch` to keep the table bounded. The alternative would be a Cron Trigger cleaning once a day (one more handler and
+more configuration — not worth introducing unless necessary).
 
-**健壮性要求**：限流相关的 D1 读写**全部 fail-open**——捕获异常后 `console.warn` 并当作「未锁定」继续走密码校验。理由：限流是防爆破的辅助层，绝不能因为表缺失/D1 抖动把管理员锁在自己的面板外；真正的防线是密码。
+**Robustness requirement**: every rate-limit related D1 read/write **fails open** — catch the exception, `console.warn`
+and continue with password verification as if not locked. Rationale: rate limiting is a brute-force defence layer and
+must never lock the administrator out of their own panel because of a missing table or a D1 hiccup; the password is the
+real defence.
 
-**代码组织**（便于自检）
+**Code organisation** (to make self-checks easy)
 
-- 新增 `src/utils/loginRate.ts`：`LOGIN_MAX_ATTEMPTS` / `LOGIN_WINDOW_SECONDS` / `isLocked(row, now)`（纯函数）/ `readAttempt()` / `recordFail()` / `clearFails()`；
-- `src/api/login.ts` 只保留调用，删掉 KV 辅助函数。
+- new `src/utils/loginRate.ts`: `LOGIN_MAX_ATTEMPTS` / `LOGIN_WINDOW_SECONDS` / `isLocked(row, now)` (pure) /
+  `readAttempt()` / `recordFail()` / `clearFails()`;
+- `src/api/login.ts` keeps call sites only and loses the KV helpers.
 
-**测试**
+**Tests**
 
-- 纯逻辑：`isLocked()` 的窗口边界（过期/未过期、等于上限、恰好 5 次）；
-- 集成（本地真实 D1）：连续 6 次错误登录 → 第 6 次返回 `1008`；第 7 次仍 `1008`；正确密码登录后被清除；
-- 新增 `scratch/login-rate.test.ts`（沿用仓库「esbuild 打包 + node 运行」的自检风格，见附录 C）。
+- pure logic: `isLocked()` window boundaries (expired/not expired, at the limit, exactly 5);
+- integration (local real D1): six wrong logins in a row → the 6th returns `1008`; the 7th is still `1008`; a correct
+  login clears the counter;
+- new `scratch/login-rate.test.ts` (following the repository's "esbuild bundle + node run" self-check style, see Appendix C).
 
-**落地结果（本轮实测）**
+**Outcome (measured this round)**
 
-- 新增 `src/utils/loginRate.ts`（常量 + `isLocked` 纯函数 + `readAttempt`/`recordFail`/`clearFails` + `ensureLoginAttemptTable` 惰性兜底）；`src/api/login.ts` 改为三个 fail-open 包装（`isRateLimited` / `recordFailSafe` / `clearFailsSafe`），KV 辅助函数全部删除。
-- `scratch/login-rate.test.ts`：**18 passed, 0 failed**（内存版 D1 模拟器只认 `loginRate.ts` 里的真实 SQL，SQL 一改就会报错，避免语义漂移）。
-- 端到端（`wrangler dev --persist-to <老库副本>`，即**没有 `login_attempt` 表的旧库**）：连续 5 次错误密码返回 `1003` → **第 6 次返回 `1008`** → 第 7 次仍 `1008`；服务端日志无 fail-open 告警；测试后确认 `login_attempt` 表已被惰性兜底自动创建。
-- 惰性兜底的代价：仅「每个 isolate 生命周期一次 `CREATE TABLE IF NOT EXISTS`」，表已存在时是一次 no-op。
+- new `src/utils/loginRate.ts` (constants + the `isLocked` pure function + `readAttempt`/`recordFail`/`clearFails` +
+  the lazy `ensureLoginAttemptTable` fallback); `src/api/login.ts` now uses three fail-open wrappers
+  (`isRateLimited` / `recordFailSafe` / `clearFailsSafe`) and all KV helpers are gone.
+- `scratch/login-rate.test.ts`: **18 passed, 0 failed** (the in-memory D1 emulator only accepts the real SQL from
+  `loginRate.ts`, so changing the SQL breaks the test instead of drifting silently).
+- end-to-end (`wrangler dev --persist-to <copy of an old database>`, i.e. a database **without** the `login_attempt`
+  table): five wrong passwords return `1003` → **the 6th returns `1008`** → the 7th stays `1008`; no fail-open warnings
+  in the server log; afterwards the `login_attempt` table had been created by the lazy fallback.
+- the price of the lazy fallback: only one `CREATE TABLE IF NOT EXISTS` per isolate lifetime, a no-op when the table exists.
 
-### 2.4 移除 KV（原 0-2 的收尾）✅ 已完成
+### 2.4 Removing KV (the tail of the former 0-2) ✅ done
 
-| 位置 | 改动 |
-|------|------|
-| `wrangler.toml` | 删除 `[[kv_namespaces]]` 整段（`binding = "LOGIN_RATE"`） |
-| `src/types.ts` | `Env` 删除 `LOGIN_RATE: KVNamespace` |
-| `src/api/login.ts` | 删除 `loginFailCount` / `recordLoginFail` / `clearLoginFails` 与 `RATE_KEY_PREFIX` |
-| `package.json` | `description` 去掉 `KV`（`Hono + D1 + R2`） |
-| `README.md` | 技术栈串 `Worker (Hono) + D1 + KV + R2 + Vue 3` → 去掉 KV；技术栈表「登录限流」一行改为 D1 |
-| `docs/deployment.md` | 技术栈表、「与上游的差异」表同步 |
-| 云端清理（可选） | Dashboard → Workers & Pages → KV → 删除自动创建的那个 namespace（只含限流计数，无业务数据） |
-| 本地清理（可选） | 删除 `.wrangler/state/v3/kv`（gitignored） |
+| Location | Change |
+|----------|--------|
+| `wrangler.toml` | drop the whole `[[kv_namespaces]]` section (`binding = "LOGIN_RATE"`) |
+| `src/types.ts` | remove `LOGIN_RATE: KVNamespace` from `Env` |
+| `src/api/login.ts` | delete `loginFailCount` / `recordLoginFail` / `clearLoginFails` and `RATE_KEY_PREFIX` |
+| `package.json` | drop `KV` from `description` (`Hono + D1 + R2`) |
+| `README.md` | tech-stack line `Worker (Hono) + D1 + KV + R2 + Vue 3` → remove KV; the "login rate limiting" row now says D1 |
+| `docs/deployment.md` | tech-stack table and the "differences from upstream" table updated |
+| cloud cleanup (optional) | Dashboard → Workers & Pages → KV → delete the automatically created namespace (rate-limit counters only, no business data) |
+| local cleanup (optional) | delete `.wrangler/state/v3/kv` (gitignored) |
 
-**对 §3.3（JWT 可吊销）的影响**：token 世代缓存改为**进程内模块级缓存**（TTL 5–10 秒），不再依赖 KV；同一 isolate 内的延迟为 0，跨 isolate 最长 TTL 级延迟，可接受。
+**Impact on §3.3 (revocable JWT)**: the token-generation cache becomes an **in-process module-level cache** (5–10 s TTL)
+instead of KV; latency within one isolate is zero, and across isolates it is at most the TTL, which is acceptable.
 
-**验证**：`grep -rn "LOGIN_RATE\|KVNamespace" src/` 应为空；`npm run typecheck` 通过；本地 `npm run dev` 启动日志中不再出现 `env.LOGIN_RATE`。
+**Verification**: `grep -rn "LOGIN_RATE\|KVNamespace" src/` should be empty; `npm run typecheck` passes; the local
+`npm run dev` startup log no longer mentions `env.LOGIN_RATE`.
 
-**落地结果（本轮实测）**：上述表格全部完成；`src/` 中已无 `LOGIN_RATE` / `KVNamespace`；`tsc --noEmit` 通过；`wrangler dev` 启动日志的绑定列表只剩 `env.DB` / `env.FILES` / `env.ASSETS` / `env.JWT_SECRET`（**KV 已消失**）。README / docs/deployment.md / package.json 的 KV 描述已同步（README「与上游差异」表另加了一行说明单文件基线策略）。
+**Outcome (measured this round)**: every row above is done; `src/` no longer contains `LOGIN_RATE` / `KVNamespace`;
+`tsc --noEmit` passes; the binding list in the `wrangler dev` startup log is down to `env.DB` / `env.FILES` /
+`env.ASSETS` / `env.JWT_SECRET` (**KV is gone**). The KV descriptions in README / docs/deployment.md / package.json are
+updated (the README "differences from upstream" table gained a row about the single-file baseline policy).
 
-### 2.5 一次性升级脚本（`docs/sql/`）❌ 已取消（决策 D5）
+### 2.5 One-off upgrade scripts (`docs/sql/`) ❌ cancelled (decision D5)
 
-原计划为已部署库提供 `docs/sql/2026xx_login_attempt.sql`。按本轮决策**不再需要**：`login_attempt` 属于「新增表」，已由 `ensureLoginAttemptTable()` 的惰性建表兜底覆盖（§2.3），旧库与新库都不需要手工 SQL。
+The plan used to include `docs/sql/2026xx_login_attempt.sql` for deployed databases. According to this round's decision
+it is **no longer needed**: `login_attempt` is a "new table" and is covered by the lazy `ensureLoginAttemptTable()`
+fallback (§2.3), so neither old nor new databases need manual SQL.
 
-保留本条仅为记录：**将来若出现「改已有表」的变化（加列/删表），仍必须回到 `docs/sql/` 一次性脚本 + 部署前执行的流程**（见 §2.2 的规则表）。部署顺序也回到最简形式：
+This entry is kept only as a record: **if a "change an existing table" case appears later (add column / drop table),
+the one-off `docs/sql/` script plus "run before deploying" flow is mandatory again** (see the rule table in §2.2).
+Deployment order also goes back to the simplest form:
 
-- **已部署库**：直接部署代码（首次请求会自动建表）→ 验证 6 次错误登录被锁定；
-- **全新部署**：`wrangler deploy` → `wrangler d1 migrations apply --remote`（0001 建全表）。
-
----
-
-## 3. 阶段二：安全加固
-
-### 3.1 上传与抓取校验（原 0-1）✅ 已完成
-
-| 改动 | 文件 |
-|------|------|
-| `uploadFiles` 增加扩展名白名单（复用 `IMG_AGREE_EXTS`，另设允许的非图片类型），被拒文件进 `errFiles` | `src/api/system/file.ts` |
-| favicon 下载后校验 `content-type` 以 `image/` 开头，否则丢弃（SVG 单独开关）；保留 1MB 上限与超时 | `src/utils/favicon.ts`、`src/api/panel/itemIcon.ts` |
-| `/uploads/*` 增加 `X-Content-Type-Options: nosniff`；非 `image/*` 补 `Content-Disposition: attachment`；SVG 额外加 `Content-Security-Policy: default-src 'none'; …; sandbox`；key 校验 `^\d{4}/\d{1,2}/\d{1,2}/[0-9a-f]{32}(\.[a-z0-9]{1,10})?$`（扩展名可选以兼容早期无扩展名对象，但禁止 `/`、`..` 等越界写法） | `src/index.ts` |
-
-**落地结果（本轮实测）**
-
-- `src/utils/file.ts` 新增 `isAllowedExt()`（图片 + `.txt/.pdf/.zip/.json`）、`normalizeIconContentType()`（非图片返回空 → 丢弃）、`isValidUploadKey()`；`isImageExt/isAllowedExt` 内部统一 `toLowerCase()`。
-- `downloadFavicon()` 现在会校验 Content-Type：`text/html`、`application/javascript` 一律丢弃（即使 URL 以 `.png` 结尾）；`application/octet-stream` 仅在 URL 扩展名是图片时兜底接受。
-- `scratch/upload-validate.test.ts`：**45 passed, 0 failed**。
-- 端到端（wrangler dev + curl）：`.png` 上传成功并返回 key；`.html` 走 `uploadImg` → `1301 Unsupported file format`；`uploadFiles` 同时传 `.txt` + `.html` → `.txt` 入库、`.html` 进 `errFiles`；`/uploads/<png>` 响应带 `x-content-type-options: nosniff` 且无 attachment；`/uploads/<txt>` 额外带 `Content-Disposition: attachment`；非法 key（`not-a-valid-key.png`、`2026/9/10/short.png`）→ 404。
-
-### 3.2 密码哈希升级（原 0-3 的 PR-1）✅ 已完成
-
-- 哈希串自描述：`pbkdf2$sha256$<iterations>$<saltB64>$<hashB64>$<pepperId>`；`^[0-9a-f]{32}$` 识别为旧版三重 MD5。
-- 新增 `checkPassword()` / `hashPassword()` / `needsRehash()` / `resolveIterations()`（`src/utils/password.ts`），WebCrypto PBKDF2-SHA256 + **常量时间比较**。
-- **pepper 用 env secret**（`PASSWORD_PEPPER`）：哈希 = PBKDF2(pepper ‖ 密码)，D1 泄露也无法离线爆破。
-- **迭代数实测**（Node/BoringSSL，与 workerd 同源）：5k ≈ 2.6ms、10k ≈ 4.5ms、100k ≈ 43ms、210k ≈ 85ms。免费版每请求 CPU 仅 10ms，故默认 **5000**；可用 `PASSWORD_PBKDF2_ITERATIONS` 覆盖（上限 100 万，下限 1000），迭代数写进哈希串 → **调高后旧哈希仍可校验并在下次登录自动重算**。
-- 防锁死设计（决策补充）：**未配置 pepper 时不会生成 v2 哈希**（旧格式照常校验、跳过重哈希并告警），所以何时 `wrangler secret put PASSWORD_PEPPER` 都不会把自己挡在门外；已配置后若 pepper 被换掉，返回明确的 `1009` 提示（而不是假装「密码错误」）。
-- 登录成功且 `needsRehash()` → 就地重写为 v2；改密接口在配置了 pepper 时写 v2，未配置时维持旧行为并 `console.warn`。
-
-**落地结果（本轮实测）**
-
-- `scratch/password-hash.test.ts`：**29 passed, 0 failed**（含旧种子哈希夹具 `579646aad11fae4dd295812fb4526245` ↔ `12345678`、随机盐、pepper 缺失/变更的可区分结果、迭代数夹取、CPU 预算断言：默认迭代数校验 ~2.2ms）。
-- 端到端：带 `--var PASSWORD_PEPPER=…` 启动后，用旧哈希登录成功（`code=0`）→ 数据库中 `system_setting.admin_password` 变成 `pbkdf2$sha256$…`，旧种子哈希已消失；随后重新登录仍正常。
-
-### 3.3 JWT 可吊销（原 0-3 的 PR-2）✅ 已完成
-
-- 新增 `src/utils/authEpoch.ts`：`auth_epoch` 存于 `system_setting`，读取带 **10 秒进程内缓存**（不使用 KV）；JWT 载荷加 `epoch`；中间件比对，落后即 `1001`（前端已有「登录过期 → 跳登录页」逻辑，零改动）。
-- 递增时机：改密码、改用户名、`/logout { allDevices: true }`。
-- 比较策略是「只拦更旧的 token」：缓存滞后最多让个别旧 token 多活 10 秒，但绝不会误杀刚签发的新 token。
-- `exp` 由 7 天缩到 **72 小时**。
-- 破坏性：本次上线后，改动前签发的老 token（没有 `epoch` 字段，按 0 处理）会失效一次，重登即可。
-- 可选后续：token 从 `localStorage` 迁到 `HttpOnly + SameSite=Lax` Cookie（需补 CSRF 防护），独立立项。
-
-**落地结果（本轮实测）**
-
-- `scratch/auth-epoch.test.ts`：**23 passed, 0 failed**（含「默认世代签发的 token 立刻失效」这条回归断言）。
-- 端到端：登出前 `getInfo=0` → `/logout {allDevices:true}` 返回 0 → **同一 token 再用返回 `1001`** → 重新登录后恢复正常。
-- 🐞 端到端抓到并修掉一个真实 bug：`bumpAuthEpoch` 首次递增时把种子值写成默认世代 1，等于没作废（记录不存在本身就代表世代 1）。已改为种子 `DEFAULT + 1`，并补上对应自检断言。
+- **deployed database**: deploy the code (the first request creates the table) → verify that 6 wrong logins are locked out;
+- **fresh deployment**: `wrangler deploy` → `wrangler d1 migrations apply --remote` (0001 creates all tables).
 
 ---
 
-## 4. 阶段三：一致性与成本
+## 3. Stage two: security hardening
 
-### 4.1 R2 ↔ `file` 表一致性（原 1-1）✅ 已完成
+### 3.1 Upload and fetch validation (formerly 0-1) ✅ done
 
-**落地结果**
+| Change | File |
+|--------|------|
+| `uploadFiles` gains an extension whitelist (reusing `IMG_AGREE_EXTS`, plus a separate set of allowed non-image types); rejected files go into `errFiles` | `src/api/system/file.ts` |
+| After downloading a favicon, validate that `content-type` starts with `image/`, otherwise discard it (SVG behind its own switch); the 1 MB cap and the timeout stay | `src/utils/favicon.ts`, `src/api/panel/itemIcon.ts` |
+| `/uploads/*` gains `X-Content-Type-Options: nosniff`; non-`image/*` responses get `Content-Disposition: attachment`; SVG additionally gets `Content-Security-Policy: default-src 'none'; …; sandbox`; key validation `^\d{4}/\d{1,2}/\d{1,2}/[0-9a-f]{32}(\.[a-z0-9]{1,10})?$` (the extension is optional to stay compatible with early extension-less objects, but `/`, `..` and similar escapes are rejected) | `src/index.ts` |
 
-- 站点图标改**按站点稳定 key**：`icons/<md5(host)>.<ext>`（`buildIconKey`），重复获取是覆盖写；`file` 表按同站点已有记录做 UPSERT（复用旧行、扩展名变化时更新 `src` 并删掉旧对象）。`/uploads` 的 key 校验同步支持 `icons/` 形态。
-- 新增 `src/utils/uploadRefs.ts`：`normalizeUploadSrc` / `srcFromIconJson` / `isUploadSrcReferenced`（检查项目 `icon_json`、面板 `background_json`、头像）/ `cleanupUploads`（只删没人引用的，失败只记日志）。
-- `itemIcon/deletes` 与 `itemIconGroup/deletes` 在软删之后调用 `cleanupUploads` 回收图片；
-  新增 `POST /api/system/file/cleanUnused` + 「上传文件管理」里的**清理未引用文件**按钮（二次确认）。
-- 自检 `scratch/upload-refs.test.ts`：**22 passed**（含「在用图片被保留」「外链不会被当成 R2 对象删除」——后者是自检抓出来的真实缺陷，已在 `cleanupUploads` 里统一归一化修掉）。
-- 端到端：新建引用图标的项目 → `cleanUnused` 返回 `deleted=0`（受保护）→ 删除该项目 → 该图标 GET 变 **404**、`file` 表记录清空；未引用的上传文件 → `cleanUnused` `deleted=1` → GET 404。
+**Outcome (measured this round)**
 
-> 注意：`cleanUnused` 也会把「刚上传但还没被任何地方引用」的图片算作未引用，所以按钮带二次确认；这一步是手动的，不会自动跑。
+- `src/utils/file.ts` gains `isAllowedExt()` (images + `.txt/.pdf/.zip/.json`), `normalizeIconContentType()` (returns
+  empty for non-images → discarded) and `isValidUploadKey()`; `isImageExt/isAllowedExt` normalise with `toLowerCase()`.
+- `downloadFavicon()` now validates the Content-Type: `text/html` and `application/javascript` are always discarded
+  (even when the URL ends in `.png`); `application/octet-stream` is accepted only as a fallback when the URL extension
+  is an image.
+- `scratch/upload-validate.test.ts`: **45 passed, 0 failed**.
+- end-to-end (wrangler dev + curl): a `.png` uploads fine and returns a key; `.html` through `uploadImg` →
+  `1301 Unsupported file format`; `uploadFiles` with `.txt` + `.html` → the `.txt` is stored and the `.html` lands in
+  `errFiles`; `/uploads/<png>` carries `x-content-type-options: nosniff` and no attachment; `/uploads/<txt>`
+  additionally carries `Content-Disposition: attachment`; invalid keys (`not-a-valid-key.png`, `2026/9/10/short.png`) → 404.
 
-### 4.2 首页去 N+1（原 1-2）✅ 已完成
+### 3.2 Password hash upgrade (PR-1 of the former 0-3) ✅ done
 
-**落地结果**
+- Self-describing hash strings: `pbkdf2$sha256$<iterations>$<saltB64>$<hashB64>$<pepperId>`; `^[0-9a-f]{32}$` is
+  recognised as the old triple MD5.
+- New `checkPassword()` / `hashPassword()` / `needsRehash()` / `resolveIterations()` (`src/utils/password.ts`),
+  WebCrypto PBKDF2-SHA256 with a **constant-time comparison**.
+- **The pepper is an env secret** (`PASSWORD_PEPPER`): hash = PBKDF2(pepper ‖ password), so even a leaked D1 dump
+  cannot be attacked offline.
+- **Measured iteration cost** (Node/BoringSSL, same origin as workerd): 5k ≈ 2.6 ms, 10k ≈ 4.5 ms, 100k ≈ 43 ms,
+  210k ≈ 85 ms. The free plan allows only 10 ms CPU per request, hence the default **5000**; it can be overridden with
+  `PASSWORD_PBKDF2_ITERATIONS` (max 1,000,000, min 1000), and the count is stored in the hash string → **after raising
+  it, old hashes still verify and are recomputed automatically on the next login**.
+- Anti-lockout design (decision note): **no v2 hash is generated while no pepper is configured** (old formats verify as
+  before, re-hashing is skipped and a warning is logged), so running `wrangler secret put PASSWORD_PEPPER` at any time
+  cannot lock you out; once configured, a replaced pepper returns an explicit `1009` message instead of pretending the
+  password is wrong.
+- On a successful login with `needsRehash()` → the hash is rewritten to v2 in place; the change-password endpoint
+  writes v2 when a pepper is configured and keeps the old behaviour with a `console.warn` otherwise.
 
-- 新增 `POST /api/panel/itemIconGroup/getListWithItems`：1 次查分组 + 1 次查全部项目，在 Worker 内按 `item_icon_group_id` 归组；空库时先建默认分组并认领游离项目**再**查项目（顺序反了这些项目会丢）。`itemIcon/getListByGroupId` 保留（排序退出/过滤退出时仍会单组刷新）。
-- 前端 `home/index.vue` 的 `getList()` 改为单次调用，`frontend/src/api/panel/itemIconGroup.ts` 增加对应 API。
-- 自检 `scratch/group-with-items.test.ts`：**15 passed**，其中一条专门断言 **SQL 次数固定为 3**（1 次 epoch + 2 次数据查询），不随分组数增长。
-- 端到端：真实 D1 上 `code=0 groups=1 首组=APP`，分组内项目正常下发。
+**Outcome (measured this round)**
 
-### 4.3 `/uploads/*` 缓存（原 1-3）✅ 已完成（决策 D7）
+- `scratch/password-hash.test.ts`: **29 passed, 0 failed** (including the old seed-hash fixture
+  `579646aad11fae4dd295812fb4526245` ↔ `12345678`, random salts, distinguishable results for a missing/changed pepper,
+  iteration clamping, and a CPU-budget assertion: a default-iteration verification takes ≈2.2 ms).
+- end-to-end: after starting with `--var PASSWORD_PEPPER=…`, logging in with the old hash succeeds (`code=0`) → the
+  database `system_setting.admin_password` becomes `pbkdf2$sha256$…` and the old seed hash is gone; logging in again
+  afterwards still works.
 
-- 缓存头：日期哈希的上传文件 `public, max-age=86400, immutable`；站点图标 `public, max-age=86400`（会被覆盖写，不能 immutable）。
-- **不做 `caches.default` 边缘缓存**：端到端实测发现，边缘缓存会让已删除的图片继续命中最长 24 小时（删除项目后 GET 仍 200），「删了还能访问」的困惑大于省下的 R2 读。
-- 需要边缘缓存时的做法（可选，运维侧）：在 Cloudflare 给 `<域名>/uploads/*` 配 Cache Rule（Edge TTL 自定义），并接受同样的删除延迟；R2 Class B 免费额度 1000 万次/月，个人站点通常无需额外缓存。
-- 端到端已验证两类 key 的缓存头与删除后的 404 行为（见 4.1）。
+### 3.3 Revocable JWT (PR-2 of the former 0-3) ✅ done
 
----
+- New `src/utils/authEpoch.ts`: `auth_epoch` lives in `system_setting` and is read with a **10-second in-process cache**
+  (no KV); the JWT payload gains `epoch`, the middleware compares it and returns `1001` when the token is behind (the
+  frontend already handles "session expired → go to login", so no change was needed).
+- The generation is bumped when the password changes, the username changes, or `/logout { allDevices: true }` is called.
+- The comparison only **blocks older tokens**: a lagging cache can keep an old token alive for at most 10 extra
+  seconds, but never kills a freshly issued one.
+- `exp` shrinks from 7 days to **72 hours**.
+- Breaking change: tokens issued before this change (no `epoch` field, treated as 0) are invalid once after rollout;
+  just log in again.
+- Optional follow-up: move the token from `localStorage` to an `HttpOnly + SameSite=Lax` cookie (needs CSRF
+  protection), a separate project.
 
-## 5. 阶段四：结构清理
+**Outcome (measured this round)**
 
-### 5.1 死存储清理（原 2-1）✅ 已完成（决策：现在删代码 + 新库不建表）
-
-**落地结果**
-
-- 后端：删除 `src/api/notice.ts`、`src/api/system/moduleConfig.ts` 并从 `src/api/index.ts` 摘掉挂载。
-- 前端：删除 `api/notice.ts`、`api/system/moduleConfig.ts`、`store/modules/notice/*`、`store/modules/moduleConfig/*`、`typings/notice.d.ts`；
-  `utils/cmn/index.ts` 里的 `noticeCreate` / `getNotice` 一并移除；面板 store 里的 `migrateLegacySearchEngine` 与首页调用点删除；
-  `searchBox` 工具里只剩「旧内置引擎/旧字段名」的本地缓存归一化（`hasStoredSearchEngineConfig`、`SEARCH_BOX_LEGACY_MODULE_NAME` 已删）。
-- 建表基线：`0001_init.sql` 不再创建 `module_config` 与 `notice`（并在文件头记录这段历史）；
-  **已部署库里的这两张空表保留不动**（代码不再访问，无需手工 SQL，符合决策 D5 的单文件策略）。
-- 文档：`docs/search-engine.md` 的「存储与兼容」改为说明「迁移已移除」，并提示老版本直升的用户需重新配置引擎。
-- 影响面（需知晓）：从很老的版本直接升级、且从未打开过迁移后新版的用户，自定义引擎不会自动恢复（回退内置三项）；
-  本仓库当前只有单一自用实例，已确认可接受。
-
-### 5.2 `ASSETS` 绑定（原 2-2）✅ 已完成
-
-从 `wrangler.toml` 删掉 `binding = "ASSETS"`，保留 `[assets] directory = "dist"`。
-
-依据（Cloudflare 官方文档 <https://developers.cloudflare.com/workers/static-assets/binding/>）：资产绑定是**可选**的，只用于在 Worker 里调用 `env.ASSETS.fetch()`；静态资产默认「资产优先」路由（`run_worker_first` 默认 false），不声明 binding 不影响托管。本项目 Worker 只实现 `/api/*` 与 `/uploads/*`，从不读资产，所以该绑定纯属多余；`Env` 类型里本来也没有它（只有 `wrangler.toml` 声明了），删掉后 dev 启动日志里不再出现 `env.ASSETS`。
-
-### 5.3 `user_config` 覆盖写（原 2-3）❌ 已决定不做（仅文档提示）
-
-按要求不加乐观锁：单用户场景下多标签同时改样式的概率很低，加锁需要改前端两处保存调用与冲突提示，收益不成比例。
-改为在 README 的「已知限制」中提示：**避免多个标签页同时修改样式/搜索引擎配置**，否则后保存的会覆盖先保存的（`user_config` 是整份 JSON 覆盖写）。
-
----
-
-## 6. 阶段五：文档与备份
-
-| # | 内容 |
-|---|------|
-| 6.1 | ✅ 已完成：`docs/deployment.md` 新增「备份与恢复」——D1 `export`（含 `--no-schema`）与恢复、R2 用 `rclone sync` / `wrangler r2 object get`、D1 与 R2 必须成对备份的说明、Time Travel 兜底、以及两个 secret 无法读回需自行留存 |
-| 6.2 | ✅ 已完成：新增 [`docs/storage.md`](./storage.md)——Cloudflare 资源与绑定清单、D1 六张表用途与删除语义、R2 两种 key 形态与引用回收规则、本地 `.wrangler/state/v3` 的 WAL 三件套与多 hash 文件成因、单文件基线的结构变更约定 |
-| 6.3 | ✅ 已完成：`vite build` 重建 `dist/`（3207 modules，21.3s）；核对新产物含「清理未引用文件 / cleanUnused / filteringTip / getListWithItems」，且不再含 `moduleConfig/getByName`、`notice/getListByDisplayType` |
-
----
-
-## 7. 已完成（总表）
-
-| 项目 | 内容 | 验证 |
-|------|------|------|
-| **§2.1 migrations 单文件基线** | `0001_init.sql` 折叠原 0002/0003 的列并新增 `login_attempt`；删除 0002/0003；文件头记录合并历史与维护约定 | 新库一次建全；老库 `No migrations to apply!`（§5.1 后再验证：11 条语句、6 张业务表） |
-| **§2.3 登录限流迁 D1** | 新增 `src/utils/loginRate.ts`（原子 UPSERT + 概率清理 + 惰性建表兜底）；`src/api/login.ts` 三个 fail-open 包装 | `scratch/login-rate.test.ts` 18 passed；真实 D1 端到端：5×`1003` → 第 6 次 `1008` → 第 7 次仍 `1008` |
-| **§2.4 移除 KV** | `wrangler.toml` / `src/types.ts` / `src/api/login.ts` / README / docs/deployment.md / package.json | `tsc --noEmit` 通过；dev 绑定列表已无 KV |
-| **§3.1 上传/抓取校验** | 扩展名白名单、图标 Content-Type 校验、`/uploads/*` nosniff + 附件下载 + key 校验 | `upload-validate` 55 passed；端到端 `.html`→1301、txt→attachment、非法 key→404 |
-| **§3.2 密码哈希升级** | PBKDF2 + 随机盐 + 可选 pepper（含 pepperId 防误判）；登录自动重哈希 | `password-hash` 29 passed；端到端旧哈希登录后库内变为 `pbkdf2$…` |
-| **§3.3 JWT 可吊销** | `auth_epoch` 世代 + 进程内缓存 + 72h；改密/改用户名/退出所有设备递增 | `auth-epoch` 23 passed；端到端旧 token 立刻 `1001` |
-| **§4.1 R2 ↔ file 一致性** | 站点图标稳定 key、引用感知回收、`cleanUnused` 接口与前端按钮 | `upload-refs` 22 passed；端到端：引用时 `deleted=0`、删项目后对象回收 404 |
-| **§4.2 首页去 N+1** | `getListWithItems`（1 次查分组 + 1 次查项目） | `group-with-items` 15 passed（含 SQL 次数固定为 3）；端到端真实 D1 通过 |
-| **§4.3 缓存头** | 上传件 `immutable`、图标仅 `max-age`（决策 D7：不做 Worker 侧边缘缓存） | 端到端核对两类响应头与删除后 404 |
-| **§5.1 死存储清理** | 删 `notice` / `moduleConfig` 全部代码；新库不建这两张表（老库空表保留） | 残留引用 grep 为空；`tsc`/`vue-tsc`/`eslint` 通过；全新库 11 条语句、6 张业务表 |
-| **§5.2 `ASSETS` 绑定** | 从 `wrangler.toml` 删除未使用的 binding | 官方文档依据；dev 启动绑定列表已无 `env.ASSETS` |
-| **§6.1 / §6.2 文档** | `docs/deployment.md` 增「备份与恢复」；新增 `docs/storage.md` | 文档索引已更新 |
-| **§6.3 重建 `dist/`** | `vite build`（3207 modules / 21.3s） | 产物含新功能字符串、不再含已删死代码 |
-| 引擎设置按钮同行 | 「添加搜索引擎 / 排序 / 恢复内置引擎」合并为一行，窄屏自动换行；破坏性「重置」仍单独置底 | `frontend/src/components/apps/Style/SearchEngineSettings.vue` |
-| 过滤缺陷修复（方案 A） | 过滤视图改为携带**原始分组对象**；交互回调由「下标」改为「分组对象」；`filterItems` 改为 `computed`；`:key` 用稳定 id；新增过滤提示与「无结果」提示；过滤中禁用排序并在进入过滤时退出排序模式 | `frontend/src/utils/panelFilter/index.ts`（新）、`frontend/src/views/home/index.vue`、两个 locale、`scratch/panel-filter.test.ts`（27 passed） |
-
-**收尾状态**：§2 ~ §9 的改动**已全部提交**（当前基线见 git log）；`dist/` 随各轮改动重建；后续增量见 §10「全仓库排查结论（本轮）」。
-**部署提醒**：`dist/` 已 gitignore，线上产物由构建流程生成 —— 本地 `npm run deploy:all` 或在 Cloudflare Workers Builds 里 `npm run build`。
+- `scratch/auth-epoch.test.ts`: **23 passed, 0 failed** (including the regression "a token issued with the default
+  generation becomes invalid immediately").
+- end-to-end: `getInfo=0` before logout → `/logout {allDevices:true}` returns 0 → **the same token now returns `1001`**
+  → logging in again restores normal behaviour.
+- 🐞 end-to-end testing caught a real bug: the first `bumpAuthEpoch` wrote the seed value as generation 1, which is a
+  no-op (a missing row already means generation 1). It now seeds `DEFAULT + 1`, with a matching self-check assertion.
 
 ---
 
-## 8. 风险登记表
+## 4. Stage three: consistency and cost
 
-| # | 风险 | 影响 | 规避 |
-|---|------|------|------|
-| R1 | 某环境只应用过 0001，删掉 0002/0003 后缺列 | 运行时报错 | ✅ 已闭环：合并前需 `migrations list --remote` 校验；本轮用户确认「重新部署新版」，老库路径不再涉及 |
-| R2 | 新代码先于 `login_attempt` 表上线 | 登录时 D1 报错 | ✅ 已闭环：改为惰性建表兜底 + 限流全部 fail-open（实测旧库副本上自动建表成功） |
-| R3 | 单文件策略下忘记处理结构变化 | 老库结构落后于代码 | 见 §2.2 规则表：新增表用惰性兜底，改已有表必须写 `docs/sql/` 脚本并在部署前执行 |
-| R4 | 移除 KV 后仍残留引用 | 部署失败/类型报错 | ✅ 已闭环：`grep -rn "LOGIN_RATE\|KVNamespace" src/` 为空；`tsc --noEmit` 通过；dev 绑定列表已无 KV |
-| R5 | PBKDF2 迭代数过高触发 `1102` | 登录失败 | ✅ 已闭环：默认 5000（实测 ≈2.6ms）；可用 `PASSWORD_PBKDF2_ITERATIONS` 调整；迭代数写进哈希串，调高后旧哈希仍可校验 |
-| R6 | `PASSWORD_PEPPER` 丢失/被换 | 无法校验密码 | ✅ 已闭环：pepper 未配置时不生成 v2 哈希（不会锁死）；已配置后被换会返回明确的 `1009` 提示而非「密码错误」；文档要求与 `JWT_SECRET` 一同备份 |
-| R7 | 删 `module_config` / `notice` 时仍有老用户未迁移 | 自定义引擎丢失 | 确认版本覆盖率后再执行；README 说明 |
+### 4.1 R2 ↔ `file` table consistency (formerly 1-1) ✅ done
+
+**Outcome**
+
+- Site icons gained a **stable per-site key**: `icons/<md5(host)>.<ext>` (`buildIconKey`), so fetching again
+  overwrites the same object; the `file` table is UPSERTed per site (reusing the old row, updating `src` and deleting
+  the old object when the extension changes). Key validation in `/uploads` accepts the `icons/` shape too.
+- New `src/utils/uploadRefs.ts`: `normalizeUploadSrc` / `srcFromIconJson` / `isUploadSrcReferenced` (checks item
+  `icon_json`, panel `background_json`, the avatar) / `cleanupUploads` (deletes only unreferenced objects, logs failures).
+- `itemIcon/deletes` and `itemIconGroup/deletes` call `cleanupUploads` after soft-deleting;
+  new `POST /api/system/file/cleanUnused` plus a **clean unused files** button (with confirmation) in the upload-file
+  manager.
+- Self-check `scratch/upload-refs.test.ts`: **22 passed** (including "an in-use image is kept" and "an external link is
+  never deleted as if it were an R2 object" — the latter was a real defect found by the check and fixed by normalising
+  in `cleanupUploads`).
+- end-to-end: create an item referencing an icon → `cleanUnused` returns `deleted=0` (protected) → delete that item →
+  the icon GET becomes **404** and the `file` row is gone; an unreferenced upload → `cleanUnused` `deleted=1` → GET 404.
+
+> Note: `cleanUnused` also counts a freshly uploaded image that nothing references yet as unreferenced, which is why the
+> button asks for confirmation; this step is manual and never runs automatically.
+
+### 4.2 Removing the home-page N+1 (formerly 1-2) ✅ done
+
+**Outcome**
+
+- New `POST /api/panel/itemIconGroup/getListWithItems`: one query for the groups + one for all items, grouped by
+  `item_icon_group_id` inside the Worker; on an empty database the default group is created and orphan items are
+  claimed **before** the items are queried (the reverse order loses those items). `itemIcon/getListByGroupId` is kept
+  (leaving sort/filter mode still refreshes a single group).
+- The frontend `home/index.vue` `getList()` now makes a single call, with the matching API added in
+  `frontend/src/api/panel/itemIconGroup.ts`.
+- Self-check `scratch/group-with-items.test.ts`: **15 passed**, one of which asserts that the **number of SQL statements
+  is fixed at 3** (1 epoch + 2 data queries) regardless of the group count.
+- end-to-end: on real D1 `code=0 groups=1 first group=APP`, and the items of the group are delivered correctly.
+
+### 4.3 `/uploads/*` caching (formerly 1-3) ✅ done (decision D7)
+
+- Cache headers: date-hashed uploads `public, max-age=86400, immutable`; site icons `public, max-age=86400` (they get
+  overwritten, so they must not be immutable).
+- **No `caches.default` edge cache**: end-to-end testing showed that the edge cache keeps serving deleted images for up
+  to 24 hours (a GET after deleting an item still returned 200), and the confusion of "deleted but still reachable"
+  outweighs the saved R2 reads.
+- If an edge cache is wanted (optional, operations side): configure a Cache Rule for `<domain>/uploads/*` in Cloudflare
+  with a custom Edge TTL and accept the same deletion delay; R2 Class B includes 10 million free reads per month, so a
+  personal site normally needs no extra cache.
+- End-to-end verification covered the cache headers of both key types and the 404 behaviour after deletion (see 4.1).
 
 ---
 
-## 9. 后续候选详细计划
+## 5. Stage four: structural cleanup
 
-> §2 ~ §6 已全部结项；本节是**尚未执行**的后续项（含实现过程中新发现的缺口与用户追加的需求），按建议优先级排列。
-> 每项格式：目标 / 前置 / 步骤 / 涉及文件 / 验证 / 风险 / 量级（S = 半小时级，M = 半天级，L = 一天以上）。
-> 执行时请把状态回填到本节的 `状态` 行。
+### 5.1 Dead storage cleanup (formerly 2-1) ✅ done (decision: delete the code now + new databases skip the tables)
+
+**Outcome**
+
+- Backend: removed `src/api/notice.ts` and `src/api/system/moduleConfig.ts` and unmounted them in `src/api/index.ts`.
+- Frontend: removed `api/notice.ts`, `api/system/moduleConfig.ts`, `store/modules/notice/*`,
+  `store/modules/moduleConfig/*`, `typings/notice.d.ts`; `noticeCreate` / `getNotice` in `utils/cmn/index.ts` went with
+  them; `migrateLegacySearchEngine` and its call site on the home page were deleted;
+  the `searchBox` helper keeps only the local-cache normalisation of "old built-in engines / old field names"
+  (`hasStoredSearchEngineConfig` and `SEARCH_BOX_LEGACY_MODULE_NAME` are gone).
+- Schema baseline: `0001_init.sql` no longer creates `module_config` and `notice` (with that history recorded in the
+  file header); **the two empty tables in already-deployed databases are left untouched** (the code no longer touches
+  them, no manual SQL is needed, matching the single-file policy of decision D5).
+- Documentation: the "storage and compatibility" section of `docs/search-engine.md` now says the migration was removed
+  and warns users upgrading from very old versions to reconfigure their engines.
+- Blast radius (worth knowing): users upgrading straight from a very old version who never opened the post-migration UI
+  do not get their custom engines back (they fall back to the three built-ins); the repository currently has a single
+  self-hosted instance, so this was accepted.
+
+### 5.2 `ASSETS` binding (formerly 2-2) ✅ done
+
+`binding = "ASSETS"` was removed from `wrangler.toml` while `[assets] directory = "dist"` stays.
+
+Rationale (Cloudflare docs <https://developers.cloudflare.com/workers/static-assets/binding/>): an assets binding is
+**optional** and only used to call `env.ASSETS.fetch()` from the Worker; static assets use the default "assets first"
+routing (`run_worker_first` defaults to false) and are served without declaring the binding. This Worker only
+implements `/api/*` and `/uploads/*` and never reads assets, so the binding was pure surplus; the `Env` type never had
+it either (only `wrangler.toml` declared it), and after removal the dev startup log no longer lists `env.ASSETS`.
+
+### 5.3 `user_config` whole-value overwrite (formerly 2-3) ❌ decided against (documented instead)
+
+No optimistic lock, as requested: with a single user the chance of two tabs editing the style at once is very low, and
+locking would require touching two save call sites in the frontend plus a conflict UI — a poor trade.
+Instead the README "Known Limitations" warns: **avoid editing the style / search-engine configuration in several tabs
+at once**, otherwise the last save wins (`user_config` is overwritten as a whole JSON value).
+
+---
+
+## 6. Stage five: documentation and backup
+
+| # | Content |
+|---|---------|
+| 6.1 | ✅ done: `docs/deployment.md` gained "Backup & Restore" — D1 `export` (including `--no-schema`) and restore, R2 via `rclone sync` / `wrangler r2 object get`, the note that D1 and R2 must be backed up as a pair, Time Travel as a safety net, and that the two secrets cannot be read back and must be kept elsewhere |
+| 6.2 | ✅ done: new [`docs/storage.md`](./storage.md) — Cloudflare resources and bindings, the purpose and delete semantics of the six D1 tables, the two R2 key shapes and the reference-aware reclamation rules, the WAL trio and multiple-hash files under `.wrangler/state/v3`, and the structure-change policy of the single-file baseline |
+| 6.3 | ✅ done: `vite build` rebuilt `dist/` (3207 modules, 21.3 s); the new output contains "clean unused files / cleanUnused / filteringTip / getListWithItems" and no longer contains `moduleConfig/getByName` or `notice/getListByDisplayType` |
+
+---
+
+## 7. Completed work (summary)
+
+| Item | Content | Verification |
+|------|---------|--------------|
+| **§2.1 single-file migrations baseline** | `0001_init.sql` folds in the columns from 0002/0003 and adds `login_attempt`; 0002/0003 deleted; the header records the merge history and the policy | a new database is built in one pass; an old database reports `No migrations to apply!` (re-verified after §5.1: 11 statements, 6 business tables) |
+| **§2.3 login rate limiting on D1** | new `src/utils/loginRate.ts` (atomic UPSERT + probabilistic cleanup + lazy table creation); three fail-open wrappers in `src/api/login.ts` | `scratch/login-rate.test.ts` 18 passed; real-D1 end-to-end: 5×`1003` → 6th `1008` → 7th still `1008` |
+| **§2.4 removing KV** | `wrangler.toml` / `src/types.ts` / `src/api/login.ts` / README / docs/deployment.md / package.json | `tsc --noEmit` passes; the dev binding list has no KV |
+| **§3.1 upload/fetch validation** | extension whitelist, icon Content-Type validation, `/uploads/*` nosniff + attachment download + key validation | `upload-validate` 55 passed; end-to-end: `.html`→1301, txt→attachment, invalid key→404 |
+| **§3.2 password hash upgrade** | PBKDF2 + random salt + optional pepper (with a pepperId to avoid false negatives); automatic re-hash on login | `password-hash` 29 passed; end-to-end: after logging in with the old hash the row becomes `pbkdf2$…` |
+| **§3.3 revocable JWT** | `auth_epoch` generation + in-process cache + 72 h; bumped on password change / username change / logout everywhere | `auth-epoch` 23 passed; end-to-end: an old token returns `1001` immediately |
+| **§4.1 R2 ↔ file consistency** | stable keys for site icons, reference-aware reclamation, the `cleanUnused` endpoint and frontend button | `upload-refs` 22 passed; end-to-end: `deleted=0` while referenced, object reclaimed and 404 after deleting the item |
+| **§4.2 home-page N+1** | `getListWithItems` (one group query + one item query) | `group-with-items` 15 passed (including the fixed 3 SQL statements); real-D1 end-to-end passes |
+| **§4.3 cache headers** | uploads `immutable`, icons `max-age` only (decision D7: no Worker-side edge cache) | end-to-end check of both response headers and the 404 after deletion |
+| **§5.1 dead storage cleanup** | all `notice` / `moduleConfig` code removed; new databases skip both tables (empty tables in old databases are kept) | grep for leftover references is empty; `tsc`/`vue-tsc`/`eslint` pass; a fresh database runs 11 statements and ends with 6 business tables |
+| **§5.2 `ASSETS` binding** | the unused binding was removed from `wrangler.toml` | backed by the official docs; the dev startup binding list no longer contains `env.ASSETS` |
+| **§6.1 / §6.2 documentation** | `docs/deployment.md` gained "Backup & Restore"; `docs/storage.md` was added | the documentation index is updated |
+| **§6.3 rebuilding `dist/`** | `vite build` (3207 modules / 21.3 s) | the output contains the new feature strings and no removed dead code |
+| Engine-settings buttons on one row | "Add search engine / Sort / Restore built-in engines" merged into one row that wraps on narrow screens; the destructive "Reset" stays at the bottom on its own | `frontend/src/components/apps/Style/SearchEngineSettings.vue` |
+| Filtering defect fix (option A) | the filtered view now carries the **original group object**, interaction callbacks take a group object instead of an index, `filterItems` became a `computed`, `:key` uses a stable id, filter and "no results" hints were added, sorting is disabled while filtering and sort mode exits when filtering starts | `frontend/src/utils/panelFilter/index.ts` (new), `frontend/src/views/home/index.vue`, two locales, `scratch/panel-filter.test.ts` (27 passed) |
+
+**Closing status**: every change from §2 ~ §9 is **committed** (the current baseline is in `git log`); `dist/` was rebuilt
+with each round; later increments are in §10 "repo-wide audit findings (this round)".
+**Deployment reminder**: `dist/` is gitignored and the hosted artefact is produced by the build pipeline — either
+`npm run deploy:all` locally or `npm run build` inside Cloudflare Workers Builds.
+
+---
+
+## 8. Risk register
+
+| # | Risk | Impact | Mitigation |
+|---|------|--------|------------|
+| R1 | An environment only applied 0001 and loses columns when 0002/0003 are deleted | runtime errors | ✅ closed: `migrations list --remote` is required before merging; the user confirmed "redeploy the new version", so the old-database path no longer applies |
+| R2 | The new code goes live before the `login_attempt` table exists | D1 errors on login | ✅ closed: lazy table creation + fail-open rate limiting (measured: the table was created automatically on a copy of an old database) |
+| R3 | Forgetting to handle structural change under the single-file policy | an old database lagging behind the code | see the rule table in §2.2: new tables use the lazy fallback, changing an existing table requires a `docs/sql/` script run before deploy |
+| R4 | References to KV remain after its removal | failed deploy / type errors | ✅ closed: `grep -rn "LOGIN_RATE\|KVNamespace" src/` is empty; `tsc --noEmit` passes; the dev binding list has no KV |
+| R5 | Too many PBKDF2 iterations trigger `1102` | login fails | ✅ closed: default 5000 (≈2.6 ms measured), adjustable via `PASSWORD_PBKDF2_ITERATIONS`, and the count is stored in the hash so old hashes still verify after raising it |
+| R6 | `PASSWORD_PEPPER` is lost or replaced | passwords can no longer be verified | ✅ closed: no v2 hash is generated while the pepper is unset (no lock-out); replacing a configured pepper returns an explicit `1009` instead of "wrong password"; the docs require backing it up with `JWT_SECRET` |
+| R7 | Deleting `module_config` / `notice` while old users have not migrated | custom engines lost | check version coverage before doing it; documented in the README |
+
+---
+
+## 9. Candidate backlog in detail
+
+> §2 ~ §6 are all closed; this section lists the **not yet implemented** follow-ups (including gaps found while
+> implementing and requirements added by the user), ordered by suggested priority.
+> Format per item: goal / prerequisites / steps / files / verification / risks / size (S = about half an hour,
+> M = about half a day, L = more than a day).
+> When executing one, fill its status back into the `status` line of the item.
 >
-> **本节变更（按用户指示）**：新增 **9.2「获取图标弹窗选一张」**；**移除**原 9.4（PBKDF2 迭代数提升）与
-> 原 9.7（仓库原有待确认需求）；编号已重新连续化，9.0 为已完成的回收开关。
+> **Changes to this section (per user instruction)**: **9.2 "pick one icon in a dialog when several candidates
+> exist"** was added; the former 9.4 (raising the PBKDF2 iteration count) and 9.7 (repository-wide open requirements)
+> were **removed**; numbering was re-compacted, with 9.0 being the completed reclamation switch.
 >
-> **执行进度**：9.0 ~ 9.5、9.8、9.9 已完成；9.6 待确认（运维侧可选）；9.7 待执行（提交拆分与手动回归）；9.10 ~ 9.12 为待明确需求。
+> **Progress**: 9.0 ~ 9.5, 9.8 and 9.9 are done; 9.6 awaits confirmation (optional, operations side); 9.7 awaits
+> execution (commit split and manual regression); 9.10 ~ 9.13 need clarified requirements / a decision
+> (**9.13** = the security review's V-07 package, recommended as one piece).
 >
-> **待用户操作（不阻塞开发，详见 [deployment.md](./deployment.md)）**：
-> ① 配置 secrets（`JWT_SECRET` 必填；建议配 `PASSWORD_PEPPER`，**配后勿改勿删**）；
-> ② `npm run build` + `wrangler deploy`（新库再跑 `wrangler d1 migrations apply DB --remote`）；
-> ③ 首次登录确认旧密码哈希已自动升级（`system_setting.admin_password` 变为 `pbkdf2$…`）；
-> ④ 可选：删除云端孤儿 KV namespace（§2.4 移除 KV 后的遗留）；
-> ⑤ **旧资源清理**：命名基线为 Worker `sun-panel-on-cloudflare-worker`、D1 `sun-panel-on-cloudflare-worker_db`、
-> R2 `sun-panel-on-cloudflare-worker-files`；按此部署并验证通过后，把不再使用的旧 Worker（`sun-panel`）、
-> 旧 D1（`sun-panel`）、旧 R2（`sun-panel-files`）与孤儿 KV 从控制台删除。
+> **Waiting for the user (does not block development; see [deployment.md](./deployment.md))**:
+> ① configure the secrets (`JWT_SECRET` required; `PASSWORD_PEPPER` recommended, **never change or delete it once set**);
+> ② `npm run build` + `wrangler deploy` (on a new database also run `wrangler d1 migrations apply DB --remote`);
+> ③ after the first login confirm that the old password hash was upgraded automatically
+> (`system_setting.admin_password` becomes `pbkdf2$…`);
+> ④ optional: delete the orphan KV namespace in the cloud (left over from removing KV in §2.4);
+> ⑤ **cleaning up old resources**: the naming baseline is Worker `sun-panel-on-cloudflare-worker`, D1
+> `sun-panel-on-cloudflare-worker-db`, R2 `sun-panel-on-cloudflare-worker-files`; once deployed that way and verified,
+> delete the unused old Worker (`sun-panel`), old D1 (`sun-panel`), old R2 (`sun-panel-files`) and the orphan KV from
+> the dashboard.
 
-### 9.0 图片回收开关（**已实现**，决策 D8，作为格式参照）
+### 9.0 Image reclamation switch (**implemented**, decision D8; kept as the format reference)
 
-- **目标**：删除项目/分组时是否自动回收未引用图片，做成可切换项，默认开。
-- **落地**：`system_setting.storage_auto_clean_unused`（'1'/'0'，缺省=开）；接口 `POST /api/system/getStorageSettings` / `saveStorageSettings`（`src/api/system/setting.ts`）；
-  读取与解析在 `src/utils/settings.ts`（`SETTING_AUTO_CLEAN_UNUSED` / `parseBoolSetting` / `getAutoCleanUnused`，**读取失败按「关」**）；
-  两个删除路由（`itemIcon/deletes`、`itemIconGroup/deletes`）与站点图标换扩展名的旧对象清理都以它为前置条件，并叠加引用检查；
-  前端开关在上传文件管理页顶部（`UploadFileManager/index.vue` + `api/system/setting.ts` + 两个 locale）。
-- **验证**：`scratch/upload-clean-setting.test.ts` **23 passed**（含路由级：默认开→R2 被删、设为 '0'→R2 不动但项目照样软删）；
-  真实 D1+R2 端到端：关→删项目→图片 HTTP 200 且 `file` 行保留；开→删项目→图片 HTTP 404 且 `file` 行消失；设置持久化 ✓。
-- **配套文档**：[storage.md](./storage.md) §3 有专门的「图片回收：两个入口、判定规则与开关」小节，逐条记录开关与按钮的行为、场景与盲区（按用户要求补充）。
-- **状态**：已完成。
+- **Goal**: make "reclaim unreferenced images when deleting an item/group" a toggle, on by default.
+- **Implementation**: `system_setting.storage_auto_clean_unused` (`'1'`/`'0'`, missing = on); endpoints
+  `POST /api/system/getStorageSettings` / `saveStorageSettings` (`src/api/system/setting.ts`);
+  reading and parsing in `src/utils/settings.ts` (`SETTING_AUTO_CLEAN_UNUSED` / `parseBoolSetting` /
+  `getAutoCleanUnused`, **a failed read counts as "off"**);
+  the two delete routes (`itemIcon/deletes`, `itemIconGroup/deletes`) and the cleanup of the old object when a site
+  icon changes extension all require it and additionally run the reference check;
+  the frontend switch sits at the top of the upload-file manager page (`UploadFileManager/index.vue` +
+  `api/system/setting.ts` + two locales).
+- **Verification**: `scratch/upload-clean-setting.test.ts` **23 passed** (including route level: on by default → the R2
+  object is deleted; set to `'0'` → R2 untouched while the item is still soft-deleted);
+  real D1+R2 end-to-end: off → delete the item → the image still returns HTTP 200 and the `file` row survives;
+  on → delete the item → the image returns HTTP 404 and the `file` row is gone; the setting persists ✓.
+- **Related documentation**: [storage.md](./storage.md) §3 has a dedicated "Image reclamation: two entry points,
+  decision rules and the switch" section recording the behaviour, scenarios and blind spots of the switch and the
+  button item by item (added on user request).
+- **Status**: done.
 
-### 9.1 `1009` 在前端可见（新发现的缺口）— 量级 S
+### 9.1 Making `1009` visible in the frontend (a newly found gap) — size S
 
-- **问题**：`PASSWORD_PEPPER` 缺失/不匹配时后端返回 `1009`，但前端 `apiRespErrMsg`（`frontend/src/utils/request/apiMessage.ts:22-26`）
-  发现 locale 里没有 `apiErrorCode.1009` → 返回 `false` → 拦截器 `Promise.reject` 且**不弹任何提示**，登录页只 `console.log`。
-  用户看到的现象是「点登录没反应」，原因只在浏览器控制台和 Worker 日志里。
-- **步骤**：① 两个 locale 的 `apiErrorCode` 下各加 `"1009"`，文案带可操作信息（如「服务端密码配置异常：PASSWORD_PEPPER 未配置或已变更，请检查 Worker Secret」）；
-  ② 无需改拦截器（命中 locale 后会自动走 `message.error`）；③ `npm run build` 重建 `dist/`。
-- **涉及文件**：`frontend/src/locales/zh-CN.json`、`en-US.json`、`dist/`（构建产物）。
-- **验证**：`scratch/i18n-audit.ts` 缺失 0 / 中英不齐 0；本地起 dev（故意不配 `PASSWORD_PEPPER`，并把库里 `admin_password` 改成 v2 串）→ 登录页应弹出提示。
-- **风险**：低。⚠️ 不要把 `1009` 加进后端 `ERROR_CODE_MAP`，否则 `errorByCodeAndMsg` 会用它覆盖掉具体提示（`src/utils/response.ts:49-52`）。
-- **状态**：已完成。
-- **落地结果（本轮实测）**：两个 locale 的 `apiErrorCode` 下各加 `"1009"`（中文文案：「服务端密码配置异常：PASSWORD_PEPPER 未配置或已变更，请检查 Worker Secret」），
-  未动拦截器、未动 `ERROR_CODE_MAP`；`scratch/i18n-audit.ts` 复跑：缺失 0 / 中英不齐 0（1009 出现在「死文案」列表属动态 key 的已知误报，见 §9.3）；`dist/` 已随本轮统一重建。
+- **Problem**: when `PASSWORD_PEPPER` is missing or mismatched the backend returns `1009`, but the frontend
+  `apiRespErrMsg` (`frontend/src/utils/request/apiMessage.ts:22-26`) finds no `apiErrorCode.1009` in the locales →
+  returns `false` → the interceptor does `Promise.reject` and **shows no message at all**, while the login page only
+  `console.log`s. What users see is "clicking sign-in does nothing", with the reason visible only in the browser
+  console and the Worker log.
+- **Steps**: ① add `"1009"` under `apiErrorCode` in both locales with actionable wording (e.g. "Server-side password
+  configuration problem: PASSWORD_PEPPER is missing or changed, check the Worker secret");
+  ② no interceptor change needed (a locale hit triggers `message.error` automatically); ③ `npm run build` to rebuild `dist/`.
+- **Files**: `frontend/src/locales/zh-CN.json`, `en-US.json`, `dist/` (build output).
+- **Verification**: `scratch/i18n-audit.ts` reports 0 missing / 0 zh-en mismatches; start dev locally (deliberately
+  without `PASSWORD_PEPPER` and with `admin_password` set to a v2 string) → the login page should show the message.
+- **Risk**: low. ⚠️ Do not add `1009` to the backend `ERROR_CODE_MAP`, otherwise `errorByCodeAndMsg` would use it to
+  override the specific message (`src/utils/response.ts:49-52`).
+- **Status**: done.
+- **Outcome (measured this round)**: `"1009"` was added under `apiErrorCode` in both locales (the Chinese text:
+  「服务端密码配置异常：PASSWORD_PEPPER 未配置或已变更，请检查 Worker Secret」), with no change to the interceptor or
+  `ERROR_CODE_MAP`; re-running `scratch/i18n-audit.ts`: 0 missing / 0 zh-en mismatches (1009 appearing in the "dead
+  strings" list is the known false positive for dynamic keys, see §9.3); `dist/` was rebuilt with this round.
 
-### 9.2 获取图标：多候选时弹窗让用户选一张 — 量级 M（用户已确认要做）
+### 9.2 Fetching an icon: let the user pick one when several candidates exist — size M (confirmed by the user)
 
-- **现状（为什么需要改）**：`POST /api/panel/itemIcon/getSiteFavicon` 把「抓页面 → 取**第一个** `rel` 含 `icon` 的 `<link>` → 退到 `/favicon.ico` → 再退到 icon.horse」串成一条链，
-  **只下载并保存一张**；页面里有多个尺寸/多种 rel（`icon` / `shortcut icon` / `apple-touch-icon` / `mask-icon`）时，取谁取决于 **HTML 里谁先出现**，用户没有选择权。
-- **目标**：一次抓取返回**候选列表**（带尺寸与来源）；≥2 个候选时弹窗让用户选一张，**只下载并保存选中的那张**；只有 1 个候选时保持现在的「一键获取」体验（不弹窗）。
+- **Current behaviour (why this is needed)**: `POST /api/panel/itemIcon/getSiteFavicon` chains "fetch the page → take
+  the **first** `<link>` whose `rel` contains `icon` → fall back to `/favicon.ico` → fall back to icon.horse" and
+  **downloads and stores exactly one**; when the page declares several sizes or rel values
+  (`icon` / `shortcut icon` / `apple-touch-icon` / `mask-icon`), which one wins depends on **which appears first in
+  the HTML**, and the user has no say.
+- **Goal**: one fetch returns a **candidate list** (with size and source); with ≥2 candidates a dialog lets the user
+  pick one and **only the chosen image is downloaded and stored**; with exactly 1 candidate the current one-click
+  behaviour stays (no dialog).
 
-**后端步骤**
+**Backend steps**
 
-1. `src/utils/favicon.ts` 新增纯函数 `extractIconCandidates(html, baseUrl)`：收集所有 `rel` 含 `icon` 的 `<link>`（含 `shortcut icon`、`apple-touch-icon`、`mask-icon`）的 `href` + `sizes` + `type`；
-   跳过 `data:` 与非 http(s)；按解析后的绝对 URL 去重；保留文档顺序；**上限 12 条**。
-   兜底候选：`<origin>/favicon.ico`（HEAD 200 才收录，`source: 'favicon.ico'`）、icon.horse（仅当上面一个都没有时收录，`source: 'icon-horse'`）。
-   现有 `getSiteFaviconUrl()` 保留（内部改为「取候选列表第一条」），不破坏旧调用。
-2. 新接口 `POST /api/panel/itemIcon/getSiteFaviconCandidates { url }` → `{ candidates: [{ url, sizes?, type?, source }] }`
-   （需登录；沿用 8s 超时与 1MB HTML 截断；无候选时返回空数组而不是报错）。
-3. 新接口 `POST /api/panel/itemIcon/saveSiteFavicon { url, pageUrl }`：`url` = 选中的候选，`pageUrl` = 用户填的站点地址（用它推导 host 作为稳定 key 与 `file_name`）。
-   内部复用现有逻辑：`downloadFavicon(url)`（≤1MB、必须是 `image/*`）→ `buildIconKey(host, ext)` 覆盖写 → `file` 行 UPSERT → 旧扩展名对象回收（**受回收开关 + 引用检查双重保护**）→ 返回 `{ iconUrl }`。
-   ⚠️ 不做「任意 URL 代理」：只保存内容校验通过的图片，与现有抓取同一信任模型。
-4. 旧接口 `getSiteFavicon` 保留（内部 = 候选第一条 + 保存），兼容旧前端/脚本。
+1. New pure function `extractIconCandidates(html, baseUrl)` in `src/utils/favicon.ts`: collect the `href` + `sizes` +
+   `type` of every `<link>` whose `rel` contains `icon` (including `shortcut icon`, `apple-touch-icon`, `mask-icon`);
+   skip `data:` and non-http(s); deduplicate by absolute URL; keep document order; **cap at 12 entries**.
+   Fallback candidates: `<origin>/favicon.ico` (only when a HEAD returns 200, `source: 'favicon.ico'`) and icon.horse
+   (only when nothing above was accepted, `source: 'icon-horse'`).
+   Keep the existing `getSiteFaviconUrl()` (internally "first entry of the candidate list") so old callers keep working.
+2. New endpoint `POST /api/panel/itemIcon/getSiteFaviconCandidates { url }` → `{ candidates: [{ url, sizes?, type?, source }] }`
+   (auth required; same 8 s timeout and 1 MB HTML truncation; return an empty array rather than an error when there is
+   no candidate).
+3. New endpoint `POST /api/panel/itemIcon/saveSiteFavicon { url, pageUrl }`: `url` = the chosen candidate, `pageUrl` =
+   the site address the user entered (used to derive the host for the stable key and `file_name`).
+   Internally it reuses the existing logic: `downloadFavicon(url)` (≤1 MB, must be `image/*`) → `buildIconKey(host, ext)`
+   overwrite → `file` row UPSERT → reclaim the old-extension object (**protected by both the reclamation switch and the
+   reference check**) → return `{ iconUrl }`.
+   ⚠️ No "proxy any URL": only images that pass content validation are stored, the same trust model as the existing fetch.
+4. Keep the old endpoint `getSiteFavicon` (internally = first candidate + store) for old frontends/scripts.
 
-**前端步骤**
+**Frontend steps**
 
-1. 新增 `frontend/src/views/home/components/EditItem/FaviconPicker.vue`（与 `GalleryPicker.vue` 同级、沿用 `RoundCardModal` + 网格样式）：网格展示候选，标注尺寸与来源徽标，点击选中并确认 → `emit('selected', candidate)`。
-2. `EditItem/index.vue` 的 `getIconByUrl(url, loadingIndex)`（第 178-196 行；入口是「网址 / 内网网址」旁的获取按钮，第 319 / 335 行）改为：
-   先调 `getSiteFaviconCandidates` → 0 个则报 `iconItem.geticonFail`；1 个直接调 `saveSiteFavicon`（保持一键）；≥2 个打开 `FaviconPicker`，选完再调 `saveSiteFavicon`。
-3. 预览直接用候选原 URL（`<img>` 不需要 CORS）；若面板是 https 而候选是 http，浏览器会拦混合内容 → 这类候选在弹窗里标注「不安全（http）」并置灰不可选（或改用下面的可选增强）。
-4. 可选增强：加 `POST /api/panel/itemIcon/previewFavicon { url }`，由 Worker 取回图片字节原样返回（≤1MB、content-type 校验、10s 超时），弹窗统一用它预览——顺带解决混合内容与第三方跟踪。
+1. New `frontend/src/views/home/components/EditItem/FaviconPicker.vue` (a sibling of `GalleryPicker.vue`, reusing
+   `RoundCardModal` and the grid styling): the grid shows the candidates with their size and a source badge; clicking
+   selects and confirms → `emit('selected', candidate)`.
+2. `getIconByUrl(url, loadingIndex)` in `EditItem/index.vue` (lines 178-196; the entry points are the fetch buttons next
+   to "URL / LAN URL" on lines 319 / 335) becomes:
+   call `getSiteFaviconCandidates` first → 0 → report `iconItem.geticonFail`; 1 → call `saveSiteFavicon` directly (keep
+   the one-click flow); ≥2 → open `FaviconPicker` and call `saveSiteFavicon` after the selection.
+3. Preview with the candidate's original URL (`<img>` needs no CORS); if the panel is https while a candidate is http,
+   browsers block the mixed content → mark such candidates as "insecure (http)" in the dialog and disable them (or use
+   the optional enhancement below).
+4. Optional enhancement: add `POST /api/panel/itemIcon/previewFavicon { url }` where the Worker fetches the image bytes
+   and returns them as-is (≤1 MB, content-type validated, 10 s timeout), and let the dialog preview through it — which
+   also solves mixed content and third-party tracking.
 
-**i18n**：`iconItem.faviconPickerTitle` / `faviconPickerTip` / `faviconPickerEmpty` / `faviconPickerSourceLink` / `faviconPickerSourceFallback` / `faviconPickerInsecure`（zh + en 各一条，中英对齐）。
+**i18n**: `iconItem.faviconPickerTitle` / `faviconPickerTip` / `faviconPickerEmpty` / `faviconPickerSourceLink` /
+`faviconPickerSourceFallback` / `faviconPickerInsecure` (one entry each in zh and en, kept aligned).
 
-**验证**
+**Verification**
 
-- 新增自检 `scratch/favicon-candidates.test.ts`：HTML 夹具覆盖「rel/href 顺序颠倒」「`sizes="32x32"`」「`apple-touch-icon`」「`data:` 跳过」「相对路径解析」「重复 href 去重」「超过 12 条截断」「无 link 时回退外」。
-- 端到端：用一个返回 3 个 icon link 的本地页面 → 候选接口返回 3 条 → 保存第 2 条 → `file` 表 `icons/` 只有 1 条记录、`/uploads/<key>` 200。
-- `vue-tsc` + `eslint` + `npm run check` + 重建 `dist/`。
+- New self-check `scratch/favicon-candidates.test.ts`: HTML fixtures covering "rel/href in reverse order",
+  "`sizes="32x32"`", "`apple-touch-icon`", "`data:` skipped", "relative path resolution", "duplicate href
+  deduplication", "truncation beyond 12 entries", "fallback when no link exists".
+- End-to-end: a local page returning three icon links → the candidate endpoint returns 3 → save the second → the `file`
+  table holds exactly one `icons/` row and `/uploads/<key>` returns 200.
+- `vue-tsc` + `eslint` + `npm run check` + rebuild `dist/`.
 
-**风险**：中。① 正则解析对写法怪异的站点可能漏候选（有兜底链）；② 弹窗多一步交互（仅多候选时出现）；③ 重新获取仍会覆盖同一稳定 key（符合预期）。
+**Risk**: medium. ① regex parsing may miss candidates on oddly written sites (there is a fallback chain);
+② the dialog adds one interaction step (only with several candidates); ③ fetching again still overwrites the same
+stable key (as intended).
 
-**状态**：已完成（本轮实现）。
-**落地结果（本轮实测）**：
-- 后端：`src/utils/favicon.ts` 新增纯函数 `extractIconCandidates(html, baseUrl)`（收集 rel 含 icon 的 link，带 `sizes`/`type`；跳过 `data:` 与非 http(s)；去掉查询参数后按绝对 URL 去重；保留文档顺序；上限 12 条）
-  与 `getSiteFaviconCandidates(pageUrl)`（页面提取为空时依次 HEAD 探测 `/favicon.ico` → `icon.horse`，无候选返回空数组）；`getSiteFaviconUrl()` 改为取候选第一条（旧调用行为不变）。
-  `src/api/panel/itemIcon.ts`：保存逻辑抽成 `storeFavicon()`；新增 `POST /panel/itemIcon/getSiteFaviconCandidates` 与 `POST /panel/itemIcon/saveSiteFavicon`（下载校验 → `buildIconKey` 覆盖写 → `file` 行 UPSERT → 旧扩展名对象回收，受开关+引用检查保护）；旧接口 `getSiteFavicon` 保留（内部 = 候选第一条 + 保存）。
-- 前端：新增 `frontend/src/views/home/components/EditItem/FaviconPicker.vue`（网格候选 + 尺寸/类型 + 来源徽标；http 候选在 https 页面下标注「不安全」并置灰）；
-  `EditItem/index.vue` 的 `getIconByUrl()` 改为「0 个报错 / 1 个直存 / ≥2 个弹窗选择后保存」；新增 `Panel.FaviconCandidate` 类型与两个 API 封装；6 条 `iconItem.faviconPicker*` 文案（中英对齐）。
-- 自检：新增 `scratch/favicon-candidates.test.ts` **48 passed, 0 failed**：纯函数 8 类 HTML 夹具 + mock fetch 兜底链（有候选不走兜底、无 link 回退 favicon.ico、再落到 icon.horse、全无返回空、非法 URL 不发请求、旧函数取第一条）
-  + 路由级（鉴权 1000、空参 1400、3 条候选、无候选返回空数组、保存写 R2 + INSERT file 行、同站点覆盖写走 UPDATE、非图片被拒、旧接口取第一条）。
-- 质量闸门：`npm run check` 通过（0 error / 4 个既有 warning）；`scratch/i18n-audit.ts` 缺失 0 / 中英不齐 0；`dist/` 已重建。
+**Status**: done (implemented this round).
+**Outcome (measured this round)**:
+- Backend: `src/utils/favicon.ts` gained the pure function `extractIconCandidates(html, baseUrl)` (collects links whose
+  rel contains icon, with `sizes`/`type`; skips `data:` and non-http(s); deduplicates by absolute URL after dropping
+  query parameters; keeps document order; caps at 12 entries) and `getSiteFaviconCandidates(pageUrl)` (when page
+  extraction is empty, tries HEAD on `/favicon.ico` → `icon.horse`; returns an empty array when nothing is found);
+  `getSiteFaviconUrl()` now returns the first candidate (old callers unchanged).
+  `src/api/panel/itemIcon.ts`: the storing logic was extracted into `storeFavicon()`; new
+  `POST /panel/itemIcon/getSiteFaviconCandidates` and `POST /panel/itemIcon/saveSiteFavicon` (download + validate →
+  `buildIconKey` overwrite → `file` row UPSERT → reclaim the old-extension object, protected by the switch and the
+  reference check); the old `getSiteFavicon` endpoint is kept (internally = first candidate + store).
+- Frontend: new `frontend/src/views/home/components/EditItem/FaviconPicker.vue` (candidate grid + size/type + source
+  badge; http candidates are marked "insecure" and disabled on an https page);
+  `getIconByUrl()` in `EditItem/index.vue` became "0 → error / 1 → store directly / ≥2 → pick in the dialog and store";
+  the `Panel.FaviconCandidate` type and two API wrappers were added; six `iconItem.faviconPicker*` strings (zh/en aligned).
+- Self-check: new `scratch/favicon-candidates.test.ts` **48 passed, 0 failed**: 8 HTML fixture classes for the pure
+  function + mocked-fetch fallback chain (candidates present → no fallback, no link → favicon.ico, then icon.horse,
+  nothing → empty, invalid URL → no request, the old function taking the first entry)
+  + route level (auth 1000, missing parameter 1400, three candidates, empty array when there is none, storing writes R2
+  + INSERTs the file row, a second fetch for the same site overwrites via UPDATE, a non-image is rejected, the old
+  endpoint takes the first entry).
+- Quality gate: `npm run check` passes (0 error / 4 pre-existing warnings); `scratch/i18n-audit.ts` 0 missing /
+  0 zh-en mismatches; `dist/` rebuilt.
 
-### 9.3 清理 57 条上游遗留 i18n 死文案 — 量级 S/M
+### 9.3 Removing 57 upstream i18n dead strings — size S/M
 
-- **目标**：让 `scratch/i18n-audit.ts` 的「死文案」降到 0（或把确认保留的写进白名单）。
-- **现状**：57 条，主要是上游未使用命名空间（`adminSettingUsers.*` 12 条、`common.*` 22 条、`apiErrorCode.*` 15 条等）。
-  注意 `apiErrorCode.*` 与 `deskModule.searchEngine.*` 的 5 条是**误报**：它们在代码里通过动态 key 使用（`apiErrorCode.${code}`、`t(result.titleError)`），不要删。
-- **步骤**：① 先给 `i18n-audit.ts` 加一份「确认保留」白名单（动态 key + 上游预留），让输出只剩余真正可删的；
-  ② 按命名空间分批删除 `zh-CN.json` / `en-US.json` 中两侧都无引用的 key；③ 每批跑一次审计确认「缺失 0 / 不齐 0」。
-- **验证**：审计输出「死文案 0（白名单 N）」；`vue-tsc` 通过（locale 是 JSON，类型来自 key 字面量，删错会立刻在页面上显示原始 key，所以手动点几页）。
-- **风险**：中（删错会让界面显示原始 key）。建议按命名空间小步提交，便于回滚。
-- **状态**：已完成。
-- **落地结果（本轮实测）**：`scratch/i18n-audit.ts` 增加 `DYNAMIC_KEY_WHITELIST`（`apiErrorCode.*` 15 条 + `deskModule.searchEngine` 的 5 条校验文案，均由动态 key 使用），输出改为「死文案（已排除白名单）+ 白名单明细」；
-  两个 locale 各删除 **36 条**真正无引用的文案（`adminSettingUsers.*` 12、`common.*` 21、`apps.baseSettings.*` 4 等），并清理因此产生的空对象；文案量 298 → 262 条（两侧齐平）。
-  复跑审计：**缺失 0 / 中英不齐 0 / 死文案 0（白名单 20）**；`npm run check`（tsc + vue-tsc + eslint）通过。
+- **Goal**: bring the "dead strings" reported by `scratch/i18n-audit.ts` down to 0 (or whitelist the ones deliberately kept).
+- **Current state**: 57, mostly unused upstream namespaces (`adminSettingUsers.*` 12, `common.*` 22,
+  `apiErrorCode.*` 15, …). Note that the `apiErrorCode.*` entries and the five `deskModule.searchEngine.*` ones are
+  **false positives**: the code uses them through dynamic keys (`apiErrorCode.${code}`, `t(result.titleError)`) — do not delete them.
+- **Steps**: ① first add a "deliberately kept" whitelist to `i18n-audit.ts` (dynamic keys + upstream reserves) so the
+  output only contains what can really go; ② delete the keys with no reference on either side from `zh-CN.json` /
+  `en-US.json` namespace by namespace; ③ run the audit after each batch to confirm "0 missing / 0 mismatches".
+- **Verification**: the audit prints "0 dead strings (whitelist N)"; `vue-tsc` passes (locales are JSON, types come from
+  key literals, and a wrong deletion shows the raw key on the page immediately — so click through a few pages).
+- **Risk**: medium (a wrong deletion makes the UI show raw keys). Commit in small namespace-sized steps so rollback is easy.
+- **Status**: done.
+- **Outcome (measured this round)**: `scratch/i18n-audit.ts` gained `DYNAMIC_KEY_WHITELIST` (15 `apiErrorCode.*`
+  entries + the five `deskModule.searchEngine` validation strings, all used through dynamic keys), and its output became
+  "dead strings (whitelist excluded) + whitelist details";
+  **36** genuinely unreferenced strings were deleted from each locale (`adminSettingUsers.*` 12, `common.*` 21,
+  `apps.baseSettings.*` 4, …) together with the empty objects left behind; the string count went from 298 to 262
+  (both sides equal).
+  Re-running the audit: **0 missing / 0 zh-en mismatches / 0 dead strings (whitelist 20)**; `npm run check`
+  (tsc + vue-tsc + eslint) passes.
 
-### 9.4 token 从 localStorage 迁到 HttpOnly Cookie — 量级 L
+### 9.4 Moving the token from localStorage to an HttpOnly cookie — size L
 
-- **目标**：让 JWT 不再暴露给 JavaScript（XSS 也偷不走），同时保留「改密/退出所有设备即刻吊销」的能力（`auth_epoch` 已具备）。
-- **前置**：确认自定义域已启用 HTTPS（`Secure` cookie 需要）；确认调用方没有依赖 `token` 请求头的第三方脚本（若有，保留 header 兼容）。
-- **设计**：
-  1. 登录成功时 `Set-Cookie: token=<jwt>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=259200`（72h，与 JWT 一致）；`/logout` 清 cookie（`Max-Age=0`）。
-  2. `authMiddleware` 读取顺序：Cookie → `token` 头 → `Authorization: Bearer`（后两者保留，便于脚本/兼容期）。
-  3. CSRF：`SameSite=Lax` 已阻止跨站 POST 携带 cookie；再叠加 `Origin` / `Sec-Fetch-Site` 校验（仅允许同站）作为第二道。
-  4. 前端：`authStore` 不再持久化 token（或仅内存态）；`request` 拦截器去掉 `token` 头；`1000/1001` 的跳登录逻辑不变。
-  5. 迁移期：服务端**先**同时接受 cookie 与 header（旧前端不受影响），确认稳定后再改前端；回滚只需恢复前端。
-- **涉及文件**：`src/api/login.ts`、`src/middleware/auth.ts`、`frontend/src/utils/request/index.ts`、`frontend/src/store/modules/auth/*`、`docs/deployment.md`（本地 dev 的 cookie 说明）。
-- **验证**：登录后 `document.cookie` 读不到 token；带 cookie 的请求正常；跨站来源的 POST 被拒（可用 `curl -H 'Origin: https://evil.example'` 验证）；改密/退出所有设备后旧 cookie 失效（1001）。
-- **风险**：中高。注意本地 `wrangler dev`（http://127.0.0.1）上 `Secure` cookie 的行为、以及 workers.dev 与自定义域混用时的 cookie 作用域。
-- **状态**：**已完成**。
-- **落地结果（本轮实测）**：
-  - 新增 `src/utils/authCookie.ts`：`setAuthCookie` / `clearAuthCookie` / `readAuthToken`；属性 `Path=/; HttpOnly; SameSite=Lax; Max-Age=259200`（与 JWT 的 72h 一致），**`Secure` 仅在 https 下添加**（本地 dev 是 http，加了浏览器会丢弃该 Cookie）。
-  - `src/middleware/auth.ts`：读取顺序改为 **Cookie → `token` 头 → `Authorization: Bearer`**；用 Cookie 认证时对写操作（POST/PUT/PATCH/DELETE）做跨站校验 —— 优先看 `Sec-Fetch-Site`，缺失时退回「Origin 与 Host 的**主机名**比较」（Cookie 不区分端口，比较主机名才能让本地 Vite 代理 :1002 → :8787 正常工作）。
-  - `src/api/login.ts`：登录成功下发 Cookie；`/logout` 清除 Cookie（`allDevices` 仍递增世代，其它设备上的 Cookie 一并失效）。
-  - 前端：`store/modules/auth/helper.ts` 的 `setStorage` **不再把 token 落盘**（localStorage 只剩用户信息与 visitMode）；请求头仅在内存里有 token 时才补发；登录响应体里的 `token` 保留给命令行脚本使用。
-  - 自检 `scratch/auth-cookie.test.ts`：**17 passed**（Cookie 认证 / 跨站写 1005 / 跨站读放行 / 头认证兼容 / 无凭证 1000 / 世代过期 1001 / 同主机不同端口放行 / Cookie 属性 + http 下无 Secure）。
+- **Goal**: stop exposing the JWT to JavaScript (so XSS cannot steal it) while keeping "password change / logout
+  everywhere revokes immediately" (already provided by `auth_epoch`).
+- **Prerequisites**: confirm HTTPS is enabled on the custom domain (a `Secure` cookie needs it); confirm no third-party
+  script depends on the `token` header (keep the header for compatibility if one does).
+- **Design**:
+  1. On successful login `Set-Cookie: token=<jwt>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=259200` (72 h,
+     matching the JWT); `/logout` clears the cookie (`Max-Age=0`).
+  2. `authMiddleware` read order: cookie → `token` header → `Authorization: Bearer` (the latter two are kept for
+     scripts and the transition period).
+  3. CSRF: `SameSite=Lax` already stops cross-site POSTs from carrying the cookie; add an `Origin` / `Sec-Fetch-Site`
+     check (same-site only) as a second line.
+  4. Frontend: `authStore` no longer persists the token (memory only), the `request` interceptor drops the `token`
+     header, and the `1000/1001` redirect-to-login logic is unchanged.
+  5. Transition: the server accepts cookie **and** header first (old frontends unaffected), and the frontend is changed
+     once that is stable; rolling back only needs the frontend reverted.
+- **Files**: `src/api/login.ts`, `src/middleware/auth.ts`, `frontend/src/utils/request/index.ts`,
+  `frontend/src/store/modules/auth/*`, `docs/deployment.md` (cookie notes for local dev).
+- **Verification**: `document.cookie` cannot read the token after login; requests with the cookie work; cross-site
+  POSTs are rejected (`curl -H 'Origin: https://evil.example'`); after a password change / logout everywhere the old
+  cookie fails with 1001.
+- **Risk**: medium-high. Watch the `Secure` cookie behaviour under local `wrangler dev` (http://127.0.0.1) and the
+  cookie scope when workers.dev and a custom domain are mixed.
+- **Status**: **done**.
+- **Outcome (measured this round)**:
+  - new `src/utils/authCookie.ts`: `setAuthCookie` / `clearAuthCookie` / `readAuthToken`; the attributes are
+    `Path=/; HttpOnly; SameSite=Lax; Max-Age=259200` (matching the 72 h JWT), with **`Secure` added only over https**
+    (local dev is http, and adding it there makes browsers drop the cookie).
+  - `src/middleware/auth.ts`: the read order is now **cookie → `token` header → `Authorization: Bearer`**; cookie
+    authentication performs a cross-site check for write requests (POST/PUT/PATCH/DELETE) — preferring
+    `Sec-Fetch-Site` and falling back to comparing the **host names** of `Origin` and `Host` (cookies ignore ports, and
+    comparing host names is what lets the local Vite proxy :1002 → :8787 work).
+  - `src/api/login.ts`: a successful login sets the cookie; `/logout` clears it (`allDevices` still bumps the
+    generation, invalidating cookies on other devices too).
+  - Frontend: `setStorage` in `store/modules/auth/helper.ts` **no longer writes the token to storage** (localStorage
+    keeps only user info and visitMode); the request header is only added while a token exists in memory; the `token`
+    in the login response body remains for CLI scripts.
+  - Self-check `scratch/auth-cookie.test.ts`: **17 passed** (cookie authentication / cross-site write 1005 / cross-site
+    read allowed / header authentication compatible / no credentials 1000 / expired generation 1001 / same host on a
+    different port allowed / cookie attributes and no `Secure` over http).
 
-### 9.5 `JWT_SECRET` 强度提示 — 量级 S
+### 9.5 `JWT_SECRET` strength warning — size S
 
-- **背景（本会话实测）**：jose 5.10 对 HMAC **不校验密钥长度**，空串、1 字符、8 字符都能正常签发与校验——也就是说配置再弱也不会报错，只会静默地不安全。
-- **步骤**：① 在 `src/utils/jwt.ts` 或登录路由里加一次性检查：`JWT_SECRET` 长度 < 32 时 `console.warn`（**不要** fail-closed，避免把已部署实例锁在门外）；
-  ② 在 `docs/deployment.md` 的 secret 步骤补一条生成命令（如 `openssl rand -base64 48`）。
-- **验证**：短密钥启动时日志出现告警；正常长度无告警；登录功能不受影响。
-- **风险**：极低（只加日志与文档）。
-- **状态**：已完成。
-- **落地结果（本轮实测）**：`src/utils/jwt.ts` 新增 `warnIfSecretWeak()`（`signToken` / `verifyToken` 入口检查，长度 < 32 时 `console.warn` 一次；空串/未配置也会提示；不 fail-closed）；
-  `docs/deployment.md` 两处 secret 步骤补 `openssl rand -base64 48` 生成建议与长度说明。
+- **Background (measured in this session)**: jose 5.10 does **not** validate HMAC key length — an empty string, one
+  character or eight characters all sign and verify fine, so a weak configuration never errors, it is just silently insecure.
+- **Steps**: ① add a one-off check in `src/utils/jwt.ts` or the login route: `console.warn` when `JWT_SECRET` is
+  shorter than 32 characters (**do not** fail closed, which would lock deployed instances out);
+  ② add a generation command (e.g. `openssl rand -base64 48`) to the secret step in `docs/deployment.md`.
+- **Verification**: the log warns on startup with a short secret and stays silent with a proper one; login is unaffected.
+- **Risk**: very low (a log line and documentation).
+- **Status**: done.
+- **Outcome (measured this round)**: `src/utils/jwt.ts` gained `warnIfSecretWeak()` (checked at the `signToken` /
+  `verifyToken` entry points, warning once when the length is < 32; an empty or missing value warns too; no fail
+  closed); the two secret steps in `docs/deployment.md` now mention `openssl rand -base64 48` and the length requirement.
 
-### 9.6 `/uploads/*` 边缘缓存（运维侧可选）— 量级 S
+### 9.6 `/uploads/*` edge cache (optional, operations side) — size S
 
-- **背景**：决策 D7 不做 Worker 侧缓存（删除后仍命中 24h）。若确实想省 R2 读，可在 Cloudflare 侧配 Cache Rule。
-- **步骤**：① Dashboard → Caching → Cache Rules → 新建规则，匹配 `http.request.uri.path matches "^/uploads/"`；
-  ② 设 Edge TTL（例如 1 小时，别太长）；③ 如遇「删了还能访问」的困惑，Purge 对应 URL 或降低 TTL。
-- **验证**：第二次请求响应头出现 `cf-cache-status: HIT`；删除对象后 1 小时内仍可能命中（已知取舍）。
-- **风险**：低（纯运维配置，随时可删规则）。R2 Class B 免费额度 1000 万次/月，个人站点通常不需要。
-- **状态**：待确认（可选）。
+- **Background**: decision D7 rules out a Worker-side cache (deleted objects would still be served for 24 h). If R2
+  reads really need to be saved, configure a Cache Rule on the Cloudflare side.
+- **Steps**: ① Dashboard → Caching → Cache Rules → new rule matching
+  `http.request.uri.path matches "^/uploads/"`; ② set an Edge TTL (one hour, say — not too long); ③ when the "deleted
+  but still reachable" confusion appears, purge the URL or lower the TTL.
+- **Verification**: the second request shows `cf-cache-status: HIT`; after deleting an object it may still hit for up to
+  an hour (the known trade-off).
+- **Risk**: low (pure operations configuration, the rule can be deleted at any time). R2 Class B includes 10 million
+  free reads per month, so a personal site normally does not need this.
+- **Status**: to confirm (optional).
 
-### 9.7 工程收尾 — 量级 S
+### 9.7 Project wrap-up — size S
 
-- **提交拆分建议**（§2 ~ §9.5 已提交；本轮 §10 的改动建议单独成一个 PR，见 §10.4）：PR-A（§2 数据层）→ PR-B（§3.1）→ PR-C（§3.2）→ PR-D（§3.3）→ PR-E（§4）→ PR-F（§5）→ PR-G（§6 文档）→ PR-H（§9.0 开关 + 配套文档）→ PR-I（§9.1 / §9.2 / §9.5 / §9.3 / §9.8）。
-  每批提交前跑 `npm run check`（根 typecheck + 前端 type-check + lint）；`dist/` 已 gitignore，无需提交。
-- **手动回归清单**（浏览器，脚本覆盖不到交互）：① 登录 / 改密 / 退出所有设备；② 首页「不过滤 → 过滤 → 清空关键词」三步（hover 按钮、排序、拖拽保存、右键、跳转、「+」落到正确分组）；
-  ③ 引擎设置三个按钮是否在同行；④ 上传文件管理：开关切换、清理未引用文件；⑤ 同一站点连点两次「获取图标」应复用同一 URL；
-  ⑥ 「获取图标」：页面声明多个 icon 时应弹窗选择（只保存选中那张），只有 1 个候选时不弹窗直接保存。
-- **状态**：待执行。
+- **Suggested commit split** (§2 ~ §9.5 are committed; the §10 changes of this round are best kept as a separate PR,
+  see §10.4): PR-A (§2 data layer) → PR-B (§3.1) → PR-C (§3.2) → PR-D (§3.3) → PR-E (§4) → PR-F (§5) → PR-G (§6 docs)
+  → PR-H (§9.0 switch + related docs) → PR-I (§9.1 / §9.2 / §9.5 / §9.3 / §9.8).
+  Run `npm run check` (root typecheck + frontend type-check + lint) before each batch; `dist/` is gitignored and needs
+  no commit.
+- **Manual regression list** (browser; interaction is beyond the scripts' reach): ① login / change password / log out
+  everywhere; ② the home page's "no filter → filter → clear the keyword" sequence (hover buttons, sorting, drag-save,
+  context menu, navigation, "+" landing in the right group);
+  ③ whether the three engine-settings buttons share a row; ④ the upload-file manager: toggling the switch and cleaning
+  unused files; ⑤ clicking "fetch icon" twice for the same site should reuse the same URL;
+  ⑥ "fetch icon" with several icons declared on the page should open the picker (and store only the chosen one), while a
+  single candidate stores directly without a dialog.
+- **Status**: to do.
 
-### 9.8 把 `custom_css` / `custom_js` 纳入引用检查 — 量级 S（**待确认**）
+### 9.8 Including `custom_css` / `custom_js` in the reference check — size S (**to confirm**)
 
-- **问题**：`isUploadSrcReferenced()` 只检查三处（项目图标、`user_config.panel_json`、头像）。若你在「全局设置 → 自定义 CSS/JS」里引用了 `uploads/...` 图片，
-  它不会被视为「在用」——手动点「清理未引用文件」时可能被删掉。
-- **步骤**：`isUploadSrcReferenced()` 增加一次查询把 `custom_css` 与 `custom_js` 两行一起取回（`config_name IN (?, ?)`），`includes(bare)` 命中即保留。
-- **涉及文件**：`src/utils/uploadRefs.ts`（+ 常量从 `src/api/system/setting.ts` 提升到 `src/utils/settings.ts` 以免循环依赖）、`scratch/upload-refs.test.ts`。
-- **验证**：自检增断言；端到端：把某张图的 URL 写进自定义 JS → `cleanUnused` 返回 `deleted=0`。
-- **风险**：极低（多一次查询、判定更保守）。
-- **状态**：**已完成**。
-- **落地结果（本轮实测）**：`SETTING_CUSTOM_CSS` / `SETTING_CUSTOM_JS` 常量从 `src/api/system/setting.ts` 提升到 `src/utils/settings.ts`（避免 utils ↔ api 循环依赖）；
-  `isUploadSrcReferenced()` 增加一次 `config_name IN (?, ?)` 查询，命中即保留；顶部注释与 [storage.md](./storage.md) §3.1 的判定清单同步为 4 项。
-  `scratch/upload-refs.test.ts` 增加 3 条断言（CSS 引用保留 / JS 引用保留 / 清空后不再保留），**25 passed**（原 22）；
-  `scratch/upload-clean-setting.test.ts` 的内存版 D1 补齐 `.all()` 契约，**23 passed**。
+- **Problem**: `isUploadSrcReferenced()` only checks three places (item icons, `user_config.panel_json`, the avatar). If
+  you reference an `uploads/...` image from "Global settings → custom CSS/JS", it is not considered "in use" and can be
+  deleted by a manual "Clean unused files".
+- **Steps**: add one query to `isUploadSrcReferenced()` fetching the `custom_css` and `custom_js` rows together
+  (`config_name IN (?, ?)`); a hit on `includes(bare)` keeps the file.
+- **Files**: `src/utils/uploadRefs.ts` (+ move the constants from `src/api/system/setting.ts` to `src/utils/settings.ts`
+  to avoid a circular dependency), `scratch/upload-refs.test.ts`.
+- **Verification**: extra self-check assertions; end-to-end: put an image URL into the custom JS → `cleanUnused`
+  returns `deleted=0`.
+- **Risk**: very low (one more query, a more conservative decision).
+- **Status**: **done**.
+- **Outcome (measured this round)**: the `SETTING_CUSTOM_CSS` / `SETTING_CUSTOM_JS` constants moved from
+  `src/api/system/setting.ts` to `src/utils/settings.ts` (avoiding a utils ↔ api cycle);
+  `isUploadSrcReferenced()` gained a `config_name IN (?, ?)` query whose hit keeps the file, and the header comment plus
+  the check list in [storage.md](./storage.md) §3.1 were updated to four items.
+  `scratch/upload-refs.test.ts` gained 3 assertions (kept when referenced from CSS / kept when referenced from JS /
+  no longer kept after clearing them), **25 passed** (up from 22);
+  the in-memory D1 of `scratch/upload-clean-setting.test.ts` gained the missing `.all()` contract, **23 passed**.
 
-### 9.9 清理流程的子请求优化（图库变大后的稳定性）— 量级 S/M（**待确认**）
+### 9.9 Subrequest optimisation of the cleanup flow (stability as the library grows) — size S/M (**to confirm**)
 
-- **问题**：`cleanupUploads` 对**每张**候选最多 3 次引用查询 + 1 次 R2 删除 + 1 次 `file` 行更新；图片几十上百张时，单次请求的子请求数与耗时线性上升
-  （免费版对单次请求的子请求数有上限，见 Workers limits；本项目无法在本地复现该上限，只能按官方口径预防）。
-- **方案**：三个引用来源**各查一次**（全部 `item_icon.icon_json`、`panel_json`、头像、可选 custom_css/js）在内存里建「仍被引用的 bare 路径集合」，
-  再把 `file` 行更新合并成一条 `UPDATE ... WHERE src IN (...)` → 子请求从约 `5M` 降到约 `M + 4`；若仍偏大，再加「每次只处理 N 张 + 前端循环调用」。
-- **涉及文件**：`src/utils/uploadRefs.ts`、`src/api/system/file.ts`（可选加 `limit` 参数）、`UploadFileManager/index.vue`（可选循环）、`scratch/upload-refs.test.ts`。
-- **验证**：自检覆盖「引用集合构建 + 批量更新」；端到端用 20 张图跑一次清理，核对 `checked/deleted` 与耗时。
-- **风险**：低（纯内部重构），但必须保持「可能被引用 → 保留」的保守语义不变。
-- **状态**：**已完成**。
-- **落地结果（本轮实测）**：`src/utils/uploadRefs.ts` 重构为「一次性读取 + 内存比对」：
-  - `loadReferenceTexts()` 固定 **3 次查询**（活着的 `item_icon.icon_json`、`user_config.panel_json`、`system_setting` 的头像 + 自定义 CSS/JS 三键），与候选数量**无关**；
-  - `isSrcReferenced()` 纯函数做字符串包含判定（保守语义不变），`isUploadSrcReferenced()` 复用它（站点图标换扩展名的单点场景同样只 3 次查询）；
-  - `file` 行改为**分片批量 UPDATE**（每片 90 个绑定参数，D1 上限 100）；
-  - 新增 `limit` 参数与 `remaining` 返回值：`/file/cleanUnused` 默认每次最多处理 **30** 个候选（免费版每次调用只有 50 个子请求，删对象各占 1 个），前端「清理未引用文件」循环调用直到 `remaining === 0`（上限 50 轮兜底）。
-  - 自检 `scratch/upload-refs.test.ts`：**35 passed**，其中断言「2 个候选与 24 个候选的语句数都是 4 条」（旧实现是 4N 级别）以及分批语义（limit=2 时 2/3 → 2/1 → 1/0）。
+- **Problem**: `cleanupUploads` does up to 3 reference queries + 1 R2 delete + 1 `file` row update **per** candidate;
+  with dozens or hundreds of images both subrequests and latency grow linearly
+  (the free plan caps subrequests per request, see the Workers limits; that cap cannot be reproduced locally, so the fix
+  is preventive, following the official figures).
+- **Approach**: query each of the reference sources **once** (all `item_icon.icon_json`, `panel_json`, the avatar,
+  optionally custom_css/js) to build the set of "still referenced bare paths" in memory, then merge the `file` row
+  updates into one `UPDATE ... WHERE src IN (...)` → subrequests drop from about `5M` to about `M + 4`; if that is still
+  too much, add "process N images per call + loop from the frontend".
+- **Files**: `src/utils/uploadRefs.ts`, `src/api/system/file.ts` (optional `limit` parameter),
+  `UploadFileManager/index.vue` (optional loop), `scratch/upload-refs.test.ts`.
+- **Verification**: self-checks covering "reference-set construction + batch update"; end-to-end with 20 images in one
+  cleanup, checking `checked`/`deleted` and the duration.
+- **Risk**: low (pure internal refactor), but the conservative "might be referenced → keep" semantics must stay intact.
+- **Status**: **done**.
+- **Outcome (measured this round)**: `src/utils/uploadRefs.ts` was refactored to "one read + in-memory comparison":
+  - `loadReferenceTexts()` always issues **3 queries** (live `item_icon.icon_json`, `user_config.panel_json`, the
+    avatar + custom CSS/JS keys of `system_setting`), **independent of** the candidate count;
+  - `isSrcReferenced()` is a pure string-containment decision (same conservative semantics) and
+    `isUploadSrcReferenced()` reuses it (the single-object case of an icon changing extension also needs only 3 queries);
+  - `file` rows are updated with a **chunked batch UPDATE** (90 bound parameters per chunk, D1's cap is 100);
+  - a new `limit` parameter and `remaining` return value: `/file/cleanUnused` processes at most **30** candidates per
+    call by default (the free plan allows 50 subrequests per invocation and each object deletion takes one), and the
+    frontend "Clean unused files" loops until `remaining === 0` (capped at 50 rounds as a safety net).
+  - Self-check `scratch/upload-refs.test.ts`: **35 passed**, asserting among others that "2 candidates and 24 candidates
+    both take 4 statements" (the old implementation was 4N) and the batching semantics (with limit=2: 2/3 → 2/1 → 1/0).
 
-### 9.10 「我的信息」合并登录信息 — 量级 S（**待明确需求**）
+### 9.10 Merging the login information in "My Info" — size S (**requirements to clarify**)
 
-- **背景**：原需求是「账号区放用户名（合并原『账号』与『昵称』、去掉『编辑』按钮）→ 分隔线 → 修改登录信息（弹窗顶部加用户名输入且不能为空）」。
-  当前实现仍是「修改用户名」「修改密码」两个独立入口，密码弹窗里没有用户名输入，「昵称」也不再展示。
-- **需要确认**：是否把两个弹窗合并为一个「修改登录信息」表单（用户名 + 当前密码 + 新密码 + 确认新密码，留空表示不修改该项）？「昵称」是否恢复展示与编辑（后端 `admin_name` 与 `/user/updateInfo` 都还在）？
-- **涉及**：`frontend/src/components/apps/UserInfo/index.vue`；后端 `/user/updateUsername`、`/user/updatePassword`（若合并接口，需保持 `auth_epoch` 递增语义不变）。
+- **Background**: the original requirement was "the Account area holds Username (merging the former 'Account' and
+  'Nickname', dropping the 'Edit' button) → separator → Change login info (a required username field at the top of the
+  dialog)". The current implementation still has separate "Change username" and "Change password" entries, the password
+  dialog has no username field, and "Nickname" is no longer shown.
+- **To confirm**: should the two dialogs merge into one "Change login info" form (username + current password + new
+  password + confirm new password, where leaving a field empty means "do not change it")? Should "Nickname" be shown
+  and editable again (the backend `admin_name` and `/user/updateInfo` both still exist)?
+- **Files**: `frontend/src/components/apps/UserInfo/index.vue`; the backend `/user/updateUsername` and
+  `/user/updatePassword` (merging the endpoints must keep the `auth_epoch` bump semantics unchanged).
 
-### 9.11 上传文件管理的图片背景（棋盘格）透明度 — 量级 S（**待明确需求**）
+### 9.11 Opacity of the image background (checkerboard) in the upload-file manager — size S (**requirements to clarify**)
 
-- **背景**：需求为「图片背景太花，减少 50% 透明度」。当前棋盘格为 `rgba(0, 0, 0, 0.03)`（`frontend/src/components/apps/UploadFileManager/index.vue` 的 `.transparent-grid`），上游是 `#f0f0f0` / 16px。
-- **需要确认**：目标值取 `rgba(0, 0, 0, 0.015)`（严格减半）还是改成更中性的浅灰（例如 `#f7f7f7`）？给一句结论即可落地。
+- **Background**: the request was "the image background is too busy, reduce its opacity by 50%". The checkerboard is
+  currently `rgba(0, 0, 0, 0.03)` (`.transparent-grid` in
+  `frontend/src/components/apps/UploadFileManager/index.vue`), while upstream uses `#f0f0f0` / 16px.
+- **To confirm**: should the target be `rgba(0, 0, 0, 0.015)` (an exact halving) or a more neutral light grey (e.g.
+  `#f7f7f7`)? One sentence is enough to implement it.
 
-### 9.12 「新建」布局调整 — 量级 ?（**需求待明确**）
+### 9.12 Layout adjustment of "New" — size ? (**requirements to clarify**)
 
-- **背景**：原需求只有「调整新建的布局」一句，无法判断指哪个界面（分组管理的「新建分组」弹窗？首页的「新增项目」弹窗？启动器布局？）。
-- **需要确认**：具体界面 + 期望效果（截图或文字描述均可）。
+- **Background**: the request was only "adjust the layout of New", which does not say which screen is meant (the
+  "New group" dialog of group management? The "New item" dialog on the home page? The launcher layout?).
+- **To confirm**: the exact screen + the expected result (a screenshot or a description both work).
+
+### 9.13 Separating script credentials from the Web session (security review V-07, steps B + C) — size M/L (**to confirm: do it as one package?**)
+
+- **Background**: the login response returns the same JWT that the cookie carries, because the middleware keeps
+  `token` / `Authorization: Bearer` for CLI scripts and third-party tools — clients that cannot use an `HttpOnly`
+  cookie, and therefore need a way to *obtain* the token. That makes the token readable by page JavaScript, which
+  matters once an XSS exists: it turns "borrow the victim's browser" into "reuse the credential offline" for up to
+  72 hours. Full analysis, the residual-risk list and why it is rated Low: [security.md](./security.md) §3 (V-07).
+- **Step A (implemented)**: the login response carries `Cache-Control: no-store`, so an intermediate proxy can never
+  replay a session. One line, no compatibility cost — this closes the only risk in that list that code alone can close.
+- **Step B (make the token opt-in)**: stop returning `token` on an ordinary browser login; return it only when the
+  caller asks for it (`withToken: true` in the request body, or a separate `POST /login/token`). Scripts keep working
+  by asking; a normal browser login simply never puts a credential into a page-readable body.
+  - ⚠️ **A partial B is worse than it looks**: it removes the *incidental* exposure (proxy caches, HAR exports,
+    response-logging SDKs) but not the *deliberate* one, because an attacker's script can call `POST /api/login`
+    itself. The real gain only arrives with C.
+  - ⚠️ **Frontend must change in the same commit**, otherwise custom CSS/JS injection silently stops: the trigger is
+    currently `watch(() => authStore.token, …, { immediate: true })` in `frontend/src/App.vue:69-76`, and
+    `authStore.setToken()` is called only from the login page.
+- **Step C (separate the credential)**: keep the Web session on cookies only, and give scripts a credential of their
+  own that can be revoked and audited independently.
+  - **Storage**: a new `api_key` table — `id`, `name` (a note for the operator), `key_hash` (**store a hash, never
+    the key**), `prefix` (the visible first characters, so the UI can list entries), `created_at`, `last_used_at`,
+    `revoked_at`. Those columns are the contract; nothing else is needed.
+  - **Endpoints**: `POST /api/system/apiKey/create` (returns the plaintext key **once**), `/list`, `/revoke`.
+    Accept a key with `Authorization: Bearer sp_<key>` (a `sp_` prefix makes keys greppable in logs and reviews),
+    resolved by hashing and looking it up in `api_key`; revoked or missing → `1001`.
+  - **Interaction with `auth_epoch`**: bumping the generation must **not** invalidate API keys (otherwise a password
+    change silently breaks every automated job), and revoking a key must not log the Web session out. Keep the two
+    credential types on separate validation paths so neither can affect the other.
+  - **When C lands, B becomes worth doing**: the login endpoint can drop the token unconditionally, and the
+    `api_key` path takes over for scripts.
+- **Migration order (do not skip)**: ① land B behind `withToken` and keep returning the token for callers that ask →
+  ② update the scripts/CLI clients to ask for it → ③ land C → ④ remove the token from the login response and update
+  [deployment.md](./deployment.md) + this document. Reverting is possible at every step.
+- **Frontend changes for B + C** (the part that must not be forgotten):
+  `frontend/src/store/modules/auth/index.ts` (drop `token` / `setToken`, keep an authenticated flag),
+  `frontend/src/views/login/index.vue` (call `updateLocalUserInfo()` after login — it fills `userInfo` through
+  `getAuthInfo` and does not need the token), `frontend/src/utils/request/index.ts` (drop the `headers.token`
+  fallback), `frontend/src/App.vue` (trigger injection off the authenticated flag instead of `authStore.token`).
+- **Verification**: with cookies but no token header, every page-level request must still return `0`
+  (`getAuthInfo` / `userConfig/get` / `getListWithItems` / `getCustomCode` — already measured, see
+  [security.md](./security.md) §4); a normal browser login must not put a token in the response body; custom CSS/JS
+  must still be injected after a fresh login **and** after a page reload; a script logging in with `withToken: true`
+  must still get a usable token; a revoked API key must return `1001` while the Web session keeps working; a password
+  change must invalidate sessions but **not** API keys. Add a self-check covering the four frontend-trigger paths,
+  because a missing trigger is silent (nothing errors — the CSS just does not appear).
+- **Risk**: medium-high, mostly on the frontend side. The failure mode is a silent loss of custom CSS/JS injection
+  rather than a crash, so the manual checks above matter as much as the self-check script.
+- **Decision needed from the user**: whether to do B and C as one package (recommended — B alone buys little and
+  still costs the frontend migration), and whether the `api_key` endpoints belong under `/api/system/` or a new
+  `/api/key/` mount.
 
 ---
 
-## 10. 全仓库排查结论（本轮）
+## 10. Repo-wide audit findings (this round)
 
-> 触发：对整个仓库做一次「缺陷 / 异常处理 / 性能 / 弃用内容」的系统排查，并按类别逐条评估后分批落地。
-> 本节只记录**结论与裁决**，逐条证据与评估表见当时产出的排查报告（不在仓库内）。
+> Trigger: a systematic sweep of the whole repository for "defects / error handling / performance / deprecated
+> content", evaluated item by item and landed in batches.
+> This section records only the **conclusions and verdicts**; the per-item evidence and evaluation tables live in the
+> audit report produced at the time (not part of the repository).
 
-### 10.1 已落地的修复（按批次）
+### 10.1 Fixes that landed (by batch)
 
-| 批次 | 内容 |
-|------|------|
-| P0 高危 | `Style/index.vue` 补 `NInputNumber` 导入（「面板最大宽度」输入框原本不可用）；`ImportExport` 导入失败不再用「成功」提示、部分失败不再谎报成功；`ItemGroupManage` 点「添加」前重置表单（原本会静默覆盖正在编辑的分组）、编辑改为浅拷贝；`zh-CN` 的 `common.saveFail` 文案由「保存成功」改为「保存失败」 |
-| P1 健壮性 | 首页 `jumpUrl` 空值回退（原本可能跳 `/undefined`）；拖拽 `item-key` 改 `id` 并在保存后同步本地 `sort`；`RoundCardModal` 去掉 `:style="$parent"`；导入 JSON 顶层非对象时给出提示（不再静默失败）；请求层 `failHandler` 修正类型并显示服务端 msg（错误弹窗 50s → 8s）、GET 也带 headers；`updatePanelConfigByCloud` 补 catch 且只在 `code -1` 时重置、保存动作合并为一个入口；删除指向不存在路由的 `reloadRoute`；拖拽手柄改用本地存在的图标（原本空白）；`getFileList` 补 code/异常/loading 复位；设置壁纸等待结果、失败回滚；导出失败不再静默丢数据；上传回调补 `JSON.parse` 保护与 `@error`；搜索框保存补 catch；`max-[400px]` → `max-w-[400px]`；登录页内联样式补单位；`add-frontend-version.js` 版本日期改北京时间口径；`AppIcon` 的 `style` prop 改名 `cardStyle`；`IconEditor` 去掉「靠 computed 缓存传值」的脆弱实现；`useLanguage` 改为 watch 驱动；`AppStarter` 应用列表改 computed（语言切换即时生效）且不再强制覆盖折叠状态 |
-| P2 清理 | 删除 15 个整文件死代码（`utils/is`、`utils/format`、`utils/functions`、`utils/crypto` 等）与 3 个空目录；清理约 20 处注释残留；删除 8 个未使用 SVG 图标与 4 张未使用大图（≈620 KB，保留 `avatar.png`）；`store/modules/app`、`panel`、`auth` 的死 action/字段/类型一并移除 |
-| P3 依赖 | 移除 `vuedraggable`（零引用）与 `rimraf`；`axios` / `crypto-js` / `@iconify/vue` / `markdown-it-link-attributes` 从 devDependencies 移入 dependencies；删除未生效的 `terserOptions.drop_console`；补 `VITE_APP_VERSION` 类型声明并移除未使用的 env 变量 |
-| P4 文档 | 「未提交」等过时说明修正；`scratch/` 描述与自检命令统一；`/about` 版本号改为读根 `package.json`（消除三处硬编码）；关于页补本仓库链接 |
-| P5 附加 | §9.3 死文案清理（36 条）+ 审计脚本白名单；§9.8 自定义 CSS/JS 纳入引用检查；后端 `addMultiple` 接受传入 `sort`（导入顺序保真）；删除 `ImportExport` 恒不显示的调试 UI 与「样式配置」死复选框 |
+| Batch | Content |
+|-------|---------|
+| P0 critical | `Style/index.vue` gained the missing `NInputNumber` import (the "panel max width" input was unusable); a failed `ImportExport` no longer reports "success" and a partial failure no longer claims success; `ItemGroupManage` resets the form before "Add" (it used to silently overwrite the group being edited) and editing uses a shallow copy; the `zh-CN` string `common.saveFail` changed from "保存成功" (saved successfully) to "保存失败" (save failed) |
+| P1 robustness | home-page `jumpUrl` null fallback (it could navigate to `/undefined`); drag `item-key` switched to `id` and the local `sort` is synced after saving; `RoundCardModal` lost `:style="$parent"`; a non-object JSON import now reports a message (instead of failing silently); the request layer's `failHandler` type was fixed and shows the server `msg` (error toast 50 s → 8 s) and GETs carry headers too; `updatePanelConfigByCloud` gained a catch and only resets on `code -1`, with the save action merged into one entry point; `reloadRoute` pointing at a non-existent route was deleted; the drag handle uses an icon that actually exists locally (it used to be blank); `getFileList` resets code/exception/loading; setting a wallpaper awaits the result and rolls back on failure; an export failure no longer silently loses data; upload callbacks gained `JSON.parse` protection and `@error`; saving the search box gained a catch; `max-[400px]` → `max-w-[400px]`; the login page's inline style gained units; `add-frontend-version.js` derives the version date in Beijing time; `AppIcon`'s `style` prop was renamed `cardStyle`; `IconEditor` dropped the fragile "pass values through a computed cache" approach; `useLanguage` became watch-driven; `AppStarter`'s app list became a `computed` (language switches apply instantly) and no longer force-overwrites the collapsed state |
+| P2 cleanup | 15 whole dead files (`utils/is`, `utils/format`, `utils/functions`, `utils/crypto`, …) and 3 empty directories removed; about 20 leftover comments cleaned up; 8 unused SVG icons and 4 unused large images deleted (≈620 KB, `avatar.png` kept); dead actions/fields/types in `store/modules/app`, `panel` and `auth` removed |
+| P3 dependencies | `vuedraggable` (zero references) and `rimraf` removed; `axios` / `crypto-js` / `@iconify/vue` / `markdown-it-link-attributes` moved from devDependencies to dependencies; the ineffective `terserOptions.drop_console` deleted; a type declaration for `VITE_APP_VERSION` added and unused env variables removed |
+| P4 documentation | stale notes such as "uncommitted" corrected; the `scratch/` description and self-check commands unified; `/about` reads the version from the root `package.json` (removing three hardcoded copies); the about page links to this repository |
+| P5 extras | §9.3 dead-string cleanup (36) + audit-script whitelist; §9.8 custom CSS/JS included in the reference check; the backend `addMultiple` accepts a passed-in `sort` (import order preserved); the always-hidden debug UI and the dead "style configuration" checkbox were removed from `ImportExport` |
 
-### 10.2 评估后判定「不改」的项（避免误伤）
+### 10.2 Evaluated and deliberately left alone (avoiding collateral damage)
 
-- `apiMessage` 里调用 `useOsTheme()` **不存在**监听器泄漏（naive-ui 内部以 `usedCount` 计数，根组件已持有实例）。
-- 请求层 `code === -1` 保持静默：各调用方已各自提示，统一弹窗会造成重复提示。
-- 首页/文件列表的虚拟滚动、面板/引擎两个 deep watch：当前规模（<100 项 + 1s 防抖）下收益不足。
-- `1001` 只清 auth store：显式登出已清全部 store，被动失效保留缓存反而体验更好。
-- 限流/抓取 fail-open、前端 role 只作展示拦截：均为有意取舍，注释与文档已说明。
-- `github-markdown.less` / `highlight.less` / markdown 系依赖**暂不删除**（保留将来做 markdown 渲染的余地，且自定义 CSS 可能引用 `.markdown-body` / `.hljs`）。
+- `useOsTheme()` in `apiMessage` does **not** leak listeners (naive-ui counts internally with `usedCount`, and the root component already holds an instance).
+- The request layer keeps `code === -1` silent: each caller reports its own message, and a central toast would duplicate them.
+- Virtual scrolling on the home page / file list and the two deep watches on panel/engines: not worth it at the current scale (<100 items + a 1 s debounce).
+- `1001` only clears the auth store: an explicit logout clears every store, and keeping caches on a passive expiry is the better experience.
+- Fail-open rate limiting/fetching and frontend roles being display-only: intentional trade-offs, explained in comments and documentation.
+- `github-markdown.less` / `highlight.less` / the markdown dependencies are **not removed yet** (keeping the option of markdown rendering, and custom CSS may reference `.markdown-body` / `.hljs`).
 
-### 10.3 仍待处理（需决策或属运维动作）
+### 10.3 Still open (needs a decision or is an operations action)
 
-| 项 | 说明 |
-|----|------|
-| 本地残留 | 已清理 `.wrangler/state/v3/kv`、8 月的孤儿 D1 文件（4 KB，仅含种子数据）与 5 个空目录；**仅剩根目录 `.dev-web.log` / `.dev-worker.log`** 两个开发日志（工具的安全删除被拒，需手动删；已被 `.gitignore` 覆盖） |
-| 云端残留 | 孤儿 KV namespace `sun-panel-login-rate` —— 实测 **0 个 key**，纯清理项（Dashboard 手动删即可）；线上 D1 仍有 `module_config` / `notice` 两张历史表，其中 **`module_config` 有 1 行历史数据**（旧版搜索框配置，代码已不再读取），删表前建议先备份 |
-| §9.6 | `/uploads/*` 边缘缓存（运维侧可选，取舍见 §9.6） |
-| §9.10 ~ 9.12 | 三条待明确需求（详见 §9 末尾） |
+| Item | Notes |
+|------|-------|
+| Local leftovers | `.wrangler/state/v3/kv`, an orphan D1 file from August (4 KB, seed data only) and 5 empty directories were cleaned up; **only the two development logs `.dev-web.log` / `.dev-worker.log` in the root remain** (the tool's safe delete was refused, so delete them by hand; both are covered by `.gitignore`) |
+| Cloud leftovers | the orphan KV namespace `sun-panel-login-rate` — **0 keys** measured, a pure cleanup item (delete it in the dashboard); the hosted D1 still has the historical `module_config` / `notice` tables, with **1 historical row in `module_config`** (an old search-box config the code no longer reads); back up before dropping tables |
+| §9.6 | `/uploads/*` edge cache (optional, operations side; trade-offs in §9.6) |
+| §9.10 ~ 9.13 | requirements that need clarification or a decision (see the end of §9; **9.13** is the security review's V-07 package B+C) |
+| Security review, still open | V-01 (forced password change away from the seeded default) and V-08 (refuse a password change without `PASSWORD_PEPPER`); V-06 / V-07 (B+C in §9.13) / V-09 were evaluated and accepted — the reasoning is in [security.md](./security.md) §3 |
 
-### 10.4 提交建议
+### 10.4 Commit suggestions
 
-本轮改动跨前后端与文档，建议按 P0+P1（行为修复）→ P2+P3（清理与依赖）→ P4+P5（文档与附加项）→ P6（本轮第二批，见 §10.5）拆四个提交；
-每批提交前跑 `npm run check` 与附录 C 的全部自检脚本；`dist/` 已 gitignore，部署前由构建流程生成。
+This round touches frontend, backend and documentation, so four commits are suggested: P0+P1 (behaviour fixes) →
+P2+P3 (cleanup and dependencies) → P4+P5 (documentation and extras) → P6 (the second batch of this round, see §10.5);
+run `npm run check` and every self-check script from Appendix C before each commit; `dist/` is gitignored and produced
+by the build pipeline before deployment.
 
-### 10.5 本轮第二批（排查结论落地后追加）
+### 10.5 The second batch of this round (added after the audit findings landed)
 
-> 触发：用户要求「核对未被使用的 openness 接口 → 清除；补 `onlyName` 的导入导出；评估并优化 §9.4 / §9.9；整理 docs/」。
+> Trigger: the user asked to "verify the unused openness endpoints → remove them; finish `onlyName` import/export;
+> evaluate and optimise §9.4 / §9.9; tidy up docs/".
 
-| 主题 | 结论与落地 |
-|------|-----------|
-| **openness 接口清除** | 全仓库核对（含 `-SimpleMatch` 误用导致的漏检复核）确认零使用后删除：前端 `api/openness.ts`、类型 `typings/openness/openness.d.ts`、后端 `src/api/openness.ts` 与其在 `src/api/index.ts` 的挂载；连带移除只被它使用的 `SETTING_SYSTEM_APPLICATION` / `SETTING_DISCLAIMER` / `SETTING_WEB_ABOUT_DESCRIPTION`、`getSettingJson` / `setSettingJson`，以及 `0001_init.sql` 里对应的三行种子（**只影响全新库**；线上库残留的三行设置与两张历史表保留无害，见 §10.3） |
-| **`onlyName` 导入导出** | 导出结构 `Icon` 增加可选 `onlyName`（向后兼容旧文件）；导出时带上、导入时提交；后端 `addMultiple` 归一化（去空白/剔非法字符/截断 50）并对「库内已占用 + 批内重复」降级为空串，把被丢弃的标识回报给前端提示；单条 `edit` 复用同一套归一化（原本只在服务端查重、不校验字符集）。自检 `scratch/only-name-import.test.ts`：**8 passed** |
-| **§9.4 Cookie** | 见 §9.4 落地结果（HttpOnly + SameSite=Lax + 写操作跨站校验；持久化层不再存 token） |
-| **§9.9 子请求** | 见 §9.9 落地结果（固定 3 次读取 + 分片批量更新 + `limit`/`remaining` 分批）。额外发现：**免费版每次调用只有 50 个子请求**（官方限制），因此大批量清理必须分批 —— 这正是 `limit` 与前端循环的由来 |
-| **docs/ 整理** | `history/` 收纳迁移设计与早期需求清单（`migration-plan.md`、`todo.md`）；`docs/README.md` 重写为「文档地图 + 职责表 + 维护约定」；`deployment.md` 去掉与根 README 重复的技术栈/差异表；`storage.md` 新增「Cloudflare 资源与免费层额度」实测章节；待明确需求集中到 §9.10~9.12 |
+| Topic | Conclusion and outcome |
+|-------|------------------------|
+| **Removing the openness endpoints** | A repo-wide check (including a re-check for misses caused by a misused `-SimpleMatch`) confirmed zero usage, so they were deleted: the frontend `api/openness.ts`, the types in `typings/openness/openness.d.ts`, the backend `src/api/openness.ts` and its mount in `src/api/index.ts`; the settings they alone used went with them — `SETTING_SYSTEM_APPLICATION` / `SETTING_DISCLAIMER` / `SETTING_WEB_ABOUT_DESCRIPTION`, `getSettingJson` / `setSettingJson`, and the three matching seed rows in `0001_init.sql` (**only affects brand-new databases**; the three leftover settings rows and two historical tables in the hosted database are harmless, see §10.3) |
+| **`onlyName` import/export** | The exported `Icon` structure gained an optional `onlyName` (backwards compatible with old files); it is included on export and submitted on import; the backend `addMultiple` normalises it (trim, drop invalid characters, truncate at 50) and downgrades collisions ("already used in the database + duplicated within the batch") to an empty string, reporting the discarded identifiers back to the frontend; the single-item `edit` reuses the same normalisation (it only checked for duplicates server-side and never validated the character set). Self-check `scratch/only-name-import.test.ts`: **8 passed** |
+| **§9.4 cookies** | see the §9.4 outcome (HttpOnly + SameSite=Lax + cross-site checks for writes; the persistence layer no longer stores the token) |
+| **§9.9 subrequests** | see the §9.9 outcome (a fixed 3 reads + chunked batch updates + `limit`/`remaining` batching). One extra finding: **the free plan allows only 50 subrequests per invocation** (official limit), so large cleanups must be batched — which is where `limit` and the frontend loop come from |
+| **Tidying `docs/`** | `history/` took in the migration design and the early requirement list (`migration-plan.md`, `todo.md`); `docs/README.md` was rewritten as "document map + ownership table + maintenance rules"; `deployment.md` dropped the tech-stack/differences tables duplicated from the root README; `storage.md` gained a measured "Cloudflare resources and free-tier usage" section; requirements needing clarification were collected into §9.10~9.12 |
 
 ---
 
-## 附录 A：`0001_init.sql` 结构（§5.1 之后的现状）
+## Appendix A: state of `0001_init.sql` (after §5.1)
 
 ```
--- 表 1 item_icon         id, created_at, updated_at, deleted_at, icon_json, title, url, lan_url,
---                        description, open_method, sort, item_icon_group_id, only_name(原 0003)
---                        index: idx_item_icon_group_id
--- 表 2 item_icon_group   id, created_at, updated_at, deleted_at, icon, title, description, sort,
---                        card_style(原 0002), text_color(原 0002), hide_description(原 0002)
--- 表 3 user_config       单行 id=1(CHECK), created_at, updated_at, panel_json, search_engine_json
--- 表 4 system_setting    id, config_name(UNIQUE), config_value
---                        （键: 管理员账号/密码/昵称/头像、custom_css、custom_js、auth_epoch、
---                          storage_auto_clean_unused —— 除账号四项外都是按需写入, 不在基线里预置；
---                          system_application / disclaimer / web_about_description 已随 /openness 接口删除, 见 §10.5）
--- 表 5 file              id, created_at, updated_at, deleted_at, src, file_name, method, ext
--- 表 6 login_attempt     ip(PK), fail_count, window_start   index: idx_login_attempt_window
--- 种子  system_setting ×4（admin_username/admin_password/admin_name/admin_head_image）
--- 种子  item_icon_group ×1（默认分组 APP）
--- 已移除（不再创建）: module_config、notice —— 见 §5.1；已部署库里的空表保留不动
+-- table 1 item_icon        id, created_at, updated_at, deleted_at, icon_json, title, url, lan_url,
+--                          description, open_method, sort, item_icon_group_id, only_name (formerly 0003)
+--                          index: idx_item_icon_group_id
+-- table 2 item_icon_group  id, created_at, updated_at, deleted_at, icon, title, description, sort,
+--                          card_style (formerly 0002), text_color (formerly 0002), hide_description (formerly 0002)
+-- table 3 user_config      single row id=1 (CHECK), created_at, updated_at, panel_json, search_engine_json
+-- table 4 system_setting   id, config_name (UNIQUE), config_value
+--                          (keys: admin account/password/nickname/avatar, custom_css, custom_js, auth_epoch,
+--                           storage_auto_clean_unused — apart from the four account keys these are written on
+--                           demand and not pre-seeded in the baseline;
+--                           system_application / disclaimer / web_about_description were removed with the
+--                           /openness endpoints, see §10.5)
+-- table 5 file             id, created_at, updated_at, deleted_at, src, file_name, method, ext
+-- table 6 login_attempt    ip (PK), fail_count, window_start   index: idx_login_attempt_window
+-- seed   system_setting ×4 (admin_username/admin_password/admin_name/admin_head_image)
+-- seed   item_icon_group ×1 (default group APP)
+-- removed (no longer created): module_config, notice — see §5.1; empty tables in deployed databases are kept
 ```
 
-> **线上实例实测（2026-09-21，`wrangler d1 execute --remote`）**：11 张表（6 张业务表 + `d1_migrations` + `sqlite_sequence` + `_cf_KV` + 历史遗留的 `module_config` / `notice`），
-> `system_setting` 7 行（旧的 3 个已废弃键仍在）、`module_config` 1 行历史数据、`notice` 0 行、`item_icon` 1 / `item_icon_group` 2 / `file` 2 / `login_attempt` 0。
-> 也就是说：**这个库建于 2026-09-04**，早于 §5.1（不再建表）与本轮（不再种入 3 个设置键），所以历史表与废弃键都还在 —— 代码已不访问，属于无害残留。
+> **Measured on the hosted instance (2026-09-21, `wrangler d1 execute --remote`)**: 11 tables (the 6 business tables +
+> `d1_migrations` + `sqlite_sequence` + `_cf_KV` + the historical `module_config` / `notice`),
+> `system_setting` 7 rows (the three deprecated keys are still there), `module_config` 1 historical row, `notice` 0 rows,
+> `item_icon` 1 / `item_icon_group` 2 / `file` 2 / `login_attempt` 0.
+> In other words: **that database was created on 2026-09-04**, before §5.1 (no longer creating the tables) and before
+> this round (no longer seeding the three settings keys), so the historical tables and deprecated keys are still present
+> — the code no longer touches them and they are a harmless leftover.
 
-## 附录 B：登录限流 SQL
+## Appendix B: login rate-limit SQL
 
 ```sql
--- 1) 校验前读取
+-- 1) read before verification
 SELECT fail_count, window_start FROM login_attempt WHERE ip = ?;
 --    isLocked: window_start + 600 > now && fail_count >= 5  →  1008
 
--- 2) 记录一次失败（原子；now - 600 由参数传入，滑动窗口）
+-- 2) record one failure (atomic; now - 600 is passed in as a parameter, sliding window)
 INSERT INTO login_attempt (ip, fail_count, window_start) VALUES (?, 1, ?)
 ON CONFLICT(ip) DO UPDATE SET
   fail_count   = CASE WHEN login_attempt.window_start < ? THEN 1
                       ELSE login_attempt.fail_count + 1 END,
   window_start = ?;
---    绑定顺序: ip, now, now-600, now
+--    bind order: ip, now, now-600, now
 
--- 3) 登录成功清除
+-- 3) clear on a successful login
 DELETE FROM login_attempt WHERE ip = ?;
 
--- 4) 概率清理（1/50，与 2) 一起 db.batch 提交）
-DELETE FROM login_attempt WHERE window_start < ?;   -- 绑定: now-600
+-- 4) probabilistic cleanup (1/50, submitted together with 2) via db.batch)
+DELETE FROM login_attempt WHERE window_start < ?;   -- bind: now-600
 ```
 
-## 附录 C：自检脚本与命令
+## Appendix C: self-check scripts and commands
 
 ```bash
-# 前端纯逻辑自检（仓库约定：esbuild 打包 + node 运行）
+# Frontend pure-logic self-checks (repository convention: esbuild bundle + node run)
 node_modules/.bin/esbuild scratch/panel-filter.test.ts --bundle --platform=node --format=esm \
   --outfile=scratch/panel-filter.mjs --log-level=warning && node scratch/panel-filter.mjs
 node_modules/.bin/esbuild scratch/login-rate.test.ts --bundle --platform=node --format=esm \
@@ -703,66 +1012,79 @@ node_modules/.bin/esbuild scratch/favicon-candidates.test.ts --bundle --platform
   --banner:js="import{webcrypto}from'node:crypto';globalThis.crypto??=webcrypto;" && node scratch/favicon-candidates.mjs
 node_modules/.bin/esbuild scratch/i18n-audit.ts --bundle --platform=node --format=esm \
   --outfile=scratch/i18n-audit.mjs --log-level=warning && node scratch/i18n-audit.mjs
-# 注意: CJS 格式不支持顶层 await, 统一用 esm + .mjs; 产物用完请删除 (未加 gitignore)
-# 唯一例外: search-engine-util 需要 --loader:.svg=text 处理内置图标 (esm / cjs 均可)
+# Note: CJS does not support top-level await, so use esm + .mjs everywhere; delete the artefacts when done (not gitignored)
+# The one exception: search-engine-util needs --loader:.svg=text for the built-in icons (esm / cjs both work)
 node_modules/.bin/esbuild scratch/search-engine-util.test.ts --bundle --platform=node --format=esm \
   --outfile=scratch/search-engine-util.mjs --loader:.svg=text --log-level=warning && node scratch/search-engine-util.mjs
-# 会话 Cookie / CSRF 防线 (§9.4)
+# Session cookie / CSRF defences (§9.4)
 node_modules/.bin/esbuild scratch/auth-cookie.test.ts --bundle --platform=node --format=esm \
   --outfile=scratch/auth-cookie.mjs --log-level=warning \
   --banner:js="import{webcrypto}from'node:crypto';globalThis.crypto??=webcrypto;" && node scratch/auth-cookie.mjs
-# 后端路由级自检 (含浏览器/加密全局垫片):
+# Backend route-level self-checks (with browser/crypto globals shimmed):
 node_modules/.bin/esbuild scratch/user-config-merge.test.ts --bundle --platform=node --format=esm \
   --outfile=scratch/merge.mjs --log-level=warning \
   --banner:js="import{webcrypto}from'node:crypto';globalThis.crypto??=webcrypto;" && node scratch/merge.mjs
 node_modules/.bin/esbuild scratch/only-name-import.test.ts --bundle --platform=node --format=esm \
   --outfile=scratch/only-name.mjs --log-level=warning \
   --banner:js="import{webcrypto}from'node:crypto';globalThis.crypto??=webcrypto;" && node scratch/only-name.mjs
+# Security-review fixes (V-02A rate-limit key / V-02B JWT_SECRET / V-03 custom code needs auth /
+# V-04 no raw DB text on the wire / V-05 body limits) — see docs/security.md
+node_modules/.bin/esbuild scratch/security-fixes.test.ts --bundle --platform=node --format=esm \
+  --outfile=scratch/security-fixes.mjs --log-level=warning \
+  --banner:js="import{webcrypto}from'node:crypto';globalThis.crypto??=webcrypto;" && node scratch/security-fixes.mjs
 
-# 结果速查 (最近一次实测): panel-filter 27 · login-rate 18 · upload-validate 55 · password-hash 29 ·
+# Results at a glance (most recent run): panel-filter 27 · login-rate 18 · upload-validate 55 · password-hash 29 ·
 # auth-epoch 23 · auth-cookie 17 · upload-refs 35 · group-with-items 15 · upload-clean-setting 23 ·
-# favicon-candidates 48 · user-config-merge 16 · only-name-import 8 · search-engine-util 50 ·
-# i18n-audit 缺失 0 / 不齐 0 / 死文案 0（白名单 20）
+# favicon-candidates 48 · user-config-merge 16 · only-name-import 8 · search-engine-util 50 · security-fixes 46 ·
+# i18n-audit 0 missing / 0 mismatches / 0 dead strings (whitelist 20)
 
-# 迁移与新库校验
-npm run migrations:apply:local          # 新库: 期望一次建全 8 张业务表(含 login_attempt) + 全部列
+# Migrations and new-database verification
+npm run migrations:apply:local          # new database: expects all 8 business tables (including login_attempt) + all columns in one pass
 npx wrangler d1 execute DB --local --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-npx wrangler d1 migrations list DB --remote   # 老库: 期望三个名字均已记录
+npx wrangler d1 migrations list DB --remote   # old database: expects all three names to be recorded
 
-# 质量闸门
-npm run check      # 根 typecheck + 前端 type-check + eslint
-npm run deploy:all # 构建 + 部署
+# Quality gates
+npm run check      # root typecheck + frontend type-check + eslint
+npm run deploy:all # build + deploy
 ```
 
-## 附录 D：提交拆分建议
+## Appendix D: suggested commit split
 
-| PR | 内容 | 备注 |
-|----|------|------|
-| PR-A | §2.1 migrations 合并 + §2.3 限流迁 D1 + §2.4 移除 KV（§2.5 已取消） + 文档同步 | ✅ 已完成；代码与迁移已就绪，可直接重新部署 |
-| PR-B | §3.1 上传/抓取校验 | ✅ 已完成（自检 45 passed + 端到端 curl 验证） |
-| PR-C | §3.2 密码哈希升级（含 `PASSWORD_PEPPER`） | ✅ 已完成（自检 29 passed；端到端确认旧哈希登录后自动升级） |
-| PR-D | §3.3 JWT 可吊销 + `exp` 缩短 | ✅ 已完成（自检 23 passed；端到端确认旧 token 返回 1001）；破坏性：老 token 失效一次 |
-| PR-E | §4.1 R2 一致性 + §4.2 getListWithItems + §4.3 缓存 | ✅ 已完成（自检 22 + 15 passed；端到端验证稳定 key / 引用保护 / 删除回收 / 缓存头） |
-| PR-F | §5.1 死存储清理 | ✅ 已完成（经确认后删除代码 + 新库不建表；老库空表保留） |
-| PR-G | §6.x 文档与备份 + `dist/` 重建 | ✅ 已完成（新增 storage.md、deployment 增备份章节、dist 已重建并核对内容） |
+| PR | Content | Notes |
+|----|---------|-------|
+| PR-A | §2.1 merging migrations + §2.3 moving rate limiting to D1 + §2.4 removing KV (§2.5 cancelled) + documentation | ✅ done; code and migrations are ready to redeploy |
+| PR-B | §3.1 upload/fetch validation | ✅ done (45 self-check assertions passed + end-to-end curl verification) |
+| PR-C | §3.2 password hash upgrade (including `PASSWORD_PEPPER`) | ✅ done (29 self-check assertions passed; end-to-end confirmed an old hash is upgraded on login) |
+| PR-D | §3.3 revocable JWT + shorter `exp` | ✅ done (23 self-check assertions passed; end-to-end confirmed an old token returns 1001); breaking: old tokens fail once |
+| PR-E | §4.1 R2 consistency + §4.2 getListWithItems + §4.3 caching | ✅ done (22 + 15 self-check assertions passed; end-to-end verified stable keys / reference protection / reclamation on delete / cache headers) |
+| PR-F | §5.1 dead storage cleanup | ✅ done (code deleted after confirmation + new databases skip the tables; empty tables in old databases are kept) |
+| PR-G | §6.x documentation and backup + rebuilding `dist/` | ✅ done (storage.md added, a backup section added to deployment, dist/ rebuilt and its content verified) |
 
 ---
 
-## 变更记录
+## Change log
 
-| 日期 | 内容 |
-|------|------|
-| 本轮 | 建立本计划；记录决策 D1–D4；完成 §7 两项前端改动 |
-| 本轮（PR-A） | 完成 §2.1 / §2.3 / §2.4：`migrations/` 合并为单文件基线、限流迁 D1 并加惰性建表兜底、KV 全部移除；记录决策 D5（取消 `docs/sql/` 一次性脚本）；新增 `scratch/login-rate.test.ts`；README / docs/deployment.md / package.json 同步 |
-| 本轮（PR-B/C/D） | 完成 §3.1 / §3.2 / §3.3：上传与抓取校验、密码哈希升级（PBKDF2 + 可选 pepper，决策 D6）、JWT 世代吊销（`auth_epoch` + 72h）；新增 `scratch/upload-validate.test.ts`、`scratch/password-hash.test.ts`、`scratch/auth-epoch.test.ts`；端到端验证抓到并修掉 `bumpAuthEpoch` 首次递增的 off-by-one |
-| 本轮（PR-E） | 完成 §4.1 / §4.2 / §4.3：站点图标稳定 key + 引用感知的 R2 回收 + `cleanUnused` 接口与前端按钮、首页 `getListWithItems` 去 N+1、缓存头整理（决策 D7：不做 Worker 侧边缘缓存）；新增 `scratch/upload-refs.test.ts`、`scratch/group-with-items.test.ts`；自检抓到 `cleanupUploads` 会误删外链的缺陷并已修 |
-| 本轮（PR-F + §5.2/5.3） | 完成 §5.1（删 `notice` / `moduleConfig` 全部代码，`0001_init.sql` 不再建这两张表；老库空表保留）、§5.2（删 `ASSETS` binding，附官方依据）、§5.3（决定不加乐观锁，改为 README「已知限制」提示）；删代码后 `tsc` / `vue-tsc` / `eslint` / 10 个自检脚本 / i18n 审计全通过，并用全新库验证基线只剩 6 张业务表（11 条语句执行成功） |
-| 本轮（PR-G） | 完成 §6.1 / §6.2 / §6.3：`docs/deployment.md` 增「备份与恢复」、新增 `docs/storage.md`（资源/表/R2 布局/本地状态/结构变更约定）、`vite build` 重建 `dist/` 并核对产物内容。**改进计划全部条目结项**（§5.3 为「按决策不做」） |
-| 本轮（结项后追加 + 文档答疑） | 按用户需求实现 §9.0 图片回收开关（决策 D8，含 `scratch/upload-clean-setting.test.ts` 23 断言 + 真实 D1/R2 端到端双分支验证）并重建 `dist/`；新增 §9「后续候选详细计划」（9.1~9.8）；修正 `docs/todo.md` 批次三 #3 的过时表述与附录 A 的表清单（§5.1 之后只剩 6 张表） |
-| 本轮（计划调整 + 文档） | 按用户指示调整 §9：**新增 9.2「获取图标弹窗选一张」**（含后端候选解析/两个新接口、前端 `FaviconPicker.vue`、i18n、自检与端到端验证步骤）、**移除原 9.4（PBKDF2 迭代数）与原 9.7（仓库原有待确认需求）**、编号重新连续化；[storage.md](./storage.md) 新增 **§3.1「图片回收：两个入口、判定规则与开关」**（开关默认值/失败方向/按钮链路/场景对照/盲区） |
-| 本轮（A1+A2+B1 落地） | 完成 §9.1（`apiErrorCode.1009` 中英各一条，登录页可见密码配置异常）、§9.5（`JWT_SECRET` 弱密钥一次性告警 + 部署文档补 `openssl rand -base64 48`）、§9.2（`extractIconCandidates` + 候选/保存两个接口 + `FaviconPicker.vue` 弹窗，旧接口保留；新增自检 `scratch/favicon-candidates.test.ts` **48 passed**）；`npm run check` 与 i18n 审计通过，`dist/` 重建 |
-| 本轮（待办标记补全） | §9 顶部新增「待用户操作」清单（secrets / 部署 / 首登确认 / 可选清理）；§7 收尾的「未提交」提示更新为覆盖 §2 ~ §9 全部改动；§9.7 的 PR-I 更新为「§9.1 / §9.2 / §9.5 已完成」并补手动回归第 ⑥ 条（多候选弹窗） |
-| 本轮（全仓库排查） | 新增 §10：一次系统排查后按 P0~P5 分批落地 —— 4 项高危修复（`NInputNumber` 缺失、导入导出假成功、分组静默覆盖、`saveFail` 文案）、约 25 项健壮性修复、15 个死文件与约 620 KB 未使用资源清理、依赖与配置整理（-2 依赖、4 个移入 dependencies）、文档同步与版本号统一；同时完成 §9.3（删 36 条死文案 + 审计白名单）与 §9.8（自定义 CSS/JS 纳入引用检查）；12 个自检脚本全绿，`npm run check` 0 error / 0 warning |
-| 本轮（第二批） | 新增 §10.5：清除未被使用的 `/openness/*` 三个接口及其设置键、种子（前端封装与类型一并删）；`onlyName` 贯通导入导出并在后端做归一化/去重（新增 `scratch/only-name-import.test.ts` 8 断言）；§9.4 完成（HttpOnly Cookie + SameSite=Lax + 写操作跨站校验 + token 不再落盘，新增 `scratch/auth-cookie.test.ts` 17 断言）；§9.9 完成（固定 3 次引用读取 + 分片批量更新 + `limit`/`remaining` 分批，`upload-refs` 扩到 35 断言）；`docs/` 重组（`history/` 归档、索引重写、storage 增免费层额度章节、deployment 去重）；共 14 个自检脚本全绿 |
-| 本轮（第四批·资源改名） | 命名基线更新：Worker → `sun-panel-on-cloudflare-worker`，D1 → `sun-panel-on-cloudflare-worker_db`，R2 → `sun-panel-on-cloudflare-worker-files`（**实测约束**：R2 桶名不允许下划线，故用连字符）；`wrangler.toml` 与 deployment.md（导入说明、访问 URL、创建与迁移命令、备份恢复）、storage.md（资源表、免费层实测）、双语 README 全部同步；`wrangler deploy --dry-run` 校验通过（`env.DB` / `env.FILES` 均正确解析） |
-| 本轮（第三批·文档与双语） | 根 README 拆为双语对：`README.md`（英文）与 `README.zh-CN.md`（中文），两者顶部带语言切换入口、许可证段落分别按 `This project is licensed under the [MIT License](LICENSE).` / `本项目采用 [MIT License](LICENSE)。` 撰写并补上游作者署名说明；**部署章节改写为 Workers Git 集成流程**（连接仓库 → 两条命令 → 补 `JWT_SECRET` → `git push` 自动部署），详细说明仍指向 deployment.md；`docs/history/` 按主题重组为 `migration/plan.md` 与 `requirements/early-todo.md` 并新增归档判定标准（`history/README.md`）；`improvement-plan.md` 经判定**保留在 `docs/` 根下**（§9/§10 仍是活跃待办且被多处按锚点引用）；`docs/README.md` 增双语同步约定与链接层级说明；12 份文档相对链接校验通过 |
+| Date | Content |
+|------|---------|
+| round | plan created; decisions D1–D4 recorded; the two §7 frontend changes done |
+| round (PR-A) | §2.1 / §2.3 / §2.4 done: `migrations/` collapsed into a single-file baseline, rate limiting moved to D1 with a lazy table-creation fallback, KV fully removed; decision D5 recorded (one-off `docs/sql/` scripts cancelled); `scratch/login-rate.test.ts` added; README / docs/deployment.md / package.json synced |
+| round (PR-B/C/D) | §3.1 / §3.2 / §3.3 done: upload and fetch validation, password hash upgrade (PBKDF2 + optional pepper, decision D6), JWT generation revocation (`auth_epoch` + 72 h); `scratch/upload-validate.test.ts`, `scratch/password-hash.test.ts` and `scratch/auth-epoch.test.ts` added; end-to-end testing caught and fixed the off-by-one in the first `bumpAuthEpoch` increment |
+| round (PR-E) | §4.1 / §4.2 / §4.3 done: stable keys for site icons + reference-aware R2 reclamation + the `cleanUnused` endpoint and frontend button, home-page `getListWithItems` removing the N+1, cache headers tidied (decision D7: no Worker-side edge cache); `scratch/upload-refs.test.ts` and `scratch/group-with-items.test.ts` added; the self-check caught `cleanupUploads` deleting external links and it was fixed |
+| round (PR-F + §5.2/5.3) | §5.1 done (all `notice` / `moduleConfig` code deleted, `0001_init.sql` no longer creates the two tables, empty tables in old databases kept), §5.2 (the `ASSETS` binding removed, with official references), §5.3 (no optimistic lock; a README "known limitations" note instead); after the deletions `tsc` / `vue-tsc` / `eslint` / 10 self-check scripts / the i18n audit all pass, and a fresh database verified that the baseline is down to 6 business tables (11 statements executed successfully) |
+| round (PR-G) | §6.1 / §6.2 / §6.3 done: `docs/deployment.md` gained "Backup & Restore", `docs/storage.md` was added (resources/tables/R2 layout/local state/structure-change policy), `vite build` rebuilt `dist/` and its content was verified. **Every item of the improvement plan is closed** (§5.3 being "decided against") |
+| round (post-closure additions + documentation Q&A) | §9.0 image reclamation switch implemented on user request (decision D8, with `scratch/upload-clean-setting.test.ts` at 23 assertions + real D1/R2 end-to-end verification of both branches) and `dist/` rebuilt; the §9 "candidate backlog in detail" section (9.1~9.8) added; the stale wording in `docs/todo.md` batch three #3 and the table list in Appendix A corrected (only 6 tables remain after §5.1) |
+| round (plan adjustment + documentation) | §9 adjusted per user instruction: **9.2 "pick one icon in a dialog"** added (backend candidate parsing / two new endpoints, frontend `FaviconPicker.vue`, i18n, self-check and end-to-end verification steps), the former 9.4 (PBKDF2 iterations) and 9.7 (pre-existing open requirements) **removed**, numbering re-compacted; [storage.md](./storage.md) gained **§3.1 "Image reclamation: two entry points, decision rules and the switch"** (default value / failure direction / button flow / scenario matrix / blind spots) |
+| round (A1+A2+B1 landed) | §9.1 done (`apiErrorCode.1009` in both locales, so the login page shows the password-configuration problem), §9.5 (`JWT_SECRET` weak-key one-off warning + `openssl rand -base64 48` added to the deployment doc), §9.2 (`extractIconCandidates` + the candidate/save endpoints + the `FaviconPicker.vue` dialog, old endpoint kept; new self-check `scratch/favicon-candidates.test.ts` **48 passed**); `npm run check` and the i18n audit pass, `dist/` rebuilt |
+| round (backlog markers completed) | the "waiting for the user" list (secrets / deploy / first-login check / optional cleanup) added at the top of §9; the "uncommitted" note closing §7 updated to cover all of §2 ~ §9; §9.7's PR-I updated to "§9.1 / §9.2 / §9.5 done" with a sixth manual regression item (the multi-candidate dialog) |
+| round (repo-wide audit) | §10 added: after a systematic review, work landed in P0~P5 batches — 4 critical fixes (missing `NInputNumber`, fake import success, silent group overwrite, the `saveFail` string), about 25 robustness fixes, 15 dead files and about 620 KB of unused assets removed, dependencies and configuration tidied (-2 dependencies, 4 moved to dependencies), documentation synced and version numbers unified; §9.3 (36 dead strings removed + audit whitelist) and §9.8 (custom CSS/JS included in the reference check) completed as well; 12 self-check scripts green, `npm run check` 0 error / 0 warning |
+| round (second batch) | §10.5 added: the three unused `/openness/*` endpoints removed together with their settings keys and seeds (frontend wrappers and types too); `onlyName` threaded through import/export with backend normalisation/deduplication (new `scratch/only-name-import.test.ts`, 8 assertions); §9.4 done (HttpOnly cookie + SameSite=Lax + cross-site checks for writes + the token no longer persisted, new `scratch/auth-cookie.test.ts`, 17 assertions); §9.9 done (a fixed 3 reference reads + chunked batch updates + `limit`/`remaining` batching, `upload-refs` grown to 35 assertions); `docs/` reorganised (`history/` archive, index rewritten, a free-tier section added to storage, deployment deduplicated); 14 self-check scripts green |
+| round (fourth batch · resource rename) | naming baseline updated: Worker → `sun-panel-on-cloudflare-worker`, D1 → `sun-panel-on-cloudflare-worker_db`, R2 → `sun-panel-on-cloudflare-worker-files` (**measured constraint**: R2 bucket names reject underscores, hence hyphens); `wrangler.toml` and deployment.md (import instructions, access URL, create and migration commands, backup/restore), storage.md (resource table, measured free-tier usage) and both READMEs all synced; `wrangler deploy --dry-run` passes (`env.DB` / `env.FILES` resolve correctly) |
+| round (third batch · documentation and bilingual) | the root README split into a bilingual pair: `README.md` (English) and `README.zh-CN.md` (Chinese), both carrying a language switch at the top, with the licence section written as `This project is licensed under the [MIT License](LICENSE).` / `本项目采用 [MIT License](LICENSE)。` respectively plus a note crediting the upstream author; **the deployment section was rewritten as the Workers Git integration flow** (connect the repository → two commands → add `JWT_SECRET` → automatic deploys on `git push`), with the details still pointing at deployment.md; `docs/history/` was reorganised by topic into `migration/plan.md` and `requirements/early-todo.md` with new archiving criteria (`history/README.md`); `improvement-plan.md` was judged to **stay in the `docs/` root** (§9/§10 are still active backlog and referenced by anchor in several places); `docs/README.md` gained the bilingual-sync rule and the link-depth explanation; relative links in 12 documents verified |
+| round (fifth batch · all docs bilingual) | all 10 documents under `docs/` became bilingual pairs using the root README's naming: the Chinese versions are `*.zh-CN.md` and the English versions take the original file names; every document opens with the same one-line language switch as the root README (`[English](X.md) | [简体中文](X.zh-CN.md)`, no heading). The Chinese content was not rewritten — only the switch line was added and internal links were split by language (`./storage.md` → `./storage.zh-CN.md`, root README → `README.zh-CN.md`); the English versions are section-by-section translations whose numbering (§2.2, §9.9, Appendix A/C, …) matches the Chinese versions, so the `docs/improvement-plan.md §x.y` references in `src/*.ts` comments stay valid; `docs/README.md` gained the bilingual file map plus the "same-language links only" and "never update one half of a pair" rules; the links in both root READMEs and in the `history/` and `upstream/` archives were updated accordingly; relative links verified |
+| round (sixth batch · bilingual comments) | every code comment in the repository now follows the "English first, Chinese second" bilingual rule: a single-line comment pair sits next to each other (no blank line); inside a multi-line comment sections are separated by one blank comment line, and between the two languages there is one blank line for a single-section comment and two blank lines for a multi-section comment. Covers `src/` (22 files), `scratch/` (14), `frontend/src` (54) plus `migrations/0001_init.sql`, `wrangler.toml`, `.dev.vars.example` and the frontend config/build scripts. Commented-out code and tool directives (`/// <reference>`, `@type`) are left untouched. Verification: a self-check script comparing comment-stripped code against HEAD reports **0 code changes**, and a scan for mono-lingual comment blocks leaves only the deliberately kept commented-out code and directives |
+| round (security review) | a repo-wide security review (injection / access control / data exposure / input validation / hardcoded secrets / OWASP Top 10) produced findings `V-01`…`V-09` and fixed four of them: V-02A (the rate-limit key trusts only `cf-connecting-ip`, falling back to a shared bucket plus an operator warning), V-02B (`JWT_SECRET` empty/whitespace now fails closed — 503 from login, the middleware and `onError`), V-03 (`getCustomCode` requires authentication and the frontend only injects when a token exists), V-04 (`internalError` added; eight call sites stop forwarding storage/DB text) and V-05 (a `bodyLimit` middleware across 22 endpoints plus array-length caps). New self-check `scratch/security-fixes.test.ts` **42 passed**; end-to-end on real workerd: rate-limit buckets are per-IP and a forged `X-Forwarded-For` changes nothing, a 2 MB login body and a 52 MB upload both return 413, a cookie-only session completes every page-level request, and a cross-site write returns 1005. **Conclusions and IDs now live in [security.md](./security.md)** (trust boundaries + registry + verified properties + what is deliberately not defended); V-01 / V-08 remain open |
+| round (V-07 step A + documentation close-out) | step A of V-07 implemented: the login response carries `Cache-Control: no-store`, closing the only risk in that list that code alone can close (an intermediate proxy replaying the response body). Documentation: the bilingual [security.md](./security.md) / `security.zh-CN.md` pair added and registered in the `docs/README` document map, ownership table and reading paths, with the "finding IDs are never renumbered" rule stated explicitly; the V-07 B+C plan written into §9.13 (migration order, the `api_key` table contract, the four frontend changes, the verification list); all 27 `V-0x` comments in `src/` now point at `docs/security.md §3`, so nothing depends on a report outside the repository; the review report outside `docs/` was deleted so it cannot become a second source of truth |
+| round (docs polish · language switch) | the `# Language Switch` heading that had been placed above the switch was removed from all 22 bilingual documents (the `docs/` root, `history/` and `upstream/` pairs); what remains is the single-line switch `[English](X.md) | [简体中文](X.zh-CN.md)` at the very top of each file (right below the front matter where there is one). The maintenance rule in `docs/README` and the "fifth batch" row above were reworded to describe the format without the heading; a repo-wide scan confirms that no `# Language Switch` heading is left and that every pair still carries its switch line |
+| round (docs housekeeping + URL surface) | `wrangler.toml` gained `workers_dev = true` and `preview_urls = false` (version URLs disabled: old deployments are no longer publicly reachable under `*.workers.dev`; re-enable if non-production branch preview builds are ever used); `docs/images/` renamed to `docs/assets/` with the root READMEs and the upstream archive links updated; light YAML front matter (`title` / `status` / `audience` / `last_verified`) added to the 10 content documents; `docs/README` gained the stable-path rule (paths referenced by `src/` comments and `migrations/` are contracts), the flat-structure decision (Diátaxis mapping in the index instead of subfolders), the front-matter convention and the `docs/assets/` naming rule |
+| round (docs polish · switch placement + strict same-language links) | the language switch now sits **directly under the H1 title** in all 22 bilingual documents (the `docs/` root, `history/` and `upstream/` pairs), exactly like the root README (`# Title` → blank → `[English](X.md) | [简体中文](X.zh-CN.md)` → blank → `---`), replacing the previous "very first line" placement; front matter and bodies are unchanged. Every cross-language link outside the switch line was removed so that "same-language linking" holds strictly: the root README pair, `docs/README`, `docs/deployment`, `docs/history/README`, `docs/improvement-plan` and `docs/upstream` now mention the other language with code spans instead of links, and the Chinese link text `docs/storage.md` was corrected to `docs/storage.zh-CN.md`. The wording about the switch position was updated in both root READMEs and in the `docs/README` maintenance rules (`under the title`, not `at the top`); verified by a script checking the head structure of all 22 documents (H1 → switch → `---`), the existence of every relative link, and that no cross-language link survives outside the switch line |
+

@@ -1,6 +1,13 @@
 import { buildIconKey, buildIconKeyPrefix, isAllowedExt, isImageExt, isValidUploadKey, normalizeIconContentType } from '../src/utils/file'
 
 /**
+ * Self-check for upload / fetch validation (§3.1)
+ *
+ * The risk it guards against: uploadFiles used to accept any extension and favicon fetching did not validate
+ * the Content-Type, so a third-party page could push HTML or script into R2 and have it served same-origin
+ * from /uploads/* (a stored-XSS stepping stone).
+ *
+ *
  * 上传 / 抓取校验自检 (§3.1)
  *
  * 回归的风险: uploadFiles 原本对扩展名不设限, favicon 抓取也不校验 Content-Type ——

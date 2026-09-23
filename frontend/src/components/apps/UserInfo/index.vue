@@ -83,6 +83,7 @@ const updateUsernameModalFormRules: FormRules = {
 }
 
 async function logoutApi() {
+  // A failed backend logout (expired token, network problem) must not block the local logout
   // 后端登出失败（如 token 已过期、网络异常）不应阻塞本地登出
   try {
     await logout()
@@ -115,6 +116,7 @@ function handleUpdatePassword(e: MouseEvent) {
       updatePasswordModalState.value.form.password,
     ).then(({ code, msg }) => {
       if (code === 0) {
+        // Success: clear the form so the plaintext password does not linger in component state (the username change does the same)
         // 成功: 清空表单, 避免密码明文残留在组件状态里 (改用户名那边也是这么做的)
         updatePasswordModalState.value.show = false
         updatePasswordModalState.value.form.oldPassword = ''
@@ -151,6 +153,7 @@ function handleUpdateUsername(e: MouseEvent) {
     updateUsernameModalState.value.loading = true
     updateUsername(newUsername, updateUsernameModalState.value.form.password).then(({ code, msg }) => {
       if (code === 0) {
+        // Success
         // 成功
         updateUsernameModalState.value.show = false
         updateUsernameModalState.value.form.password = ''
@@ -195,6 +198,7 @@ function handleChangeTheme(value: Theme) {
 
 <template>
   <div class="bg-slate-200 dark:bg-zinc-900 p-2 h-full">
+    <!-- Account -->
     <!-- 账号 -->
     <NCard style="border-radius:10px" size="small">
       <div class="text-slate-500 mb-[5px] font-bold">
@@ -221,6 +225,7 @@ function handleChangeTheme(value: Theme) {
       </div>
     </NCard>
 
+    <!-- Settings -->
     <!-- 设置 -->
     <NCard style="border-radius:10px" class="mt-[10px]" size="small">
       <div class="text-slate-500 mb-[5px] font-bold">

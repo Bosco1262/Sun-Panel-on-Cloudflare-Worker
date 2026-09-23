@@ -6,6 +6,14 @@ import {
 } from '../src/utils/uploadRefs'
 
 /**
+ * Self-check for R2 reference-aware cleanup (§4.1)
+ *
+ * The regression it guards against: the old implementation only soft-deleted the D1 rows when deleting an
+ * item/group, so images stayed in R2 as orphans forever; the opposite mistake is worse — one image can be
+ * referenced by items, the panel background and the avatar at the same time, so deleting blindly breaks images
+ * that are still in use. This verifies "delete only when nobody references it" with in-memory D1 + R2.
+ *
+ *
  * R2 引用清理自检 (§4.1)
  *
  * 回归的风险: 旧实现删项目/分组只软删 D1 行, 图片永远留在 R2 变成孤儿;
@@ -29,6 +37,7 @@ function eq(label: string, actual: unknown, expected: unknown) {
   }
 }
 
+// ===================== Path normalisation =====================
 // ===================== 路径归一化 =====================
 
 console.log('== 路径归一化 ==')
@@ -43,6 +52,7 @@ eq('icon_json 无 src', srcFromIconJson('{"itemType":3,"text":"subway:add"}'), n
 eq('icon_json 是外链', srcFromIconJson('{"src":"https://x.com/a.png"}'), null)
 eq('icon_json 脏数据', srcFromIconJson('not-json'), null)
 
+// ===================== In-memory D1 / R2 =====================
 // ===================== 内存版 D1 / R2 =====================
 
 interface Ctx {
@@ -55,9 +65,14 @@ interface Ctx {
 
 const ctx: Ctx = { items: [], panelJson: '{}', headImage: '', customCss: '', customJs: '' }
 
-/** 记录创建过的语句, 用于断言「子请求数与候选数量无关」(§9.9) */
+/**
+ * Records the statements created, so "the subrequest count is independent of the candidate count" can be asserted (§9.9)
+ *
+ * 记录创建过的语句, 用于断言「子请求数与候选数量无关」(§9.9)
+ */
 const statements: string[] = []
 
+// A real D1 prepared statement can be executed directly with first()/all()/run() or bound first and then executed
 // 真实 D1 的 prepared statement 既能直接 first()/all()/run(), 也能先 bind() 再执行
 const db = {
   prepare(sql: string) {
@@ -76,9 +91,11 @@ const db = {
     }
 
     const execAll = async (args: unknown[]) => {
+      // Live items (soft-deleted ones never appear in the results)
       // 活着的项目 (软删的不会出现在结果里)
       if (sql.includes('FROM item_icon'))
         return { results: ctx.items.map(item => ({ icon_json: item.icon_json })) }
+      // Avatar + custom CSS/JS: filter by the bound config_name and return as-is (only the `v` field is used)
       // 头像 + 自定义 CSS/JS: 按绑定的 config_name 过滤后原样返回 (只用到 v 字段)
       if (sql.includes('FROM system_setting')) {
         const wanted = new Set(args.map(String))
@@ -122,6 +139,7 @@ eq('被头像引用', await isUploadSrcReferenced(db, SRC_B), true)
 ctx.headImage = ''
 eq('没人引用', await isUploadSrcReferenced(db, SRC_B), false)
 
+// §9.8: images referenced from custom CSS/JS must be kept as well, otherwise "Clean unused files" would delete images in use
 // §9.8: 自定义 CSS/JS 里引用的图片同样要保留, 否则「清理未引用文件」会删掉在用图片
 ctx.customCss = '.card{background:url(uploads/icons/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png)}'
 eq('被自定义 CSS 引用', await isUploadSrcReferenced(db, SRC_B), true)
@@ -141,6 +159,7 @@ eq('两个对象都被删', deletedKeys.length, 2)
 eq('外链不会被当成本站对象删除', deletedKeys.some(k => k.includes('x.com')), false)
 eq('key 去掉了 ./uploads/ 前缀', deletedKeys.includes('2026/9/10/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png'), true)
 
+// Images in use must never be deleted
 // 在用的图片不能被删
 ctx.items = [{ icon_json: '{"src":"uploads/2026/9/10/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png"}' }]
 deletedKeys.length = 0
@@ -148,6 +167,7 @@ result = await cleanupUploads(db, r2, [SRC_A, SRC_B])
 eq('在用图片被保留', result.deleted, 1)
 eq('只删了没人用的那个', deletedKeys, ['icons/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png'])
 
+// A single failed deletion does not affect the other objects and does not throw
 // 单个删除失败不影响其它对象, 也不抛出
 ctx.items = []
 deletedKeys.length = 0
@@ -157,6 +177,10 @@ eq('失败的那个不计入', result.deleted, 1)
 eq('另一个仍然被删', deletedKeys.includes('2026/9/10/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png'), true)
 failedDeletes.clear()
 
+// Batching: the free plan caps subrequests per invocation, so anything above the limit waits for the next round.
+// Note the semantics: the caller passes "file rows that are still not soft-deleted" each round, so the next
+// round's input shrinks (the same as cleanUnused in src/api/system/file.ts).
+//
 // 分批: 免费版单次调用子请求有限, 超过 limit 的部分留给下一轮。
 // 注意语义: 调用方每轮传入的是「仍未软删的 file 行」, 所以下一轮的输入会变小
 // (与 src/api/system/file.ts 的 cleanUnused 一致)。

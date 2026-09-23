@@ -21,7 +21,11 @@ export const useAppStore = defineStore('app-store', {
       setLocalSetting(this.$state)
     },
 
-    /** 重置为默认设置并清掉本地缓存 (登出时调用) */
+    /**
+     * Resets to the default settings and clears the local cache (called on logout)
+     *
+     * 重置为默认设置并清掉本地缓存 (登出时调用)
+     */
     resetAppSetting() {
       this.$state = defaultSetting()
       removeLocalState()

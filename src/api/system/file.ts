@@ -2,10 +2,21 @@ import { Hono } from 'hono'
 import type { Env } from '../../types'
 import { buildR2Key, contentTypeFromExt, isAllowedExt, isImageExt, r2KeyFromSrc } from '../../utils/file'
 import { cleanupUploads, normalizeUploadSrc } from '../../utils/uploadRefs'
-import { errorByCode, errorByCodeAndMsg, success, successData, successList } from '../../utils/response'
+import { errorByCode, internalError, success, successData, successList } from '../../utils/response'
+import { REQUEST_BODY_LIMIT, bodyLimit } from '../../utils/bodyLimit'
 import { authMiddleware } from '../../middleware/auth'
 
 const app = new Hono<{ Bindings: Env }>()
+
+/**
+ * Cap on one delete request (security review V-05, see docs/security.md §3): the ids become bound parameters of a
+ * single statement and the matching rows become one R2 delete each, so an unbounded list is both a D1
+ * parameter-limit error and a subrequest burst
+ *
+ * 单次删除的条数上限 (安全审查 V-05, 见 docs/security.md §3): ids 会变成同一条语句的绑定参数,
+ * 命中的行还会各占一次 R2 删除, 不限长的列表既会撞上 D1 的参数上限, 也会造成子请求突发
+ */
+const MAX_DELETE_IDS = 500
 
 interface FileRow {
   id: number
@@ -17,8 +28,9 @@ interface FileRow {
   updated_at: string
 }
 
+// Upload a single image (form field: imgfile)
 // 上传单张图片 (表单字段: imgfile)
-app.post('/file/uploadImg', authMiddleware(), async (c) => {
+app.post('/file/uploadImg', bodyLimit({ maxSize: REQUEST_BODY_LIMIT.upload, bufferBody: false }), authMiddleware(), async (c) => {
   const form = await c.req.formData().catch(() => null)
   if (!form)
     return errorByCode(c, 1300)
@@ -46,12 +58,15 @@ app.post('/file/uploadImg', authMiddleware(), async (c) => {
     return successData(c, { imageUrl: `uploads/${key}`, etag: uploaded.httpEtag })
   }
   catch (err) {
-    return errorByCodeAndMsg(c, 1300, (err as Error).message)
+    // Storage detail stays in the log; the caller gets the generic 1300 message (security review V-04, see docs/security.md §3)
+    // 存储层细节留在日志里, 调用方拿到 1300 的通用文案 (安全审查 V-04, 见 docs/security.md §3)
+    return internalError(c, 1300, 'file/uploadImg', err)
   }
 })
 
+// Upload files in bulk (form field: files[])
 // 批量上传文件 (表单字段: files[])
-app.post('/file/uploadFiles', authMiddleware(), async (c) => {
+app.post('/file/uploadFiles', bodyLimit({ maxSize: REQUEST_BODY_LIMIT.upload, bufferBody: false }), authMiddleware(), async (c) => {
   const form = await c.req.formData().catch(() => null)
   if (!form)
     return errorByCode(c, 1300)
@@ -64,6 +79,7 @@ app.post('/file/uploadFiles', authMiddleware(), async (c) => {
     const ext = file.name.includes('.')
       ? file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
       : ''
+    // Whitelist check: arbitrary types must not be written to R2 and then served same-origin
     // 白名单校验: 不允许任意类型写入 R2 再从同源返回
     if (!isAllowedExt(ext)) {
       errFiles.push(file.name)
@@ -89,8 +105,9 @@ app.post('/file/uploadFiles', authMiddleware(), async (c) => {
   return successData(c, { succMap, errFiles })
 })
 
+// File list
 // 文件列表
-app.post('/file/getList', authMiddleware(), async (c) => {
+app.post('/file/getList', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware(), async (c) => {
   const { results } = await c.env.DB
     .prepare('SELECT * FROM file WHERE deleted_at IS NULL ORDER BY created_at DESC')
     .all<FileRow>()
@@ -109,6 +126,16 @@ app.post('/file/getList', authMiddleware(), async (c) => {
 })
 
 /**
+ * Clean up unreferenced files (R2 + records)
+ *
+ * An image may be referenced by item icons / panel backgrounds / the avatar / custom CSS-JS at the same time, so
+ * all of it goes through cleanupUploads and its reference check (string containment, deliberately conservative).
+ *
+ * Batching: the Workers free plan allows at most 50 subrequests per invocation and each object costs one R2
+ * delete — so one call handles at most `limit` candidates (30 by default) and returns `remaining` for the
+ * frontend to continue with.
+ *
+ *
  * 清理未被引用的文件 (R2 + 记录)
  *
  * 图片可能同时被项目图标 / 面板背景 / 头像 / 自定义 CSS/JS 引用, 所以统一交给
@@ -120,7 +147,7 @@ app.post('/file/getList', authMiddleware(), async (c) => {
 const DEFAULT_CLEAN_LIMIT = 30
 const MAX_CLEAN_LIMIT = 60
 
-app.post('/file/cleanUnused', authMiddleware(), async (c) => {
+app.post('/file/cleanUnused', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware(), async (c) => {
   const body = await c.req.json<{ limit?: unknown }>().catch(() => null)
   const limit = typeof body?.limit === 'number' && Number.isFinite(body.limit)
     ? Math.min(Math.max(Math.floor(body.limit), 1), MAX_CLEAN_LIMIT)
@@ -140,11 +167,12 @@ app.post('/file/cleanUnused', authMiddleware(), async (c) => {
   return successData(c, { checked: results.length, deleted, remaining })
 })
 
+// Delete files (R2 + records)
 // 删除文件 (R2 + 记录)
-app.post('/file/deletes', authMiddleware(), async (c) => {
+app.post('/file/deletes', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware(), async (c) => {
   const body = await c.req.json<{ ids?: unknown }>().catch(() => null)
   const ids = Array.isArray(body?.ids) ? body.ids.filter((v): v is number => typeof v === 'number') : []
-  if (ids.length === 0)
+  if (ids.length === 0 || ids.length > MAX_DELETE_IDS)
     return errorByCode(c, 1400)
 
   const placeholders = ids.map(() => '?').join(',')
@@ -161,7 +189,7 @@ app.post('/file/deletes', authMiddleware(), async (c) => {
       .run()
   }
   catch (err) {
-    return errorByCodeAndMsg(c, 1200, (err as Error).message)
+    return internalError(c, 1200, 'file/deletes', err)
   }
 
   return success(c)

@@ -4,6 +4,16 @@ import { signToken } from '../src/utils/jwt'
 import itemIconApp from '../src/api/panel/itemIcon'
 
 /**
+ * Self-check for the "automatically reclaim unreferenced images on delete" switch
+ *
+ * Two things matter here:
+ * 1. how the switch is parsed and what its default is — a missing key means "on" (the behaviour before the
+ *    switch existed), while a failed read means "off" (conservative: one skipped deletion only leaves a file
+ *    behind, a wrong deletion removes images the user still wants to reuse);
+ * 2. the switch really stops the R2 reclamation inside the delete endpoints — verified at route level, not just
+ *    through the pure functions.
+ *
+ *
  * 「删除时自动回收未引用图片」开关自检
  *
  * 关注两件事:
@@ -40,12 +50,21 @@ eq("'no' -> false", parseBoolSetting('no'), false)
 eq("'yes' -> true", parseBoolSetting('yes'), true)
 eq('带空格也能解析', parseBoolSetting(' 0 '), false)
 
+// ===================== In-memory D1 =====================
 // ===================== 内存版 D1 =====================
 
 interface State {
-  /** storage_auto_clean_unused 的值（null = 没这行） */
+  /**
+   * Value of storage_auto_clean_unused (null = the row does not exist)
+   *
+   * storage_auto_clean_unused 的值（null = 没这行）
+   */
   autoClean: string | null
-  /** 抛错模式: 模拟 D1 抖动 */
+  /**
+   * Error mode: simulates a D1 hiccup
+   *
+   * 抛错模式: 模拟 D1 抖动
+   */
   broken: boolean
   itemDeleted: boolean
   fileDeleted: boolean
@@ -72,12 +91,16 @@ function makeDb() {
           const name = String(args[0] ?? '')
           if (name === 'storage_auto_clean_unused')
             return state.autoClean === null ? null : { v: state.autoClean }
+          // The multi-key query (the custom CSS/JS reference check) goes through all(): return an empty result set
+          // here, matching real D1's { results } contract (returning null would break the caller's destructuring).
+          //
           // 多键查询 (自定义 CSS/JS 的引用检查) 走 all(): 这里返回空结果集,
           // 与真实 D1 的 { results } 契约一致 (返回 null 会让调用方解构时抛错)
           if (mode === 'all')
             return { results: [] }
           return null // auth_epoch / admin_head_image 等
         }
+        // Live item icons: once an item is soft-deleted this query no longer matches it (the cleanup flow relies on exactly that)
         // 活着的项目图标: 项目被软删后这条查询就不再命中它 (清理流程正是靠这个前提)
         if (sql.includes('SELECT icon_json FROM item_icon'))
           return { results: state.itemDeleted ? [] : items }
@@ -93,6 +116,8 @@ function makeDb() {
         }
         if (mode === 'all')
           return { results: [] }
+        // auth_epoch / admin_head_image and similar
+        // auth_epoch / admin_head_image 等
         return null
       }
 
@@ -122,6 +147,7 @@ state.broken = true
 eq('读取失败 -> 关 (保守, 不删)', await getAutoCleanUnused(makeDb()), false)
 state.broken = false
 
+// ===================== Route-level verification =====================
 // ===================== 路由级验证 =====================
 
 const SECRET = 'clean-setting-test'

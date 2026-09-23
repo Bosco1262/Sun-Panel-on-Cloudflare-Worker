@@ -4,6 +4,15 @@ import { signToken } from '../src/utils/jwt'
 import itemIconApp from '../src/api/panel/itemIcon'
 
 /**
+ * Self-check for site icon candidate parsing (§9.2)
+ *
+ * The regression it guards against: with several <link rel*="icon"> tags on a page the old implementation took
+ * "the first one in the document", leaving the user no choice; the new one must collect every candidate and
+ * must not be thrown off by attribute order / letter case / relative paths / data: inline images / duplicate
+ * declarations / malformed markup. The fallback chain (favicon.ico → icon.horse) is verified with a mocked
+ * fetch to make sure it only runs when the page yields no candidate.
+ *
+ *
  * 站点图标候选解析自检 (§9.2)
  *
  * 回归的风险: 页面里有多个 <link rel*="icon"> 时, 旧实现只取「文档里第一个」,
@@ -30,6 +39,7 @@ function eq(label: string, actual: unknown, expected: unknown) {
 
 const BASE = 'https://example.com/page/index.html'
 
+// ===================== 1) Basics: rel/href order + sizes/type =====================
 // ===================== 1) 基础: rel/href 顺序 + sizes/type =====================
 
 console.log('== 基础解析 ==')
@@ -58,6 +68,7 @@ eq(
   [{ url: 'https://example.com/i.png', source: 'link' }],
 )
 
+// ===================== 2) rel variants (apple-touch-icon and friends) =====================
 // ===================== 2) rel 变体 (apple-touch-icon 等) =====================
 
 console.log('== rel 变体 ==')
@@ -79,6 +90,7 @@ eq(
   ],
 )
 
+// ===================== 3) Skipping data: and non-http(s) =====================
 // ===================== 3) 跳过 data: 与非 http(s) =====================
 
 console.log('== 协议过滤 ==')
@@ -95,6 +107,7 @@ eq(
   [{ url: 'https://example.com/ok.png', source: 'link' }],
 )
 
+// ===================== 4) Relative path resolution =====================
 // ===================== 4) 相对路径解析 =====================
 
 console.log('== 相对路径 ==')
@@ -116,6 +129,7 @@ eq(
   ],
 )
 
+// ===================== 5) Deduplication and document order =====================
 // ===================== 5) 去重与文档顺序 =====================
 
 console.log('== 去重 ==')
@@ -140,6 +154,7 @@ eq(
   ],
 )
 
+// ===================== 6) Cap and truncation =====================
 // ===================== 6) 上限截断 =====================
 
 console.log('== 上限截断 ==')
@@ -154,6 +169,7 @@ console.log('== 上限截断 ==')
   ])
 }
 
+// ===================== 7) Edge cases =====================
 // ===================== 7) 边界 =====================
 
 console.log('== 边界 ==')
@@ -162,6 +178,7 @@ eq('没有 link 时返回空数组', extractIconCandidates('<html><head><title>t
 eq('空 HTML', extractIconCandidates('', BASE), [])
 eq('非法 baseUrl 返回空数组', extractIconCandidates('<link rel="icon" href="/a.png">', 'not a url'), [])
 
+// ===================== 8) Fallback chain (mocked fetch) =====================
 // ===================== 8) 兜底链 (mock fetch) =====================
 
 console.log('== 兜底链 (mock fetch) ==')
@@ -186,6 +203,7 @@ function resetMock(rules: Array<[string, number, string?, string?]>) {
     routes.set(url, { status, body, contentType })
 }
 
+// 8.1 The page has link candidates: no fallback, and the page is fetched only once
 // 8.1 页面有 link 候选: 不走兜底, 只请求页面一次
 resetMock([
   ['https://site-a.test/', 200, '<link rel="icon" href="/a.png">'],
@@ -195,6 +213,7 @@ eq('页面有候选时结果来自页面', await getSiteFaviconCandidates('https
 ])
 eq('页面有候选时不请求 favicon.ico', calls.map(c => c.url), ['https://site-a.test/'])
 
+// 8.2 No link on the page: fall back to favicon.ico (HEAD 200)
 // 8.2 页面无 link: 回退 favicon.ico (HEAD 200)
 resetMock([
   ['https://site-b.test/', 200, '<html><head><title>no icon</title></head></html>'],
@@ -208,6 +227,7 @@ eq('请求顺序 = 页面 + favicon.ico', calls.map(c => c.url), [
   'https://site-b.test/favicon.ico',
 ])
 
+// 8.3 Page fetch fails + favicon.ico 404: drop down to icon.horse
 // 8.3 页面抓取失败 + favicon.ico 404: 落到 icon.horse
 resetMock([
   ['https://site-c.test/favicon.ico', 404],
@@ -217,6 +237,7 @@ eq('favicon.ico 不存在时落到 icon.horse', await getSiteFaviconCandidates('
   { url: 'https://icon.horse/icon/site-c.test', source: 'icon-horse' },
 ])
 
+// 8.4 Nothing at all: an empty array
 // 8.4 全都没有: 空数组
 resetMock([
   ['https://site-d.test/favicon.ico', 404],
@@ -224,17 +245,20 @@ resetMock([
 ])
 eq('全都没有时返回空数组', await getSiteFaviconCandidates('https://site-d.test/'), [])
 
+// 8.5 Invalid url: no request is sent
 // 8.5 非法 url: 不发请求
 resetMock([])
 eq('非法 url 返回空数组', await getSiteFaviconCandidates('not a url'), [])
 eq('非法 url 不发请求', calls.length, 0)
 
+// 8.6 Legacy function compatibility: getSiteFaviconUrl = the first candidate
 // 8.6 旧函数兼容: getSiteFaviconUrl = 候选第一条
 resetMock([
   ['https://site-e.test/', 200, '<link rel="icon" href="/1.png"><link rel="icon" href="/2.png">'],
 ])
 eq('getSiteFaviconUrl 取候选第一条', await getSiteFaviconUrl('https://site-e.test/'), 'https://site-e.test/1.png')
 
+// ===================== 9) Route level: the two new endpoints + legacy endpoint compatibility =====================
 // ===================== 9) 路由级: 两个新接口 + 旧接口兼容 =====================
 
 console.log('== 路由级: 候选 / 保存接口 ==')
@@ -250,11 +274,13 @@ interface FileState {
 
 const fileState: FileState = { rows: [] }
 
+// In-memory D1: only the SQL branches these two endpoints use are implemented
 // 内存版 D1: 只实现这两个接口用到的 SQL 分支
 function makeDb() {
   return {
     prepare(sql: string) {
       const make = (args: unknown[] = []) => ({
+        // auth_epoch / storage_auto_clean_unused / the reference check all behave as "not found"
         // auth_epoch / storage_auto_clean_unused / 引用检查都按「无」处理
         first: async () => null,
         all: async () => {
@@ -307,6 +333,7 @@ function resetFile() {
   deletedKeys.length = 0
 }
 
+// 9.1 Authentication and parameters
 // 9.1 鉴权与参数
 clearAuthEpochCache()
 resetMock([['https://site-x.test/', 200, '<link rel="icon" href="/i.png">']])
@@ -316,6 +343,7 @@ eq('候选接口: 无 token 被拦截', r.code, 1000)
 r = await (await req('/itemIcon/getSiteFaviconCandidates', {})).json() as { code: number }
 eq('候选接口: 空 url -> 1400', r.code, 1400)
 
+// 9.2 Candidates are returned normally
 // 9.2 候选正常返回
 resetMock([['https://site-x.test/', 200, '<link rel="icon" href="/1.png"><link rel="icon" href="/2.png" sizes="32x32"><link rel="icon" href="/3.png">']])
 r = await (await req('/itemIcon/getSiteFaviconCandidates', { url: 'https://site-x.test/' })).json() as { code: number, data: { candidates: Array<{ url: string }> } }
@@ -327,6 +355,7 @@ eq('候选接口: 顺序与内容', r.data.candidates.map(c => c.url), [
   'https://site-x.test/3.png',
 ])
 
+// 9.3 No candidates -> an empty array instead of an error
 // 9.3 无候选 -> 空数组而不是报错
 resetMock([
   ['https://site-y.test/', 404],
@@ -336,6 +365,7 @@ resetMock([
 r = await (await req('/itemIcon/getSiteFaviconCandidates', { url: 'https://site-y.test/' })).json() as { code: number, data: { candidates: unknown[] } }
 eq('候选接口: 无候选 code 0 + 空数组', [r.code, r.data.candidates.length], [0, 0])
 
+// 9.4 Saving: first write (INSERT the file row + R2 put)
 // 9.4 保存: 首次写入 (INSERT file 行 + R2 put)
 clearAuthEpochCache()
 resetMock([['https://site-x.test/2.png', 200, 'PNGDATA', 'image/png']])
@@ -352,6 +382,7 @@ eq('保存接口: file 行 INSERT', fileState.inserted, {
   ext: '.png',
 })
 
+// 9.5 Saving: fetching again for the same site reuses the same key (UPDATE instead of INSERT)
 // 9.5 保存: 同一站点再次获取 -> 复用同一 key (UPDATE 而不是 INSERT)
 const firstIconUrl = r.data.iconUrl
 clearAuthEpochCache()
@@ -364,6 +395,7 @@ eq('保存接口: 同 src 走 UPDATE', fileState.updatedSame?.src, `./${firstIco
 eq('保存接口: 不重复 INSERT', fileState.inserted, undefined)
 eq('保存接口: 无旧对象可删', deletedKeys.length, 0)
 
+// 9.6 Saving: a non-image is rejected (the same trust model as upload/fetch)
 // 9.6 保存: 非图片被拒 (与上传/抓取同一个信任模型)
 resetMock([['https://site-x.test/evil', 200, '<html>', 'text/html']])
 resetFile()
@@ -372,12 +404,14 @@ eq('保存接口: 非图片 -> 失败', r.code, -1)
 eq('保存接口: 提示 download favicon error', r.msg.includes('download favicon error'), true)
 eq('保存接口: 不写 R2 / 不写 file 表', [puts.length, fileState.inserted], [0, undefined])
 
+// 9.7 Saving: parameter validation
 // 9.7 保存: 参数校验
 r = await (await req('/itemIcon/saveSiteFavicon', { url: 'https://a.test/i.png' })).json() as { code: number }
 eq('保存接口: 缺 pageUrl -> 1400', r.code, 1400)
 r = await (await req('/itemIcon/saveSiteFavicon', { url: 'https://a.test/i.png', pageUrl: 'not a url' })).json() as { code: number, msg: string }
 eq('保存接口: 非法 pageUrl -> 报错', [r.code, r.msg.includes('invalid url')], [-1, true])
 
+// 9.8 Legacy endpoint compatibility: internally "first candidate + store"
 // 9.8 旧接口兼容: 内部 = 候选第一条 + 保存
 clearAuthEpochCache()
 resetMock([

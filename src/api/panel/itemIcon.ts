@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import type { D1Database } from '@cloudflare/workers-types'
 import type { Env } from '../../types'
-import { error, errorByCode, errorByCodeAndMsg, success, successData, successList } from '../../utils/response'
+import { error, errorByCode, internalError, logInternalError, success, successData, successList } from '../../utils/response'
+import { REQUEST_BODY_LIMIT, bodyLimit } from '../../utils/bodyLimit'
 import { downloadFavicon, getSiteFaviconCandidates, getSiteFaviconUrl } from '../../utils/favicon'
 import { buildIconKey, buildIconKeyPrefix, contentTypeFromExt, extFromContentType, extFromUrl, isImageExt, r2KeyFromSrc } from '../../utils/file'
 import { cleanupUploads, isUploadSrcReferenced, srcFromIconJson } from '../../utils/uploadRefs'
@@ -75,10 +76,39 @@ export function mapIcon(row: IconRow) {
   }
 }
 
-/** onlyName (唯一标识) 的最大长度: 超长直接截断, 避免异常输入写库 */
+/**
+ * Maximum length of onlyName (the unique identifier): longer values are truncated, so odd input cannot reach the database
+ *
+ * onlyName (唯一标识) 的最大长度: 超长直接截断, 避免异常输入写库
+ */
 const ONLY_NAME_MAX_LENGTH = 50
 
 /**
+ * Caps on the two batch endpoints (security review V-05, see docs/security.md §3)
+ *
+ * `addMultiple` turns every element into one `INSERT` of a single `db.batch()` call and `saveSort` into one
+ * `UPDATE` per element, so an unbounded array is a direct resource amplifier for an authenticated caller.
+ * 1000 is far above any real import (an imported panel with more than a thousand entries is not a panel).
+ *
+ *
+ * 两个批量接口的条数上限 (安全审查 V-05, 见 docs/security.md §3)
+ *
+ * `addMultiple` 会把每个元素变成同一次 `db.batch()` 里的一条 `INSERT`, `saveSort` 则是每元素一条 `UPDATE`,
+ * 不限长的数组对已认证调用方来说就是直接可用的资源放大器。
+ * 1000 远高于任何真实导入 (超过一千条的项目面板已经不是面板了)。
+ */
+const MAX_BATCH_ITEMS = 1000
+const MAX_SORT_ITEMS = 1000
+/** Same reasoning as `MAX_DELETE_IDS` in src/api/system/file.ts / 与 src/api/system/file.ts 的 MAX_DELETE_IDS 同理 */
+const MAX_DELETE_IDS = 500
+
+/**
+ * Normalises the unique identifier: trims, keeps only letters/digits/underscore/hyphen, and caps the length
+ *
+ * Consistent with EditItem's live filtering on the frontend, but the server decides — imported data comes from
+ * a file and cannot be trusted.
+ *
+ *
  * 归一化唯一标识: 去空白 + 只保留英文/数字/下划线/中划线 + 限长
  *
  * 与前端 EditItem 的即时过滤保持一致, 但以服务端为准 —— 导入的数据来自文件, 不可信。
@@ -89,7 +119,11 @@ function sanitizeOnlyName(raw: unknown): string {
   return raw.trim().replace(/[^A-Za-z0-9_-]/g, '').slice(0, ONLY_NAME_MAX_LENGTH)
 }
 
-/** 已占用的唯一标识集合 (软删的不算, 与单条 edit 的判定一致) */
+/**
+ * Set of identifiers already taken (soft-deleted rows do not count, matching the per-item edit check)
+ *
+ * 已占用的唯一标识集合 (软删的不算, 与单条 edit 的判定一致)
+ */
 async function loadTakenOnlyNames(db: D1Database): Promise<Set<string>> {
   const { results } = await db
     .prepare('SELECT only_name FROM item_icon WHERE deleted_at IS NULL AND only_name != \'\'')
@@ -97,8 +131,9 @@ async function loadTakenOnlyNames(db: D1Database): Promise<Set<string>> {
   return new Set(results.map(row => row.only_name))
 }
 
+// Create / update an icon
 // 新增/修改图标
-app.post('/itemIcon/edit', authMiddleware(), async (c) => {
+app.post('/itemIcon/edit', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware(), async (c) => {
   const body = await c.req.json<ItemIconBody>().catch(() => null)
   if (!body || typeof body !== 'object')
     return errorByCode(c, 1400)
@@ -115,6 +150,7 @@ app.post('/itemIcon/edit', authMiddleware(), async (c) => {
   const openMethod = body.openMethod ?? 0
   const onlyName = sanitizeOnlyName(body.onlyName)
 
+  // Uniqueness check for the identifier (aligned with upstream's onlyNameExisted)
   // 唯一标识占用校验 (对齐上游 onlyNameExisted)
   if (onlyName) {
     const dup = await db
@@ -152,10 +188,11 @@ app.post('/itemIcon/edit', authMiddleware(), async (c) => {
   return successData(c, body)
 })
 
+// Add icons in bulk (used by the import flow: `sort` preserves the original order, `onlyName` preserves the identifier)
 // 批量添加图标 (导入流程使用: 携带 sort 保真顺序, 携带 onlyName 保真唯一标识)
-app.post('/itemIcon/addMultiple', authMiddleware(), async (c) => {
+app.post('/itemIcon/addMultiple', bodyLimit(REQUEST_BODY_LIMIT.large), authMiddleware(), async (c) => {
   const list = await c.req.json<ItemIconBody[]>().catch(() => null)
-  if (!Array.isArray(list))
+  if (!Array.isArray(list) || list.length === 0 || list.length > MAX_BATCH_ITEMS)
     return errorByCode(c, 1400)
 
   for (const item of list) {
@@ -165,6 +202,12 @@ app.post('/itemIcon/addMultiple', authMiddleware(), async (c) => {
 
   const db = c.env.DB
 
+  // onlyName edge cases (same semantics as the single-item edit):
+  // after normalisation (trim / drop invalid characters / cap the length), any identifier already taken in the
+  // database or duplicated inside this batch is downgraded to an empty string, and the dropped identifiers are
+  // reported back to the frontend — an import must not fail as a whole over one duplicate, but it must not write
+  // conflicting data either.
+  //
   // onlyName 的边界处理 (与单条 edit 的语义对齐):
   // 归一化 (去空白/剔非法字符/限长) 后, 与库内已占用或本批次内重复的标识一律降级为空串,
   // 并把被丢弃的标识回给前端提示 —— 导入不应因一个重复标识整体失败, 但也不能写出冲突数据。
@@ -184,6 +227,7 @@ app.post('/itemIcon/addMultiple', authMiddleware(), async (c) => {
 
   const stmts = normalized.map((item) => {
     const iconJson = JSON.stringify(item.icon ?? {})
+    // `sort` comes from the import flow (to preserve the original order); a missing or invalid value uses 9999 = append at the end
     // sort 由导入流程携带 (用于保真原有顺序); 缺省或非法时用 9999 = 追加到末尾
     const sort = typeof item.sort === 'number' && Number.isFinite(item.sort) ? item.sort : 9999
     return db
@@ -198,8 +242,9 @@ app.post('/itemIcon/addMultiple', authMiddleware(), async (c) => {
   return successData(c, { list: normalized, droppedOnlyNames })
 })
 
+// List icons by group
 // 按分组获取图标列表
-app.post('/itemIcon/getListByGroupId', authMiddleware(), async (c) => {
+app.post('/itemIcon/getListByGroupId', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware(), async (c) => {
   const body = await c.req.json<{ itemIconGroupId?: number }>().catch(() => null)
   const groupId = typeof body?.itemIconGroupId === 'number' ? body.itemIconGroupId : 0
   if (!groupId)
@@ -213,17 +258,19 @@ app.post('/itemIcon/getListByGroupId', authMiddleware(), async (c) => {
   return successList(c, results.map(mapIcon), 0)
 })
 
+// Delete icons (soft-delete the records + clean up images that are no longer referenced)
 // 删除图标 (软删记录 + 清理不再被引用的图片)
-app.post('/itemIcon/deletes', authMiddleware(), async (c) => {
+app.post('/itemIcon/deletes', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware(), async (c) => {
   const body = await c.req.json<{ ids?: unknown }>().catch(() => null)
   const ids = Array.isArray(body?.ids) ? body.ids.filter((v): v is number => typeof v === 'number') : []
-  if (ids.length === 0)
+  if (ids.length === 0 || ids.length > MAX_DELETE_IDS)
     return errorByCode(c, 1400)
 
   const placeholders = ids.map(() => '?').join(',')
   let iconJsons: string[] = []
 
   try {
+    // Collect the icons of the items about to be deleted, so that afterwards we can tell which images nobody uses
     // 先取出待删项目的图标, 用于删完后判断哪些图片没人用了
     const { results } = await c.env.DB
       .prepare(`SELECT icon_json FROM item_icon WHERE deleted_at IS NULL AND id IN (${placeholders})`)
@@ -237,9 +284,13 @@ app.post('/itemIcon/deletes', authMiddleware(), async (c) => {
       .run()
   }
   catch (err) {
-    return errorByCodeAndMsg(c, 1200, (err as Error).message)
+    return internalError(c, 1200, 'itemIcon/deletes', err)
   }
 
+  // R2 cleanup happens after the database writes and only logs on failure (cleanupUploads already swallows them).
+  // With the switch off nothing is reclaimed automatically: the images stay in the upload-file manager for reuse
+  // and can be cleaned up manually with "Clean unused files".
+  //
   // R2 清理放在 DB 写入之后, 失败只记日志 (cleanupUploads 内部已兜住)
   // 开关关闭时不自动回收: 图片留在「上传文件管理」里可复用, 需要时手动点「清理未引用文件」
   if (await getAutoCleanUnused(c.env.DB))
@@ -248,12 +299,13 @@ app.post('/itemIcon/deletes', authMiddleware(), async (c) => {
   return success(c)
 })
 
+// Save the icon order
 // 保存图标排序
-app.post('/itemIcon/saveSort', authMiddleware(), async (c) => {
+app.post('/itemIcon/saveSort', bodyLimit(REQUEST_BODY_LIMIT.large), authMiddleware(), async (c) => {
   const body = await c.req.json<{ sortItems?: Array<{ id: number; sort: number }>; itemIconGroupId?: number }>().catch(() => null)
   const sortItems = Array.isArray(body?.sortItems) ? body.sortItems : []
   const groupId = typeof body?.itemIconGroupId === 'number' ? body.itemIconGroupId : 0
-  if (sortItems.length === 0 || !groupId)
+  if (sortItems.length === 0 || sortItems.length > MAX_SORT_ITEMS || !groupId)
     return errorByCode(c, 1400)
 
   try {
@@ -267,13 +319,19 @@ app.post('/itemIcon/saveSort', authMiddleware(), async (c) => {
     await c.env.DB.batch(stmts)
   }
   catch (err) {
-    return errorByCodeAndMsg(c, 1200, (err as Error).message)
+    return internalError(c, 1200, 'itemIcon/saveSort', err)
   }
 
   return success(c)
 })
 
 /**
+ * Downloads and stores a site icon: the R2 key is stable per site (icons/<md5(host)>.<ext>) and overwritten, and
+ * the file row is UPSERTed. When the extension changes the old object is reclaimed (guarded both by the automatic
+ * reclamation switch and by the reference check). On failure it returns { error }, which each route turns into
+ * 'acquisition failed: ...' (the same wording as the old implementation).
+ *
+ *
  * 下载并保存站点图标: R2 key 按站点稳定 (icons/<md5(host)>.<ext>) 覆盖写, file 行 UPSERT。
  * 扩展名变化时回收旧对象 (受自动回收开关 + 引用检查双重保护)。
  * 失败时返回 { error }, 由各路由拼成 'acquisition failed: ...' (与旧实现同文案)。
@@ -283,12 +341,19 @@ async function storeFavicon(env: Env, host: string, iconUrl: string): Promise<{ 
   if (!img)
     return { error: 'download favicon error' }
 
+  // downloadFavicon already guarantees an image type; the extension follows the Content-Type
+  // (so extension-less URLs such as icon.horse are not misjudged), with the URL extension as a fallback.
+  //
   // downloadFavicon 已保证是图片类型; 扩展名以 Content-Type 为准
   // (避免 icon.horse 这类无扩展名 URL 误判), URL 扩展名仅作兜底
   const urlExt = extFromUrl(iconUrl)
   const ext = extFromContentType(img.contentType) || (isImageExt(urlExt) ? urlExt : '.png')
   const contentType = contentTypeFromExt(ext)
 
+  // Store in R2 + record in the file table (fileName uses the site host, same as the Go version).
+  // The key is stable per site (icons/<md5(host)>.<ext>): fetching again overwrites the same object instead of
+  // piling up one more copy in R2 per click like the old implementation (whose key contained Date.now()).
+  //
   // 保存到 R2 + 记录到 file 表 (fileName 使用站点域名, 与 Go 版一致)
   // key 按站点稳定 (icons/<md5(host)>.<ext>): 重复获取会覆盖同一个对象,
   // 不再像旧实现那样每点一次就往 R2 里堆一份 (旧 key 带 Date.now(), 必然新建)
@@ -297,6 +362,7 @@ async function storeFavicon(env: Env, host: string, iconUrl: string): Promise<{ 
   try {
     await env.FILES.put(key, img.data, { httpMetadata: { contentType } })
 
+    // Existing records of this site: used to decide between overwrite, extension change and first write
     // 该站点已有的记录: 用来判断是覆盖、换扩展名还是首次写入
     const { results: existing } = await env.DB
       .prepare('SELECT src FROM file WHERE deleted_at IS NULL AND src LIKE ?')
@@ -310,6 +376,7 @@ async function storeFavicon(env: Env, host: string, iconUrl: string): Promise<{ 
         .run()
     }
     else if (existing.length > 0) {
+      // The extension changed (say .png before, .ico now): reuse the old row and clean the old object up afterwards
       // 扩展名变了 (例如原来 .png 现在是 .ico): 复用旧行, 旧对象稍后清掉
       await env.DB
         .prepare('UPDATE file SET src = ?, ext = ?, updated_at = datetime(\'now\') WHERE src = ?')
@@ -323,6 +390,10 @@ async function storeFavicon(env: Env, host: string, iconUrl: string): Promise<{ 
         .run()
     }
 
+    // Clean up the stale object left behind by an extension change.
+    // Two guards: nothing is deleted while automatic reclamation is off, and nothing is deleted while the old icon
+    // is still referenced by an item / the background / the avatar (otherwise an icon in use would start returning 404).
+    //
     // 清掉扩展名变化后残留的旧对象
     // 两个保护: 关掉自动回收时不删; 旧图标仍被项目/背景/头像引用时不删 (否则在用图标会变 404)
     const autoClean = await getAutoCleanUnused(env.DB)
@@ -342,14 +413,24 @@ async function storeFavicon(env: Env, host: string, iconUrl: string): Promise<{ 
     return { iconUrl: `uploads/${key}` }
   }
   catch (err) {
-    return { error: (err as Error).message }
+    // V-04 (see docs/security.md §3): the raw R2/D1 message used to be forwarded verbatim; the log keeps it,
+    // the caller gets a generic sentence that names the step instead of the storage internals.
+    //
+    // V-04 (见 docs/security.md §3): 原先会把 R2/D1 的原始信息原样转发; 现在日志保留细节,
+    // 调用方只拿到一句指明步骤的通用文案, 不含存储内部信息。
+    logInternalError('favicon/store', err)
+    return { error: 'store favicon error' }
   }
 }
 
+// Fetch a site icon: download it and store it in R2 (so manual uploads and fetched icons live in the same place).
+// Kept for old frontends/scripts: internally it is "first candidate + store"; for multi-candidate selection use
+// getSiteFaviconCandidates to fetch the list and then saveSiteFavicon to store the chosen one.
+//
 // 获取站点图标: 抓取后下载并保存至 R2 (与手动上传的图标统一存储在 R2)
 // 兼容旧前端/脚本: 内部 = 候选第一条 + 保存; 需要多候选选择时改用
 // getSiteFaviconCandidates 拿列表 → saveSiteFavicon 保存选中项
-app.post('/itemIcon/getSiteFavicon', authMiddleware(), async (c) => {
+app.post('/itemIcon/getSiteFavicon', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware(), async (c) => {
   const body = await c.req.json<{ url?: string }>().catch(() => null)
   const url = typeof body?.url === 'string' ? body.url.trim() : ''
   if (!url)
@@ -374,20 +455,23 @@ app.post('/itemIcon/getSiteFavicon', authMiddleware(), async (c) => {
   return successData(c, { iconUrl: saved.iconUrl })
 })
 
+// Fetch the site icon candidates (one fetch returns several entries; the frontend shows a dialog when there are ≥2)
 // 获取站点图标候选列表 (一次抓取返回多条, 前端在 ≥2 个候选时弹窗让用户选一张)
-app.post('/itemIcon/getSiteFaviconCandidates', authMiddleware(), async (c) => {
+app.post('/itemIcon/getSiteFaviconCandidates', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware(), async (c) => {
   const body = await c.req.json<{ url?: string }>().catch(() => null)
   const url = typeof body?.url === 'string' ? body.url.trim() : ''
   if (!url)
     return errorByCode(c, 1400)
 
+  // No candidates (including an invalid url / an unreachable page) returns an empty array instead of an error; the frontend shows a uniform "fetch failed"
   // 无候选 (含 url 非法/页面抓不到) 返回空数组而不是报错, 由前端统一提示「获取失败」
   const candidates = await getSiteFaviconCandidates(url)
   return successData(c, { candidates })
 })
 
+// Store the site icon the user picked (download → content validation → R2 overwrite → file row UPSERT → reclaim the old-extension object)
 // 保存用户选中的站点图标 (下载 → 内容校验 → R2 覆盖写 → file 行 UPSERT → 旧扩展名对象回收)
-app.post('/itemIcon/saveSiteFavicon', authMiddleware(), async (c) => {
+app.post('/itemIcon/saveSiteFavicon', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware(), async (c) => {
   const body = await c.req.json<{ url?: string; pageUrl?: string }>().catch(() => null)
   const iconUrl = typeof body?.url === 'string' ? body.url.trim() : ''
   const pageUrl = typeof body?.pageUrl === 'string' ? body.pageUrl.trim() : ''
@@ -402,6 +486,7 @@ app.post('/itemIcon/saveSiteFavicon', authMiddleware(), async (c) => {
     return error(c, 'acquisition failed: invalid url')
   }
 
+  // Only images that pass content validation are stored (a failed download / non-image / oversized body all return an error); arbitrary URL proxying is never done
   // 只保存内容校验通过的图片 (下载失败/非图片/超限都会返回 error), 不做任意 URL 代理
   const saved = await storeFavicon(c.env, parsed.host, iconUrl)
   if ('error' in saved)

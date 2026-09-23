@@ -9,6 +9,13 @@ import {
 } from '../src/utils/authEpoch'
 
 /**
+ * Self-check for the token generation (§3.3)
+ *
+ * With a stateless JWT the price is "once issued it cannot be taken back": after a password change or a
+ * logout-everywhere the old token stays valid until it expires. This verifies that the generation number can
+ * kill an old token immediately while the in-process cache does not kill a freshly issued one.
+ *
+ *
  * token 世代 (§3.3) 自检
  *
  * JWT 无状态时代价是「签出去就收不回」: 改密/退出所有设备后旧 token 仍有效直到过期。
@@ -31,6 +38,7 @@ function eq(label: string, actual: unknown, expected: unknown) {
   }
 }
 
+// ===================== Generation comparison (pure function) =====================
 // ===================== 世代比较 (纯函数) =====================
 
 console.log('== isTokenEpochStale ==')
@@ -41,6 +49,7 @@ eq('比当前新 -> 有效 (缓存滞后时不误杀新 token)', isTokenEpochSta
 eq('非法值按 0 处理', isTokenEpochStale('x', 1), true)
 eq('NaN 按 0 处理', isTokenEpochStale(Number.NaN, 1), true)
 
+// ===================== Generation read/write and caching =====================
 // ===================== 世代读写与缓存 =====================
 
 let stored: string | null = null
@@ -58,6 +67,7 @@ const db = {
           async run() {
             queries++
             const [, initial] = args as [string, string]
+            // Mirrors the SQL's ON CONFLICT ... CAST(config_value AS INTEGER) + 1
             // 对应 SQL 里的 ON CONFLICT ... CAST(config_value AS INTEGER) + 1
             stored = stored === null ? initial : String(Number(stored) + 1)
             return { success: true }
@@ -86,6 +96,9 @@ console.log('== bumpAuthEpoch ==')
 clearAuthEpochCache()
 stored = null
 const bumped1 = await bumpAuthEpoch(db)
+// Key regression: a missing row means "the default generation", so the first bump must step past it,
+// otherwise a token signed with the default generation would still be valid (= revocation does not work).
+//
 // 关键回归: 记录不存在时代表「默认世代」, 首次递增必须跨过它,
 // 否则用默认世代签发的 token 依旧有效 (= 吊销失效)
 eq('首次递增必须大于默认世代', bumped1 > DEFAULT_AUTH_EPOCH, true)
@@ -94,6 +107,7 @@ eq('默认世代签发的 token 立刻失效', isTokenEpochStale(DEFAULT_AUTH_EP
 eq('再次递增 +1', await bumpAuthEpoch(db), bumped1 + 1)
 eq('递增后缓存立即生效', await getAuthEpoch(db), bumped1 + 1)
 
+// ===================== JWT generation round-trip =====================
 // ===================== JWT 世代往返 =====================
 
 console.log('== JWT 往返 ==')
@@ -110,6 +124,7 @@ const ttlHours = ((claims.exp ?? 0) - (claims.iat ?? 0)) / 3600
 eq('有效期 72 小时', ttlHours, 72)
 eq('TTL 常量', TOKEN_TTL, '72h')
 
+// Simulates a token issued before this change (no epoch field)
 // 模拟改动前签发的旧 token (没有 epoch 字段)
 const legacyToken = await new SignJWT({ uid: 1, role: 1 })
   .setProtectedHeader({ alg: 'HS256' })

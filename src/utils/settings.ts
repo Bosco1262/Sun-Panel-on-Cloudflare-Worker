@@ -1,14 +1,26 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import type { UserInfo } from '../types'
 
+// ===================== system_setting keys =====================
 // ===================== system_setting 键名 =====================
 export const SETTING_ADMIN_USERNAME = 'admin_username'
 export const SETTING_ADMIN_PASSWORD = 'admin_password'
 export const SETTING_ADMIN_NAME = 'admin_name'
 export const SETTING_ADMIN_HEAD_IMAGE = 'admin_head_image'
-/** token 世代: 递增即让此前签发的所有 JWT 失效 (见 src/utils/authEpoch.ts) */
+/**
+ * Token generation: bumping it invalidates every JWT issued before (see src/utils/authEpoch.ts)
+ *
+ * token 世代: 递增即让此前签发的所有 JWT 失效 (见 src/utils/authEpoch.ts)
+ */
 export const SETTING_AUTH_EPOCH = 'auth_epoch'
 /**
+ * Whether deleting an item/group automatically reclaims images that are no longer referenced
+ *
+ * Stored as '1' / '0'; a missing key counts as **on** (the behaviour before this switch existed).
+ * When off, deletes never touch R2: the images stay in the upload-file manager, can be reused, and
+ * "Clean unused files" is there for manual work.
+ *
+ *
  * 删除项目/分组时是否自动回收不再被引用的图片
  *
  * 存 '1' / '0'; 键不存在时按**开启**处理 (与加这个开关之前的行为一致)。
@@ -16,6 +28,12 @@ export const SETTING_AUTH_EPOCH = 'auth_epoch'
  */
 export const SETTING_AUTO_CLEAN_UNUSED = 'storage_auto_clean_unused'
 /**
+ * Custom CSS / JS (injected globally)
+ *
+ * These live here instead of the api layer because the reference check (src/utils/uploadRefs.ts) reads both keys
+ * as well; keeping the constants in utils avoids a utils ↔ api circular dependency.
+ *
+ *
  * 自定义 CSS / JS (全局设置注入)
  *
  * 放在这里而不是 api 层: 引用检查 (src/utils/uploadRefs.ts) 也要读这两个键,
@@ -42,6 +60,7 @@ export async function setSetting(db: D1Database, name: string, value: string): P
     .run()
 }
 
+// Read the current user profile (single-user mode: id is fixed at 1)
 // 读取当前用户资料 (单用户模式: 固定 id=1)
 export async function getUserProfile(db: D1Database, uid = 1): Promise<UserInfo> {
   const [username, name, headImage] = await Promise.all([
@@ -58,9 +77,14 @@ export async function getUserProfile(db: D1Database, uid = 1): Promise<UserInfo>
   }
 }
 
+// ===================== Boolean settings =====================
 // ===================== 布尔型设置 =====================
 
-/** 解析布尔设置值 ('0' / 'false' / 'off' 视为关, 其余非空值视为开) */
+/**
+ * Parses a boolean setting value ('0' / 'false' / 'off' mean off, any other non-empty value means on)
+ *
+ * 解析布尔设置值 ('0' / 'false' / 'off' 视为关, 其余非空值视为开)
+ */
 export function parseBoolSetting(value: string | null | undefined): boolean | null {
   if (value === null || value === undefined || value === '')
     return null
@@ -69,6 +93,12 @@ export function parseBoolSetting(value: string | null | undefined): boolean | nu
 }
 
 /**
+ * Whether "automatically reclaim unreferenced images on delete" is on (on by default)
+ *
+ * An unreadable setting returns **false** — the error direction on this side must stay conservative: one
+ * skipped deletion only leaves a file behind, while a wrong deletion removes images the user has not reused yet.
+ *
+ *
  * 「删除时自动回收未引用图片」是否开启 (默认开)
  *
  * 读不到设置时按**关闭**返回 —— 这一侧的错误方向要偏保守: 少删一次只是残留文件,

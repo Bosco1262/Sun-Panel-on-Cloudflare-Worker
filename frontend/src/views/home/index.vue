@@ -47,15 +47,30 @@ const currentAddItenIconGroupId = ref<number | undefined>()
 const settingModalShow = ref(false)
 
 const items = ref<ItemGroup[]>([])
-/** 搜索框里的关键词: 面板过滤的唯一数据源 (由搜索框的 itemSearch 事件写入) */
+/**
+ * Keyword from the search box: the single source for panel filtering (written by the search box's itemSearch event)
+ *
+ * 搜索框里的关键词: 面板过滤的唯一数据源 (由搜索框的 itemSearch 事件写入)
+ */
 const filterKeyword = ref('')
 
-/** 是否按关键词过滤面板 (风格设置里关闭「允许搜索栏搜索项目」或关键词为空时不生效) */
+/**
+ * Whether the panel is filtered by the keyword (inactive when "allow the search bar to search items" is off in Style Settings, or the keyword is empty)
+ *
+ * 是否按关键词过滤面板 (风格设置里关闭「允许搜索栏搜索项目」或关键词为空时不生效)
+ */
 const isFiltering = computed(() =>
   filterKeyword.value.trim() !== '' && panelState.panelConfig.searchBoxSearchIcon === true,
 )
 
 /**
+ * Group views used for rendering
+ *
+ * A view element carries the **original group object** and interaction callbacks modify it directly. After
+ * filtering, the indexes of matching groups shift, and the old implementation wrote items.value back by index,
+ * which made hover / sorting act on a different group.
+ *
+ *
  * 渲染用的分组视图
  *
  * 视图元素携带的是**原始分组对象**, 交互回调直接改它。
@@ -63,12 +78,20 @@ const isFiltering = computed(() =>
  */
 const filterItems = computed(() => buildItemGroupViews(items.value, filterKeyword.value, isFiltering.value))
 
-/** 过滤提示用: 命中项目数 */
+/**
+ * For the filter hint: number of matching items
+ *
+ * 过滤提示用: 命中项目数
+ */
 const filteredItemCount = computed(() =>
   filterItems.value.reduce((total, view) => total + (view.items?.length ?? 0), 0),
 )
 
-/** 壁纸样式: 地址为空时不拼 `url()` 空值, 直接交给底层默认背景 */
+/**
+ * Wallpaper style: with an empty URL no empty `url()` is built, the underlying default background is used instead
+ *
+ * 壁纸样式: 地址为空时不拼 `url()` 空值, 直接交给底层默认背景
+ */
 const coverStyle = computed(() => {
   const src = panelState.panelConfig.backgroundImageSrc?.trim()
   return {
@@ -100,12 +123,16 @@ function openPage(openMethod: number, url: string, title?: string) {
 }
 
 function handleItemClick(group: ItemGroup, item: Panel.ItemInfo) {
+  // Clicking an item in sort mode means editing that item
   // 排序模式下点击项目 = 编辑该项目
   if (group.sortStatus) {
     handleEditItem(item)
     return
   }
 
+  // In LAN mode lanUrl wins, but it may be empty/unset (the DB column can be null), so falling back to url is
+  // mandatory — otherwise jumpUrl is undefined and the browser navigates to /undefined.
+  //
   // 内网模式下优先 lanUrl, 但 lanUrl 可能为空/未设置 (DB 列可为 null), 必须回退到 url,
   // 否则 jumpUrl 是 undefined, 会跳到 /undefined
   const preferLan = panelState.networkMode === PanelStateNetworkModeEnum.lan
@@ -119,8 +146,10 @@ function handWindowIframeIdLoad(_event: Event) {
 }
 
 function getList() {
+  // Groups and items are fetched in one call (the old flow was "query the groups, then query each group's items" = 1+N Worker requests)
   // 分组 + 项目一次取回 (旧流程是「先查分组, 再逐个分组查项目」= 1+N 次 Worker 请求)
   getGroupListWithItems<Common.ListResponse<ItemGroup[]>>().then(({ code, data }) => {
+    // When not logged in / not permitted the interceptor already redirected to the login page, so return here to avoid reading undefined
     // 未登录/无权限时拦截器已跳转登录页，此处直接返回避免读取 undefined
     if (code !== 0 || !data?.list)
       return
@@ -129,6 +158,7 @@ function getList() {
   }).catch(() => ms.error(t('panelHome.getListFail')))
 }
 
+// Fetches the icons of a group from the backend (the group is located by id, not by array index, so filtering cannot mix groups up)
 // 从后端获取组下面的图标 (按 id 定位分组, 不依赖数组下标, 过滤时也不会串组)
 function updateItemIconGroupByNet(group: ItemGroup) {
   const groupId = group.id
@@ -147,6 +177,7 @@ function updateItemIconGroupByNet(group: ItemGroup) {
 function handleRightMenuSelect(key: string | number) {
   dropdownShow.value = false
   const target = currentRightSelectItem.value
+  // Same as handleItemClick: fall back step by step when the candidate URL is empty, so window.open(undefined) never happens
   // 同 handleItemClick: 候选地址为空时逐级回退, 避免 window.open(undefined)
   const preferLan = panelState.networkMode === PanelStateNetworkModeEnum.lan
   const jumpUrl = (preferLan ? (target?.lanUrl || target?.url) : (target?.url || target?.lanUrl)) || ''
@@ -164,6 +195,7 @@ function handleRightMenuSelect(key: string | number) {
         openPage(currentRightSelectItem.value?.openMethod, currentRightSelectItem.value.lanUrl, currentRightSelectItem.value?.title)
       break
     case 'edit':
+      // Odd behaviour worth marking: without the { ... } spread the parent's value is modified in place
       // 这里有个奇怪的问题，如果不使用{...}的方式 父组件的值会同步修改 标记一下
       handleEditItem({ ...currentRightSelectItem.value } as Panel.ItemInfo)
       break
@@ -193,6 +225,7 @@ function handleRightMenuSelect(key: string | number) {
 }
 
 function handleContextMenu(e: MouseEvent, group: ItemGroup, item: Panel.ItemInfo) {
+  // No context menu in sort mode
   // 排序模式下不弹右键菜单
   if (group.sortStatus)
     return
@@ -237,6 +270,7 @@ function handleSaveSort(itemGroup: ItemGroup) {
 
     saveSort({ itemIconGroupId: itemGroup.id as number, sortItems: saveItems }).then(({ code, msg }) => {
       if (code === 0) {
+        // Sync the local sort: drag keys use id while the order depends on sort, so without syncing the next save would write back the old value
         // 同步本地 sort: 拖拽 key 用 id, 但顺序依赖 sort; 不同步会让下次保存写回旧值
         itemGroup.items?.forEach((element, i) => {
           element.sort = i + 1
@@ -248,6 +282,7 @@ function handleSaveSort(itemGroup: ItemGroup) {
         ms.error(`${t('common.saveFail')}:${msg}`)
       }
     }).catch(() => {
+      // Refresh back to the server order after a failed save, so the UI does not stay inconsistent with the backend
       // 保存失败时刷新回服务端顺序, 避免界面与后端长期不一致
       ms.error(t('common.saveFail'))
       getList()
@@ -292,29 +327,35 @@ function getDropdownMenuOptions() {
 }
 
 onMounted(() => {
+  // Update the user information
   // 更新用户信息
   updateLocalUserInfo()
   getList()
 
+  // Sync the cloud config (including the search-engine config); on failure the locally cached config is kept and reported, without affecting panel rendering
   // 更新同步云端配置 (含搜索引擎配置); 失败时保留本地缓存配置并提示, 不影响面板渲染
   panelState.updatePanelConfigByCloud().catch(() => ms.error(t('panelHome.getConfigFail')))
 
+  // Set the title
   // 设置标题
   if (panelState.panelConfig.logoText)
     setTitle(panelState.panelConfig.logoText)
 })
 
+// NBackTop's listen-to needs a stable reference; an inline arrow function is rebuilt on every render and rebinds the listener
 // NBackTop 的 listen-to 需要稳定引用, 内联箭头函数每次渲染都会重建并重新绑定监听
 function getScrollContainer() {
   return scrollContainerRef.value
 }
 
+// Refresh the group data after the system-app dialog closes (group-level card styles and similar may have been modified inside it)
 // 系统应用弹窗关闭后刷新分组数据（分组级卡片样式等可能在弹窗中被修改）
 watch(settingModalShow, (show) => {
   if (!show)
     getList()
 })
 
+// Group-level card style: -1 follows the globals
 // 分组级卡片风格: -1 跟随全局
 function getGroupCardStyle(group: Panel.ItemIconGroup): PanelPanelConfigStyleEnum {
   const style = group.cardStyle ?? -1
@@ -323,16 +364,22 @@ function getGroupCardStyle(group: Panel.ItemIconGroup): PanelPanelConfigStyleEnu
   return style as PanelPanelConfigStyleEnum
 }
 
+// Group-level text colour: empty = follow the globals
 // 分组级文字颜色: 空 = 跟随全局
 function getGroupTextColor(group: Panel.ItemIconGroup): string {
   return group.textColor || panelState.panelConfig.iconTextColor || '#ffffff'
 }
 
+// Group-level hide description: hidden when either this or the global setting is on
 // 分组级隐藏描述: 与全局设置任一开启即隐藏
 function getGroupHideDescription(group: Panel.ItemIconGroup): boolean {
   return group.hideDescription === 1 || panelState.panelConfig.iconTextInfoHideDescription === true
 }
 
+// Search-box input: only the keyword is recorded, the filtered result is derived by the filterItems computed
+// (the old implementation shallow-copied here and wrote back by index, so after filtering the shifted indexes made
+// hover / sorting act on a different group)
+//
 // 搜索框输入: 只记录关键词, 过滤结果由 filterItems 计算属性派生
 // (旧实现在这里做浅拷贝 + 按下标回写, 过滤后下标偏移会把 hover / 排序作用到别的分组)
 function itemFrontEndSearch(keyword?: string) {
@@ -344,6 +391,12 @@ function handleSetHoverStatus(group: ItemGroup, hoverStatus: boolean) {
 }
 
 /**
+ * Toggles a group's sort mode
+ *
+ * It is ignored while filtering: dragging would only affect the matching subset and saving the order would corrupt
+ * the full list. Entering filter mode also exits every sort mode on purpose (see the watch below).
+ *
+ *
  * 切换分组的排序模式
  *
  * 过滤中直接忽略: 此时拖拽只作用于命中的子集, 保存排序会把完整列表的顺序写坏。
@@ -355,11 +408,13 @@ function handleSetSortStatus(group: ItemGroup) {
 
   group.sortStatus = !group.sortStatus
 
+  // Leaving sort mode without saving: re-fetch the group and discard the local drag order
   // 未保存就退出排序: 重新拉取该组, 丢弃本地拖拽顺序
   if (!group.sortStatus)
     updateItemIconGroupByNet(group)
 }
 
+// As soon as filtering starts, exit every group's sort mode (the filtered result is only a subset, so saving its order would corrupt the full order)
 // 一旦进入过滤状态, 退出所有分组的排序模式 (过滤结果只是子集, 排序保存会写坏完整顺序)
 watch(isFiltering, (filtering) => {
   if (!filtering)
@@ -401,6 +456,7 @@ function handleAddItem(itemIconGroupId?: number) {
           maxWidth: (panelState.panelConfig.maxWidth ?? '1200') + panelState.panelConfig.maxWidthUnit,
         }"
       >
+        <!-- Header -->
         <!-- 头 -->
         <div class="mx-[auto] w-[80%]">
           <div class="flex mx-[auto] items-center justify-center text-white">
@@ -425,13 +481,16 @@ function handleAddItem(itemIconGroupId?: number) {
           </div>
         </div>
 
+        <!-- App box -->
         <!-- 应用盒子 -->
         <div :style="{ marginLeft: `${panelState.panelConfig.marginX}px`, marginRight: `${panelState.panelConfig.marginX}px` }">
+          <!-- Filter-state hint (shown when "allow the search bar to search items" is on and the search box has a keyword) -->
           <!-- 过滤状态提示 (「允许搜索栏搜索项目」开启且搜索框有关键词时) -->
           <div v-if="isFiltering" class="mt-[30px] ml-[10px] text-sm text-white/80 text-shadow">
             {{ $t('deskModule.searchBox.filteringTip', { keyword: filterKeyword.trim(), count: filteredItemCount }) }}
           </div>
 
+          <!-- Groups stacked vertically: each view carries the original group object, so callbacks no longer look it up by index -->
           <!-- 组纵向排列: view 里带的是原始分组对象, 交互回调不再按下标回查 -->
           <div
             v-for="view in filterItems" :key="view.group.id ?? view.group.title"
@@ -440,6 +499,7 @@ function handleAddItem(itemIconGroupId?: number) {
             @mouseenter="handleSetHoverStatus(view.group, true)"
             @mouseleave="handleSetHoverStatus(view.group, false)"
           >
+            <!-- Group title -->
             <!-- 分组标题 -->
             <div class="text-white text-xl font-extrabold mb-[20px] ml-[10px] flex items-center">
               <span class="group-title text-shadow">
@@ -453,6 +513,7 @@ function handleAddItem(itemIconGroupId?: number) {
                 <span class="mr-2 cursor-pointer" :title="t('common.add')" @click="handleAddItem(view.group.id)">
                   <SvgIcon class="text-white font-xl" icon="typcn:plus" />
                 </span>
+                <!-- No sorting while filtering: dragging would only affect the matching subset and saving would corrupt the full list order -->
                 <!-- 过滤中不提供排序: 拖拽只作用于命中的子集, 保存会把完整列表的顺序写坏 -->
                 <span v-if="!isFiltering" class="mr-2 cursor-pointer " :title="t('common.sort')" @click="handleSetSortStatus(view.group)">
                   <SvgIcon class="text-white font-xl" icon="ri:drag-drop-line" />
@@ -460,6 +521,7 @@ function handleAddItem(itemIconGroupId?: number) {
               </div>
             </div>
 
+            <!-- Detail icons -->
             <!-- 详情图标 -->
             <div v-if="getGroupCardStyle(view.group) === PanelPanelConfigStyleEnum.info">
               <div v-if="view.group.items">
@@ -496,6 +558,7 @@ function handleAddItem(itemIconGroupId?: number) {
               </div>
             </div>
 
+            <!-- APP icon grid box -->
             <!-- APP图标宫型盒子 -->
             <div v-else>
               <div v-if="view.group.items">
@@ -533,6 +596,7 @@ function handleAddItem(itemIconGroupId?: number) {
               </div>
             </div>
 
+            <!-- Edit bar -->
             <!-- 编辑栏 -->
             <div v-if="view.group.sortStatus" class="flex mt-[10px]">
               <div>
@@ -548,6 +612,7 @@ function handleAddItem(itemIconGroupId?: number) {
             </div>
           </div>
 
+          <!-- Nothing matched after filtering -->
           <!-- 过滤后一个都没命中 -->
           <div v-if="isFiltering && filterItems.length === 0" class="mt-[50px] ml-[10px] text-white/80 text-shadow">
             {{ $t('deskModule.searchBox.filteringEmptyTip', { keyword: filterKeyword.trim() }) }}
@@ -557,15 +622,18 @@ function handleAddItem(itemIconGroupId?: number) {
       </div>
     </div>
 
+    <!-- Context menu -->
     <!-- 右键菜单 -->
     <NDropdown
       placement="bottom-start" trigger="manual" :x="dropdownMenuX" :y="dropdownMenuY"
       :options="getDropdownMenuOptions()" :show="dropdownShow" :on-clickoutside="onClickoutside" @select="handleRightMenuSelect"
     />
 
+    <!-- Floating buttons -->
     <!-- 悬浮按钮 -->
     <div class="fixed-element fixed-element-shadow">
       <NButtonGroup vertical>
+        <!-- Network-mode switch button group -->
         <!-- 网络模式切换按钮组 -->
         <NButton
           v-if="panelState.networkMode === PanelStateNetworkModeEnum.lan && panelState.panelConfig.netModeChangeButtonShow" color="#2a2a2a6b"
@@ -618,6 +686,7 @@ function handleAddItem(itemIconGroupId?: number) {
 
     <EditItem v-model:visible="editItemInfoShow" :item-info="editItemInfoData" :item-group-id="currentAddItenIconGroupId" @done="handleEditSuccess" />
 
+    <!-- Dialog -->
     <!-- 弹窗 -->
     <NModal
       v-model:show="windowShow" :mask-closable="false" preset="card"
@@ -687,16 +756,26 @@ html {
 
 .fixed-element {
   position: fixed;
-  /* 将元素固定在屏幕上 */
+  /* Fix the element on screen
+     将元素固定在屏幕上 */
   right: 10px;
-  /* 距离屏幕顶部的距离 */
+  /* Distance from the top of the screen
+     距离屏幕顶部的距离 */
   bottom: 50px;
-  /* 距离屏幕左侧的距离 */
-  /* 与按钮组外圈的圆角保持一致, 否则阴影会在四个角露出方角 */
+  /* Distance from the left of the screen
+     距离屏幕左侧的距离 */
+  /* Match the border radius of the button group, otherwise the shadow shows square corners
+     与按钮组外圈的圆角保持一致, 否则阴影会在四个角露出方角 */
   border-radius: 3px;
 }
 
 /*
+ * Shadow of the floating buttons
+ * box-shadow is not used: it is painted along the container's rectangular box while the button group has round
+ * corners, which leaves a few opaque pixels in the corners; drop-shadow follows the actually rendered outline, so
+ * the corners stay clean.
+ *
+ *
  * 悬浮按钮的投影
  * 不用 box-shadow: 它按容器的矩形外框绘制, 而按钮组的四个角是圆的,
  * 会在四角留下一小片不透明像素; drop-shadow 按实际渲染出的圆角轮廓绘制, 四角始终干净。

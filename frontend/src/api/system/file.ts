@@ -13,7 +13,11 @@ export function deletes<T>(ids: number[]) {
   })
 }
 
-/** 清理未被引用的文件 (R2 对象 + file 记录) */
+/**
+ * Cleans up unreferenced files (R2 objects + file records)
+ *
+ * 清理未被引用的文件 (R2 对象 + file 记录)
+ */
 export function cleanUnused<T>() {
   return post<T>({
     url: '/file/cleanUnused',

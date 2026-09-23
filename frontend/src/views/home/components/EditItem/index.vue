@@ -26,9 +26,11 @@ const itemIconGroupOptions = ref<{
   value: number
 }[]>([])
 
+// "More options" collapse area (aligned with upstream: card background colour / group / unique identifier, without the card type)
 // 更多选项折叠区 (对齐上游: 卡片背景色 / 分组 / 唯一标识, 不含卡片类型)
 const showMoreOptions = ref(false)
 
+// Live preview (aligned with upstream: the preview sits above the form and does not scroll with it)
 // 效果预览 (对齐上游: 预览区固定在表单上方, 不随表单滚动)
 const previewShow = ref(true)
 const canvasTransparent = ref(false)
@@ -86,6 +88,7 @@ const options = [
   },
 ]
 
+// Write the value back to the parent's prop
 // 更新值父组件传来的值
 const show = computed({
   get: () => props.visible,
@@ -94,6 +97,7 @@ const show = computed({
   },
 })
 
+// Complete item information for the preview (title / description follow the form live)
 // 预览用的完整项目信息 (标题/描述实时跟随表单)
 const previewItemInfo = computed<Panel.ItemInfo>(() => ({
   icon: model.value.icon,
@@ -103,6 +107,7 @@ const previewItemInfo = computed<Panel.ItemInfo>(() => ({
   openMethod: 1,
 }))
 
+// Card background colour (aligned with upstream: #2a2a2a6b by default)
 // 卡片背景色 (对齐上游: 默认 #2a2a2a6b)
 const defaultBackground = '#2a2a2a6b'
 const backgroundColorValue = computed<string>({
@@ -115,6 +120,7 @@ const backgroundColorValue = computed<string>({
   },
 })
 
+// URL scheme hint (aligned with upstream's urlNoHttpStartWarn)
 // 地址协议提醒 (对齐上游 urlNoHttpStartWarn)
 function isNonHttpUrl(url?: string) {
   return !!url && !/^https?:\/\//i.test(url)
@@ -122,6 +128,7 @@ function isNonHttpUrl(url?: string) {
 const showUrlWarn = computed(() => isNonHttpUrl(model.value.url))
 const showLanUrlWarn = computed(() => isNonHttpUrl(model.value.lanUrl))
 
+// The unique identifier accepts only letters, digits, underscores and hyphens
 // 唯一标识仅允许英文/数字/下划线/中划线
 watch(() => model.value.onlyName, (v) => {
   if (v && /[^A-Za-z0-9_-]/.test(v))
@@ -151,6 +158,7 @@ async function editApi() {
   submitLoading.value = false
 }
 
+// Icon validity check (aligned with upstream's selectOneIcon)
 // 图标有效性校验 (对齐上游 selectOneIcon)
 function validateIcon(): boolean {
   const icon = model.value.icon
@@ -176,8 +184,10 @@ const handleValidateButtonClick = (e: MouseEvent) => {
   })
 }
 
+// ===================== Fetching site icons =====================
 // ===================== 获取站点图标 =====================
 
+// One fetch returns the candidate list: a single candidate is stored directly; with ≥2 a dialog picks one (only the chosen one is stored)
 // 一次抓取返回候选列表: 1 个直接保存; ≥2 个弹窗选一张 (只保存选中的)
 const faviconPickerVisible = ref(false)
 const faviconCandidates = ref<Panel.FaviconCandidate[]>([])
@@ -199,6 +209,7 @@ async function getIconByUrl(url: string, loadingIndex: number) {
       return
     }
 
+    // A single candidate keeps the one-click flow; several candidates open the picker dialog
     // 1 个候选保持「一键获取」; 多个候选弹窗让用户选一张
     if (candidates.length === 1) {
       await saveFavicon(candidates[0], url)
@@ -217,6 +228,7 @@ async function getIconByUrl(url: string, loadingIndex: number) {
   }
 }
 
+// Save the choice made in the dialog (the dialog stays open on failure so another image can be picked)
 // 弹窗选中后保存 (保存失败时保持弹窗打开, 可换一张重试)
 async function handleFaviconSelected(candidate: Panel.FaviconCandidate) {
   const ok = await saveFavicon(candidate, faviconPageUrl.value)
@@ -247,6 +259,7 @@ async function saveFavicon(candidate: Panel.FaviconCandidate, pageUrl: string): 
 }
 
 watch(() => props.visible, (newValue) => {
+  // Initialise / fetch data only when opening; the old implementation sent one more group-list request when closing the dialog
   // 只在打开时初始化/拉取数据; 旧实现在关闭弹窗时也会多发一次分组列表请求
   if (newValue !== true)
     return
@@ -270,6 +283,7 @@ function getGroupListOptions() {
 
     for (let i = 0; i < data.list.length; i++) {
       const element = data.list[i]
+      // With no group specified the first one is used (the old code wrote back to a module-level restoreDefault, which is a side effect)
       // 未指定分组时默认落到第一个分组 (不再回写模块级 restoreDefault, 避免副作用)
       if (i === 0 && !model.value.itemIconGroupId)
         model.value.itemIconGroupId = element.id
@@ -285,6 +299,7 @@ function getGroupListOptions() {
 
 <template>
   <NModal v-model:show="show" preset="card" size="small" style="width: 600px;border-radius: 1rem;" :title="itemInfo?.id ? t('iconItem.edit') : t('iconItem.add')">
+    <!-- Live preview (aligned with upstream: fixed above the form; small-icon text is always black) -->
     <!-- 效果预览 (对齐上游: 固定在表单上方; 小图标文字固定为黑色) -->
     <div class="mb-2">
       <span class="flex mb-1">
@@ -302,6 +317,7 @@ function getGroupListOptions() {
       >
         <div class="flex justify-center p-2">
           <div class="w-[210px] mr-4 z-[-1]">
+            <!-- cardStyle: 0 = bar (detail) / 1 = square (small icon) -->
             <!-- cardStyle: 0=长条形(详情) / 1=正方形(小图标) -->
             <AppIcon
               :item-info="previewItemInfo"
@@ -325,6 +341,7 @@ function getGroupListOptions() {
 
     <div class="h-[500px] overflow-auto p-[5px]">
       <NForm ref="formRef" :model="model" :rules="rules" size="small" label-placement="top">
+        <!-- Icon (the icon style + preview switches live in the label, the editor is the body) -->
         <!-- 图标（图标风格 + 预览开关在 label, 编辑器为主体） -->
         <NFormItem path="icon">
           <template #label>
@@ -342,6 +359,7 @@ function getGroupListOptions() {
           <IconEditor v-model:item-icon="model.icon" class="w-full" />
         </NFormItem>
 
+        <!-- Title / description -->
         <!-- 标题 / 描述信息 -->
         <NGrid cols="2" :x-gap="10" item-responsive>
           <NGridItem span="2 500:1">
@@ -362,6 +380,7 @@ function getGroupListOptions() {
           </NGridItem>
         </NGrid>
 
+        <!-- Default URL -->
         <!-- 默认地址 -->
         <NFormItem path="url">
           <template #label>
@@ -378,6 +397,7 @@ function getGroupListOptions() {
           {{ $t('iconItem.urlNoHttpStartWarn') }}
         </NAlert>
 
+        <!-- LAN URL -->
         <!-- 内网地址 -->
         <NFormItem path="lanUrl">
           <template #label>
@@ -394,6 +414,7 @@ function getGroupListOptions() {
           {{ $t('iconItem.urlNoHttpStartWarn') }}
         </NAlert>
 
+        <!-- Open method -->
         <!-- 打开方式 -->
         <NFormItem path="openMethod">
           <template #label>
@@ -402,8 +423,10 @@ function getGroupListOptions() {
           <NSelect v-model:value="model.openMethod" :options="options" />
         </NFormItem>
 
+        <!-- More options (card background colour, group, unique identifier) -->
         <!-- 更多选项 (卡片背景色 , 分组 , 唯一标识) -->
         <div v-if="showMoreOptions">
+          <!-- The card background colour and the group each take half the row -->
           <!-- 卡片背景色 / 分组 各占一半 -->
           <NGrid cols="2" :x-gap="10" item-responsive>
             <NGridItem span="2 500:1">
@@ -430,6 +453,7 @@ function getGroupListOptions() {
             </NGridItem>
           </NGrid>
 
+          <!-- Unique identifier -->
           <!-- 唯一标识 -->
           <NFormItem path="onlyName" :show-feedback="false">
             <template #label>
@@ -451,6 +475,7 @@ function getGroupListOptions() {
       </NForm>
     </div>
 
+    <!-- With several candidates, the dialog picks one (and only that one is stored) -->
     <!-- 多候选时弹窗选一张 (只保存选中的这张) -->
     <FaviconPicker
       v-model:visible="faviconPickerVisible"
@@ -470,7 +495,8 @@ function getGroupListOptions() {
 </template>
 
 <style scoped>
-/* 对齐上游: 预览容器层级与暗色模式亮度 */
+/* Aligned with upstream: preview container layering and dark-mode brightness
+   对齐上游: 预览容器层级与暗色模式亮度 */
 .preview-box {
   position: relative;
   z-index: 1;

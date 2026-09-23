@@ -35,6 +35,7 @@ export function saveSort<T>(data: Panel.ItemIconSortRequest) {
   })
 }
 
+// Fetches the site icon candidates (the frontend shows a dialog when there are several)
 // 获取站点图标候选列表 (多候选时前端弹窗选择)
 export function getSiteFaviconCandidates<T>(url: string) {
   return post<T>({
@@ -43,6 +44,7 @@ export function getSiteFaviconCandidates<T>(url: string) {
   })
 }
 
+// Stores the chosen site icon (url = the chosen candidate, pageUrl = the site address the user entered)
 // 保存选中的站点图标 (url = 选中的候选, pageUrl = 用户填写的站点地址)
 export function saveSiteFavicon<T>(url: string, pageUrl: string) {
   return post<T>({

@@ -39,6 +39,7 @@ const loginPost = async () => {
     }
   }
   catch (error) {
+    // Network / server errors are already reported centrally by the request layer
     // 网络/服务端异常已由请求层统一提示
     loading.value = false
     console.error('login failed:', error)
@@ -46,6 +47,7 @@ const loginPost = async () => {
 }
 
 function handleSubmit() {
+  // Triggered by clicking the sign-in button
   // 点击登录按钮触发
   loginPost()
 }
@@ -114,7 +116,8 @@ function handleChangeLanuage(value: Language) {
         background-color: #f2f6ff;
     }
 
-    /* 夜间模式 */
+    /* Dark mode
+       夜间模式 */
     .dark .login-container{
       background-color: rgb(43, 43, 43);
     }

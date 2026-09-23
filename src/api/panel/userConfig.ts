@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { Env } from '../../types'
-import { apiReturn, errorByCode, errorByCodeAndMsg, success, successData } from '../../utils/response'
+import { apiReturn, errorByCode, internalError, success, successData } from '../../utils/response'
+import { REQUEST_BODY_LIMIT, bodyLimit } from '../../utils/bodyLimit'
 import { authMiddleware } from '../../middleware/auth'
 
 const app = new Hono<{ Bindings: Env }>()
@@ -20,8 +21,9 @@ interface UserConfigRow {
   updated_at: string
 }
 
+// Read the panel config (code -1 when there is no row, matching the Go version's ErrorDataNotFound)
 // 获取面板配置 (无记录时返回 code -1, 与 Go 版 ErrorDataNotFound 一致)
-app.post('/userConfig/get', authMiddleware(), async (c) => {
+app.post('/userConfig/get', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware(), async (c) => {
   const row = await c.env.DB
     .prepare('SELECT * FROM user_config WHERE id = 1')
     .first<UserConfigRow>()
@@ -47,10 +49,16 @@ app.post('/userConfig/get', authMiddleware(), async (c) => {
   return successData(c, { panel, searchEngine })
 })
 
+// Save the panel config
+// panel and searchEngine share one row: submitting only one of them keeps the current value of the other, so
+// "changing the style" never wipes the search-engine config (or the other way round).
+//
 // 保存面板配置
 // panel 与 searchEngine 同属一行数据: 只提交其中一个字段时保留另一个字段的原值,
 // 避免「改样式」把搜索引擎配置(或反之)清空
-app.post('/userConfig/set', authMiddleware(), async (c) => {
+// `large`: the whole panel layout (wallpaper URL, footer HTML, every card) travels in a single JSON document
+// large 档: 整个面板布局 (壁纸地址、页脚 HTML、全部卡片) 都在同一个 JSON 文档里
+app.post('/userConfig/set', bodyLimit(REQUEST_BODY_LIMIT.large), authMiddleware(), async (c) => {
   const body = await c.req.json<UserConfigBody>().catch(() => null)
   if (!body || typeof body !== 'object')
     return errorByCode(c, 1400)
@@ -77,7 +85,7 @@ app.post('/userConfig/set', authMiddleware(), async (c) => {
       .run()
   }
   catch (err) {
-    return errorByCodeAndMsg(c, 1200, (err as Error).message)
+    return internalError(c, 1200, 'userConfig/set', err)
   }
 
   return success(c)

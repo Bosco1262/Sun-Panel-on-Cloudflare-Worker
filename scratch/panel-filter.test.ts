@@ -1,6 +1,14 @@
 import { buildItemGroupViews, matchItem } from '../frontend/src/utils/panelFilter/index'
 
 /**
+ * Pure-logic self-check for the home page's "search bar filters items"
+ *
+ * The regression: the old implementation rendered a shallow copy of each matching group and the interaction
+ * callbacks looked the group up in the original array by index, so after filtering the index shifted and
+ * hover / sorting acted on a different group. This is why, besides the match decisions, the check asserts
+ * that the group inside each view is the **original object reference**.
+ *
+ *
  * 首页「搜索栏过滤项目」纯逻辑自检
  *
  * 回归的问题: 旧实现把命中的分组浅拷贝一份渲染, 交互回调再按数组下标回原数组取分组,

@@ -2,9 +2,17 @@ export interface Env {
   DB: D1Database
   FILES: R2Bucket
   JWT_SECRET: string
-  /** 密码哈希用的 pepper (可选): 配置后新密码使用 PBKDF2, 详见 src/utils/password.ts */
+  /**
+   * Pepper used for password hashing (optional): once set, new passwords use PBKDF2, see src/utils/password.ts
+   *
+   * 密码哈希用的 pepper (可选): 配置后新密码使用 PBKDF2, 详见 src/utils/password.ts
+   */
   PASSWORD_PEPPER?: string
-  /** 可选的 PBKDF2 迭代数覆盖值 (默认 5000) */
+  /**
+   * Optional PBKDF2 iteration-count override (default 5000)
+   *
+   * 可选的 PBKDF2 迭代数覆盖值 (默认 5000)
+   */
   PASSWORD_PBKDF2_ITERATIONS?: string
 }
 

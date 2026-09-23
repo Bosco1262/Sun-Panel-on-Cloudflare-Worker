@@ -5,6 +5,7 @@ import { computed, ref, watch } from 'vue'
 interface Props {
   visible: boolean
   candidates: Panel.FaviconCandidate[]
+  // A save request is in flight (controlled by the parent; duplicates and closing are blocked meanwhile)
   // 保存请求进行中 (由父组件控制; 期间禁止重复提交/关闭)
   loading?: boolean
 }
@@ -26,6 +27,7 @@ const show = computed({
 
 const selectedUrl = ref('')
 
+// An https page loading an http image is blocked by the browser (mixed content), so such candidates are marked "insecure" and disabled
 // https 页面加载 http 图片会被浏览器拦 (混合内容): 这类候选标注「不安全」并置灰
 function isInsecure(candidate: Panel.FaviconCandidate): boolean {
   return window.location.protocol === 'https:' && candidate.url.startsWith('http://')
@@ -53,10 +55,12 @@ function handleConfirm() {
   const candidate = props.candidates.find(item => item.url === selectedUrl.value)
   if (!candidate)
     return
+  // The parent closes the dialog after a successful save (it stays open on failure, so another image can be picked or the save retried)
   // 由父组件保存成功后关闭弹窗 (失败时保持打开, 可换一张或重试)
   emit('selected', candidate)
 }
 
+// The selection resets every time the dialog is opened
 // 每次开关都重置选中状态
 watch(() => props.visible, () => {
   selectedUrl.value = ''
@@ -154,7 +158,8 @@ watch(() => props.visible, () => {
 </template>
 
 <style scoped>
-/* 对齐 GalleryPicker: 卡片内容居中, 网格容器 */
+/* Aligned with GalleryPicker: centred card content in a grid container
+   对齐 GalleryPicker: 卡片内容居中, 网格容器 */
 .img-card {
   display: flex;
   justify-content: center;

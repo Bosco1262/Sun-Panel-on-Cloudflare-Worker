@@ -1,4 +1,10 @@
-/** @type {import('tailwindcss').Config} */
+/**
+ * Tailwind CSS config
+ *
+ * Tailwind CSS 配置
+ *
+ * @type {import('tailwindcss').Config}
+ */
 module.exports = {
   darkMode: 'class',
   content: [

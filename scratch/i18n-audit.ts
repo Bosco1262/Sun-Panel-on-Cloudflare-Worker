@@ -4,6 +4,15 @@ import enUS from '../frontend/src/locales/en-US.json'
 import zhCN from '../frontend/src/locales/zh-CN.json'
 
 /**
+ * i18n key usage audit
+ *
+ * 1. collects every literal t(...) / $t(...) key in the source
+ * 2. compares them against zh-CN.json / en-US.json to find
+ *    - missing keys (the raw key would be shown to the user)
+ *    - keys present on only one side
+ *    - dead strings that no code references any more
+ *
+ *
  * i18n key 使用审计
  *
  * 1. 收集源码里所有 t(...) / $t(...) 的字面量 key
@@ -37,6 +46,7 @@ function flatten(obj: Record<string, unknown>, prefix = '', out = new Set<string
   return out
 }
 
+// Keys appearing in the source (including t('x') / $t('x') / t(`x`); dynamic concatenations such as apiErrorCode are handled separately)
 // 源码里出现的 key（含 t('x') / $t('x') / t(`x`) 与 apiErrorCode 这种动态拼接的部分单独处理）
 const KEY_CALL = /(?<![\w.])\$?t\(\s*['"`]([^'"`$]+)['"`]/g
 const used = new Map<string, string[]>()
@@ -54,6 +64,7 @@ for (const file of walk(SRC_DIR)) {
       list.push(rel)
     used.set(key, list)
   }
+  // Count template-string calls, whose keys cannot be resolved statically
   // 记录模板字符串拼接的调用, 这类 key 无法静态解析
   dynamicCallCount += (code.match(/\$?t\(\s*`[^`]*\$\{/g) ?? []).length
 }
@@ -67,6 +78,15 @@ const onlyZh = [...zh].filter(k => !en.has(k)).sort()
 const onlyEn = [...en].filter(k => !zh.has(k)).sort()
 
 /**
+ * Whitelist: strings used through "dynamic keys" that static analysis cannot resolve
+ *
+ * - apiErrorCode.*        → the request layer's t(`apiErrorCode.${code}`)
+ * - searchEngine validation messages → validateSearchEngine returns a key, the caller does t(result.titleError)
+ *
+ * These keys must be kept, otherwise the UI falls back to showing the raw key (exactly what this script was
+ * introduced to prevent).
+ *
+ *
  * 白名单: 通过「动态 key」使用、静态分析无法解析的文案
  *
  * - apiErrorCode.*       → 请求层 t(`apiErrorCode.${code}`)
@@ -83,11 +103,13 @@ function isWhitelisted(key: string): boolean {
   return DYNAMIC_KEY_WHITELIST.some(re => re.test(key))
 }
 
+// Dead strings: present on both sides but referenced nowhere in the code (the dynamic-key whitelist is excluded)
 // 死文案: 两侧都有, 但代码里没有任何引用 (排除动态 key 白名单)
 const unusedAll = [...zh].filter(k => !used.has(k)).sort()
 const unused = unusedAll.filter(k => !isWhitelisted(k))
 const whitelisted = unusedAll.filter(isWhitelisted)
 
+// Details of the searchBox / searchEngine namespaces
 // searchBox / searchEngine 两个命名空间的明细
 function ns(prefix: string) {
   const all = [...zh].filter(k => k.startsWith(prefix))

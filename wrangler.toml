@@ -2,19 +2,45 @@ name = "sun-panel-on-cloudflare-worker"
 main = "src/index.ts"
 compatibility_date = "2025-12-01"
 
+# workers.dev main route is the current (and only) access entry; declared explicitly to prevent
+# accidental removal — note that disabling it in the Dashboard alone gets overridden on the next deploy.
+#
+# workers.dev 主路由是当前唯一访问入口；显式声明以防误关——仅在 Dashboard 里禁用是无效的，
+# 下一次 wrangler 部署会按本配置重新启用。
+workers_dev = true
+
+# Disable version URLs (<version-prefix>-<name>.<subdomain>.workers.dev): each deploy/versions upload
+# creates a publicly reachable version URL, and old versions stay accessible — unnecessary exposure for
+# a self-hosted panel. If non-production branch preview builds (Workers Builds) are ever enabled,
+# this must be turned back on.
+#
+# 关闭版本 URL（<version-prefix>-<name>.<subdomain>.workers.dev）：每次部署都会产生公开可访问的
+# 版本 URL，旧版本会长期残留可达——对自托管面板是不必要的暴露面。
+# 若以后启用非生产分支预览构建（Workers Builds），需要重新打开。
+preview_urls = false
+
+# Frontend static assets (Vite build output, in dist/ at the repository root after `npm run build`)
+# Note: no binding is declared — an assets binding only exists to call env.ASSETS.fetch() inside the Worker,
+# and this Worker does not read assets (/api and /uploads are implemented by hand); static hosting itself
+# does not depend on the binding.
+#
 # 前端静态资源 (Vite 构建产物, `npm run build` 后位于仓库根目录 dist/)
 # 注: 不声明 binding —— 资产绑定只用于在 Worker 里调 env.ASSETS.fetch()，本项目的 Worker
 # 不读资产（/api 与 /uploads 都是自己实现的），静态托管本身不依赖 binding。
 [assets]
 directory = "dist"
 
+# D1 database: no database_id is written, so wrangler (>= 4.45) creates and links it during deployment
+# (automatic resource provisioning, Open Beta: https://developers.cloudflare.com/changelog/post/2025-10-24-automatic-resource-provisioning/)
+#
 # D1 数据库: 不写 database_id, 部署时由 wrangler (>=4.45) 自动创建并关联
 # (自动资源供应, Open Beta: https://developers.cloudflare.com/changelog/post/2025-10-24-automatic-resource-provisioning/)
 [[d1_databases]]
 binding = "DB"
-database_name = "sun-panel-on-cloudflare-worker_db"
+database_name = "sun-panel-on-cloudflare-worker-db"
 migrations_dir = "migrations"
 
+# R2 storage (created automatically on deploy)
 # R2 存储 (部署时自动创建)
 [[r2_buckets]]
 binding = "FILES"

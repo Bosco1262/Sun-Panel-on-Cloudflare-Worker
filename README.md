@@ -1,14 +1,10 @@
-# Language Switch
-
-[English](README.md) | [简体中文](README.zh-CN.md)
-
----
-
 <div align=center>
 
-<img src="./docs/images/logo.png" width="100" height="100" />
+<img src="./docs/assets/logo.png" width="100" height="100" />
 
 # Sun-Panel-on-Cloudflare-Worker
+
+[English](README.md) | [简体中文](README.zh-CN.md)
 
 A single-user port of [Sun-Panel](https://github.com/hslr-s/sun-panel) (Vue 3 frontend + Go backend) to **Cloudflare Workers**.
 
@@ -24,9 +20,10 @@ Worker (Hono) + D1 + R2 + Vue 3
 > the backend was rewritten from Go (Gin) + SQLite to Cloudflare Worker (Hono) + D1/R2, while the frontend reuses the
 > upstream Vue 3 code with adaptations.
 > The original upstream README is archived at [docs/upstream/README.md](./docs/upstream/README.md).
-> **In-depth docs are written in Chinese** — enter through [docs/README.md](./docs/README.md) (documentation index).
+> **The in-depth docs are bilingual** (`X.md` = English, `X.zh-CN.md` = Chinese, each file carrying a language
+> switch directly under its title) — enter through [docs/README.md](./docs/README.md) (documentation index).
 
-![](./docs/images/main-dark.png)
+![](./docs/assets/main-dark.png)
 
 ## ☁️ Tech Stack
 
@@ -76,7 +73,7 @@ neither create resources by hand nor install wrangler locally.
    | Field | Value |
    |-------|-------|
    | Build command | `npm run build` |
-   | Deploy command | `npx wrangler deploy && npx wrangler d1 migrations apply sun-panel-on-cloudflare-worker_db --remote` |
+   | Deploy command | `npx wrangler deploy && npx wrangler d1 migrations apply sun-panel-on-cloudflare-worker-db --remote` |
 
    > Do **not** write `npm install && npm run build`: Workers Builds installs dependencies before running the
    > build command, so installing again only wastes several minutes.
@@ -88,7 +85,7 @@ neither create resources by hand nor install wrangler locally.
 5. Done — from now on a plain `git push` is enough.
 
 > Details (auto provisioning, D1 permissions needed by the migration step, preview builds, the local wrangler
-> workflow, backup/restore and FAQ) live in **[docs/deployment.md](./docs/deployment.md)** (Chinese).
+> workflow, backup/restore and FAQ) live in **[docs/deployment.md](./docs/deployment.md)** (also available in Chinese).
 
 ## 🗂️ Repository Structure
 
@@ -121,6 +118,9 @@ neither create resources by hand nor install wrangler locally.
 | [docs/upstream/README.md](./docs/upstream/README.md) | Upstream README (features, screenshots, credits) |
 | [docs/upstream/CHANGELOG.md](./docs/upstream/CHANGELOG.md) | Upstream changelog |
 
+> Every document above is a bilingual pair: `X.md` (English) / `X.zh-CN.md` (Chinese), with a language switch directly
+> under the title (the same convention as this README).
+
 ## 🔀 Differences from Upstream (Sun-Panel v1.3.0)
 
 | Feature | Notes |
@@ -151,6 +151,7 @@ neither create resources by hand nor install wrangler locally.
 | Migration baseline | `migrations/0001_init.sql` only applies to **brand-new** databases; structural changes on an existing database follow the convention in docs/improvement-plan.md §2.2 |
 | Custom JS/CSS | Injected into every page by the administrator, which is effectively a self-inflicted XSS entry point — only paste code you trust |
 | Session depends on cookies | The session lives in an HttpOnly Cookie, so browsers with cookies disabled (or blocking cross-site requests) cannot log in; CLI scripts can still use the `token` header |
+| Security posture and accepted risks | The trust boundaries, the finding registry (V-01…, including risks that were evaluated and deliberately accepted) and the properties that are verified each round live in [docs/security.md](./docs/security.md) |
 
 ## 📄 License
 

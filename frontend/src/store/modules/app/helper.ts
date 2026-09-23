@@ -12,6 +12,7 @@ export interface AppState {
 }
 
 export function defaultSetting(): AppState {
+  // navigator does not exist outside a browser (SSR / unit tests) and would throw a ReferenceError
   // navigator 在非浏览器环境 (SSR / 单测) 不存在, 直接取会 ReferenceError
   const lan = (typeof navigator !== 'undefined' ? navigator.language : '').toLowerCase()
   const language: Language = lan.includes('zh') ? 'zh-CN' : 'en-US'

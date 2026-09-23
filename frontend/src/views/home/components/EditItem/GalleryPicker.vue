@@ -19,6 +19,7 @@ interface Emit {
 const PAGE_SIZE = 30
 const ALLOW_IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico'])
 
+// Infers the extension from ext / src / the file name (compatible with older APIs that did not return ext)
 // 从 ext / src / 文件名推断扩展名 (兼容旧版接口未返回 ext 的情况)
 function getExt(item: File.Info): string {
   const raw = item.ext || item.src || item.fileName || ''
@@ -54,6 +55,7 @@ const filteredList = computed<File.Info[]>(() => {
 const countPage = computed(() => Math.ceil(filteredList.value.length / PAGE_SIZE))
 const visibleList = computed<File.Info[]>(() => filteredList.value.slice(0, currentPage.value * PAGE_SIZE))
 
+// Aligned with upstream: the next page is appended when scrolling near the bottom (client-side pagination)
 // 对齐上游: 滚动到底部附近时追加下一页 (客户端分页)
 let scrollTimer: ReturnType<typeof setTimeout> | null = null
 function handleScroll(event: Event) {
@@ -97,6 +99,7 @@ watch(() => props.visible, (newValue) => {
   }
 })
 
+// Keyword filtering (debounced)
 // 关键字过滤 (防抖)
 let keywordTimer: ReturnType<typeof setTimeout> | null = null
 watch(keyword, () => {
@@ -108,6 +111,7 @@ watch(keyword, () => {
 })
 
 onBeforeUnmount(() => {
+  // The timer would still fire after the component is unmounted, which is a leak
   // 组件卸载后定时器仍会触发, 属于泄漏
   if (scrollTimer)
     clearTimeout(scrollTimer)
@@ -211,7 +215,8 @@ function handleConfirm() {
 </template>
 
 <style scoped>
-/* 对齐上游 gallery: 卡片内容居中, 网格容器 */
+/* Aligned with the upstream gallery: centred card content in a grid container
+   对齐上游 gallery: 卡片内容居中, 网格容器 */
 .img-card {
   display: flex;
   justify-content: center;

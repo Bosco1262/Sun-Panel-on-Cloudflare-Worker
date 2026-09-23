@@ -1,12 +1,25 @@
+// Site icon candidate fetching: parses <link rel*="icon">, falls back to favicon.ico / icon.horse,
+// and returns a candidate list for the user to choose from.
+//
 // 站点图标候选获取: 解析页面 <link rel*="icon">, 失败回退 favicon.ico / icon.horse, 返回候选列表供用户选择
 import { normalizeIconContentType } from './file'
 
-const MAX_ICON_SIZE = 1024 * 1024 // 限制 1MB (与 Go 版一致)
+// 1MB cap (same as the Go version)
+// 限制 1MB (与 Go 版一致)
+const MAX_ICON_SIZE = 1024 * 1024
 
-/** 候选上限: 防止畸形页面 (几百条 link) 拖慢解析与弹窗渲染 */
+/**
+ * Candidate cap: keeps malformed pages (hundreds of link tags) from slowing down parsing and dialog rendering
+ *
+ * 候选上限: 防止畸形页面 (几百条 link) 拖慢解析与弹窗渲染
+ */
 export const MAX_ICON_CANDIDATES = 12
 
-/** 候选来源: 页面声明 / 站点根 favicon.ico / icon.horse 兜底 */
+/**
+ * Candidate source: declared by the page / the site root favicon.ico / the icon.horse fallback
+ *
+ * 候选来源: 页面声明 / 站点根 favicon.ico / icon.horse 兜底
+ */
 export type IconCandidateSource = 'link' | 'favicon.ico' | 'icon-horse'
 
 export interface IconCandidate {
@@ -17,6 +30,13 @@ export interface IconCandidate {
 }
 
 /**
+ * Fetches the candidate list of site icons
+ *
+ * The fallback chain matches the pre-rework behaviour (page <link> → /favicon.ico → icon.horse); the difference is
+ * that "take the first" became "return them all", so the frontend can show a dialog when there are several.
+ * It returns an empty array instead of throwing when nothing is found.
+ *
+ *
  * 抓取站点图标候选列表
  *
  * 与改造前的失败链一致 (页面 <link> → /favicon.ico → icon.horse),
@@ -32,6 +52,7 @@ export async function getSiteFaviconCandidates(pageUrl: string): Promise<IconCan
     return []
   }
 
+  // Approach 1: parse every <link rel*="icon"> in the page HTML
   // 方案 1: 解析页面 HTML 中的所有 <link rel*="icon">
   try {
     const resp = await fetch(parsed.toString(), {
@@ -50,9 +71,11 @@ export async function getSiteFaviconCandidates(pageUrl: string): Promise<IconCan
     }
   }
   catch {
+    // Ignore fetch failures
     // 忽略抓取失败
   }
 
+  // Approach 2: /favicon.ico at the site root (kept only when a HEAD returns 200)
   // 方案 2: 站点根路径 favicon.ico (HEAD 200 才收录)
   try {
     const faviconUrl = `${parsed.origin}/favicon.ico`
@@ -65,9 +88,11 @@ export async function getSiteFaviconCandidates(pageUrl: string): Promise<IconCan
       return [{ url: faviconUrl, source: 'favicon.ico' }]
   }
   catch {
+    // Ignore
     // 忽略
   }
 
+  // Approach 3: the free icon.horse service (only when nothing above produced a candidate)
   // 方案 3: icon.horse 免费图标服务 (仅当前面一个候选都没有时)
   try {
     const horseUrl = `https://icon.horse/icon/${parsed.host}`
@@ -80,18 +105,25 @@ export async function getSiteFaviconCandidates(pageUrl: string): Promise<IconCan
       return [{ url: horseUrl, source: 'icon-horse' }]
   }
   catch {
+    // Ignore
     // 忽略
   }
 
   return []
 }
 
-/** 取候选列表第一条 (旧接口 getSiteFavicon 内部使用, 行为与改造前一致) */
+/**
+ * Returns the first entry of the candidate list (used internally by the legacy getSiteFavicon endpoint,
+ * with the same behaviour as before the rework)
+ *
+ * 取候选列表第一条 (旧接口 getSiteFavicon 内部使用, 行为与改造前一致)
+ */
 export async function getSiteFaviconUrl(pageUrl: string): Promise<string | null> {
   const candidates = await getSiteFaviconCandidates(pageUrl)
   return candidates[0]?.url ?? null
 }
 
+// Download the icon bytes (≤1MB, and it must be an image)
 // 下载图标二进制 (≤1MB, 且必须是图片)
 export async function downloadFavicon(url: string): Promise<{ data: ArrayBuffer; contentType: string } | null> {
   try {
@@ -110,6 +142,7 @@ export async function downloadFavicon(url: string): Promise<{ data: ArrayBuffer;
     if (data.byteLength > MAX_ICON_SIZE)
       return null
 
+    // Non-image content is discarded immediately: otherwise a third-party page could store HTML/script in R2 and have it served same-origin from our domain
     // 非图片内容直接丢弃: 否则第三方页面可以把 HTML/脚本存进 R2, 再由我们的域名同源返回
     const contentType = normalizeIconContentType(resp.headers.get('content-type') ?? '', url)
     if (!contentType)
@@ -122,6 +155,7 @@ export async function downloadFavicon(url: string): Promise<{ data: ArrayBuffer;
   }
 }
 
+// Reads the response body as a stream, truncated at maxBytes (so a huge page cannot eat memory/CPU)
 // 流式读取响应体, 最多截断 maxBytes (防止超大页面占用内存/CPU)
 async function readBodyTruncated(resp: Response, maxBytes: number): Promise<string> {
   if (!resp.body)
@@ -150,6 +184,14 @@ async function readBodyTruncated(resp: Response, maxBytes: number): Promise<stri
 }
 
 /**
+ * Pure function: collects every icon candidate from the HTML (no network requests, which makes self-checks easy)
+ *
+ * - collects <link> tags whose rel contains icon (icon / shortcut icon / apple-touch-icon / mask-icon ...)
+ * - skips inline data: images and non-http(s) protocols; deduplicates by absolute URL; keeps document order; caps at 12
+ * - same as the old implementation: drops query parameters (so cache busters like ?v= do not create duplicate candidates)
+ * - the favicon.ico / icon.horse fallbacks need network probes, so getSiteFaviconCandidates appends them
+ *
+ *
  * 纯函数: 从 HTML 里收集所有图标候选 (不发网络请求, 便于自检)
  *
  * - 收集 rel 含 icon 的 <link> (icon / shortcut icon / apple-touch-icon / mask-icon ...)
@@ -213,7 +255,12 @@ export function extractIconCandidates(html: string, baseUrl: string | URL): Icon
   return candidates
 }
 
-/** 读取 HTML 标签属性 (兼容双引号 / 单引号 / 无引号三种写法; 属性名前必须是空白, 避免误配 x-type 之类) */
+/**
+ * Reads an HTML tag attribute (accepts double quotes, single quotes and unquoted values; whitespace is required
+ * before the attribute name so that things like x-type are not matched by accident)
+ *
+ * 读取 HTML 标签属性 (兼容双引号 / 单引号 / 无引号三种写法; 属性名前必须是空白, 避免误配 x-type 之类)
+ */
 function getTagAttr(tag: string, name: string): string | null {
   const re = new RegExp(`(?:^|\\s)${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'>]+))`, 'i')
   const match = re.exec(tag)

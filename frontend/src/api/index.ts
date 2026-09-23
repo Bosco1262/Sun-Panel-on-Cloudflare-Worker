@@ -1,5 +1,6 @@
 import { post } from '@/utils/request'
 
+// Login related
 // 登录相关
 
 export function login<T>(data: Login.LoginReqest) {

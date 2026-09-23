@@ -30,12 +30,14 @@ const searchTerm = ref('')
 const isFocused = ref(false)
 const panelShow = ref(false)
 
+// Visitor mode: allows switching the search engine for this visit only, without writing to the cloud config
 // 访客模式: 允许本次访问临时切换搜索引擎, 但不写入云端配置
 const isVisitor = computed(() => authStore.visitMode === VisitMode.VISIT_MODE_PUBLIC)
 
 const engineList = computed<DeskModule.SearchBox.SearchEngine[]>(() => {
   if (panelState.searchEngineList.length > 0)
     return panelState.searchEngineList
+  // Fallback for when the administrator deleted every engine: the search box still works
   // 管理端把引擎全部删掉时的兜底: 搜索框仍然可用
   return createDefaultEngines()
 })
@@ -47,8 +49,13 @@ const currentEngine = computed<DeskModule.SearchBox.SearchEngine>(() => {
     ?? list[0]
 })
 
-/** 保存搜索引擎配置 (同一行的面板配置会一并提交); 失败只提示, 不回滚本地选择 */
+/**
+ * Saves the search-engine config (the panel config in the same row is submitted along with it); a failure only reports, without rolling back the local selection
+ *
+ * 保存搜索引擎配置 (同一行的面板配置会一并提交); 失败只提示, 不回滚本地选择
+ */
 function persistSearchEngine() {
+  // A temporary switch in visitor mode is not persisted (in this port visitMode is always the logged-in mode, so this is an upstream leftover branch)
   // 访客模式的临时切换不落库 (本移植版 visitMode 恒为登录模式, 属上游遗留分支)
   if (isVisitor.value)
     return
@@ -65,8 +72,10 @@ const newWindowOpen = computed({
   },
 })
 
+// Theme colours are assembled here, so no magic attribute names appear in the template
 // 主题色样式统一在这里拼, 避免模板里出现魔法属性名
 const containerStyle = computed(() => {
+  // A CSS custom property must be quoted; keeping it here also avoids triggering the quote-props rule
   // CSS 自定义属性必须带引号, 单独放在这里避免触发 quote-props 规则
   const cssVars = { '--sb-placeholder-color': props.placeholderColor || 'rgba(255, 255, 255, 0.6)' }
   return {
@@ -148,6 +157,7 @@ function handleClearSearchTerm() {
       </div>
     </div>
 
+    <!-- Search-engine selection: switching only; the configuration is managed in "Style Settings → Search bar component" -->
     <!-- 搜索引擎选择: 只做切换, 配置统一在「风格设置 → 搜索栏组件」里管理 -->
     <div v-if="panelShow" class="w-full mt-[10px] rounded-xl p-[10px]" :style="panelStyle">
       <div class="flex items-center flex-wrap gap-[10px]">

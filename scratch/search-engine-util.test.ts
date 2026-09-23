@@ -76,6 +76,9 @@ eq(
 )
 
 console.log('== validateSearchEngine ==')
+// The i18n keys returned by validation must match the namespace in the locales (deskModule.searchEngine.*),
+// otherwise the form shows the raw key to the user
+//
 // 校验返回的 i18n key 必须与 locales 里的命名空间一致 (deskModule.searchEngine.*),
 // 否则表单会把原始 key 直接显示给用户
 eq('缺名称', validateSearchEngine({ id: '1', title: '', url: 'https://a.com?q=%s' }).titleError, 'deskModule.searchEngine.engineNameRequired')
@@ -86,6 +89,7 @@ eq('图标非法', validateSearchEngine({ id: '1', title: 'a', url: 'https://a.c
 eq('站内相对路径图标合法', validateSearchEngine({ id: '1', title: 'a', url: 'https://a.com', iconSrc: '/uploads/x.png' }).valid, true)
 eq('全通过', validateSearchEngine({ id: '1', title: 'a', url: 'https://a.com', iconSrc: 'https://a.com/f.ico' }).valid, true)
 
+// Every validation message must exist under deskModule.searchEngine in both zh-CN and en-US
 // 所有校验错误文案都必须存在于 zh-CN / en-US 的 deskModule.searchEngine 命名空间下
 console.log('== 校验文案 key 与 locales 对齐 ==')
 {

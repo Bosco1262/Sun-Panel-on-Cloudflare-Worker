@@ -5,6 +5,17 @@ import { authMiddleware } from '../src/middleware/auth'
 import { AUTH_COOKIE_MAX_AGE, AUTH_COOKIE_NAME, setAuthCookie } from '../src/utils/authCookie'
 
 /**
+ * Self-check for the session cookie (improvement plan §9.4)
+ *
+ * Four things matter here:
+ * 1. the cookie authenticates on its own (HttpOnly, so JavaScript cannot read it — and does not need to);
+ * 2. with cookie authentication, cross-site **write** requests are rejected (the CSRF line of defence) while
+ *    reads stay unaffected;
+ * 3. request headers (token / Bearer) still work — scripts and third-party tools stay compatible;
+ * 4. the cookie attributes are right: HttpOnly + SameSite=Lax + a Max-Age matching the JWT, with Secure only
+ *    added over https.
+ *
+ *
  * 会话 Cookie 自检 (改进计划 §9.4)
  *
  * 关注四件事:
@@ -47,6 +58,7 @@ const user = { id: 1, username: 'admin', name: 'admin', headImage: '', role: 1 }
 const token = await signToken(SECRET, user, 1)
 const staleToken = await signToken(SECRET, user, 0)
 
+// In-memory D1: an unreadable auth_epoch falls back to the default generation 1 (matching the token)
 // 内存版 D1: 读不到 auth_epoch -> 使用默认世代 1 (与 token 一致)
 const db = { prepare: () => ({ bind: () => ({ first: async () => null }) }) } as never
 const env = { DB: db, JWT_SECRET: SECRET } as never
@@ -72,6 +84,7 @@ async function call(path: string, init: RequestInit = {}, host = 'https://panel.
 
 const cookieHeader = { cookie: `${AUTH_COOKIE_NAME}=${token}` }
 
+// ===================== Authentication sources =====================
 // ===================== 认证来源 =====================
 
 console.log('== 认证来源 ==')
@@ -98,6 +111,7 @@ eq('世代落后的 Cookie -> 1001', (await call('/write', {
   headers: { cookie: `${AUTH_COOKIE_NAME}=${staleToken}`, 'sec-fetch-site': 'same-origin' },
 })).body.code, 1001)
 
+// ===================== CSRF defence =====================
 // ===================== CSRF 防线 =====================
 
 console.log('== CSRF 防线 (仅针对 Cookie 认证的写操作) ==')
@@ -116,6 +130,7 @@ eq('请求头认证 + 跨站写操作 -> 放行 (CSRF 只与自动携带的凭�
   headers: { token, 'sec-fetch-site': 'cross-site' },
 })).body.code, 0)
 
+// Older browsers without Sec-Fetch-Site: fall back to comparing the host names of Origin and Host
 // 没有 Sec-Fetch-Site 的老浏览器: 退回 Origin 与 Host 的主机名比较
 eq('无 Sec-Fetch-Site + 同主机不同端口 (本地 Vite 代理) -> 放行', (await call('/write', {
   method: 'POST',
@@ -132,6 +147,7 @@ eq('无 Origin 也无 Sec-Fetch-Site (curl) -> 放行', (await call('/write', {
   headers: cookieHeader,
 })).body.code, 0)
 
+// ===================== Cookie attributes =====================
 // ===================== Cookie 属性 =====================
 
 console.log('== Cookie 属性 ==')

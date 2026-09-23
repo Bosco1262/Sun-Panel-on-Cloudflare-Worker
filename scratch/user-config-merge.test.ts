@@ -2,6 +2,13 @@ import userConfigApp from '../src/api/panel/userConfig'
 import { signToken } from '../src/utils/jwt'
 
 /**
+ * Verifies the merge semantics of userConfig/set
+ *
+ * The regression: the old implementation wrote unsubmitted fields back as an empty object, so saving only
+ * `panel` from Style Settings wiped the search_engine_json in the same row to {}. This checks the behaviour
+ * end-to-end with an in-memory replacement for D1.
+ *
+ *
  * userConfig/set 的合并语义验证
  *
  * 回归的问题: 旧实现把未提交的字段当成空对象写回, 导致「风格设置」里只提交 panel 时,
@@ -53,6 +60,7 @@ const db = {
 }
 
 const env = { DB: db, JWT_SECRET: 'test-secret' }
+// The third argument is the token generation (auth_epoch): the fake D1 cannot read system_setting, so the default generation 1 applies
 // 第三个参数是 token 世代 (auth_epoch): 假 D1 读不到 system_setting 时按默认世代 1 处理
 const token = await signToken('test-secret', { id: 1, username: 'admin', name: 'admin', headImage: '', role: 1 }, 1)
 

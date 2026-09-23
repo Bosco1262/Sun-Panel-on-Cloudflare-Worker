@@ -18,6 +18,7 @@ const currentDate = ref<CurrentDate>({
   week: '--',
 })
 
+// The weekday strings are only recomputed when the language changes, instead of rebuilding the array every second
 // 星期文案只在语言变化时重算, 不必每秒重建数组
 const daysOfWeek = computed(() => [
   t('deskModule.clock.sun'),
@@ -42,9 +43,12 @@ function updateCurrentDate() {
     currentDate.value.time = `${hours}:${minutes}`
   }
 
+  // Get the current date
   // 获取当前的日期
   const day = now.getDate()
-  const month = now.getMonth() + 1 // 月份从0开始，所以要加1
+  // Months are zero-based, hence the +1
+  // 月份从0开始，所以要加1
+  const month = now.getMonth() + 1
 
   currentDate.value.week = daysOfWeek.value[now.getDay()]
   currentDate.value.date = `${month}-${day}`

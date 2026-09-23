@@ -1,21 +1,28 @@
-# Sun-Panel（上游原版 README 存档）
+# Sun-Panel (archived upstream README)
 
-> 本文件存档上游 [hslr-s/sun-panel](https://github.com/hslr-s/sun-panel) 的 README，便于对照功能与截图。
-> - 上游仓库：<https://github.com/hslr-s/sun-panel>
-> - 上游文档：<https://doc.sun-panel.top>
-> - 本仓库移植版说明：[根 README](../../README.md)
-> - 上游更新日志：[CHANGELOG.md](./CHANGELOG.md)（仅存档到 v1.1.0，v1.2.0 起见上游文档站的「正式版更新日志」）
+[English](README.md) | [简体中文](README.zh-CN.md)
+
+> This file archives the README of the upstream project [hslr-s/sun-panel](https://github.com/hslr-s/sun-panel) so the
+> features and screenshots can be compared side by side.
+> - Upstream repository: <https://github.com/hslr-s/sun-panel>
+> - Upstream documentation: <https://doc.sun-panel.top>
+> - About this port: [root README](../../README.md)
+> - Upstream changelog: [CHANGELOG.md](./CHANGELOG.md) (archived up to v1.1.0 only; from v1.2.0 on, see the
+>   "official release changelog" on the upstream documentation site)
 >
-> 说明：原文中的「Donate」段落因相关图片（`doc/donate.md`、`doc/images/donate/*.png`）未随本仓库同步，已移除；
-> 图片路径已改指向本仓库的 [`../images/`](../images/)；上游文档站已从 `sun-panel-doc.enianteam.com`
-> 迁移到 <https://doc.sun-panel.top>，原文中的旧域名链接已一并替换。
+> Notes: the original "Donate" section was removed because its images (`doc/donate.md`,
+> `doc/images/donate/*.png`) were not carried over into this repository; image paths now point at this repository's
+> [`../assets/`](../assets/); the upstream documentation site moved from `sun-panel-doc.enianteam.com` to
+> <https://doc.sun-panel.top>, so the old domain links in the original text were replaced.
+> This English file is a reading translation of the archive — the upstream original mixes English and Chinese
+> (the Chinese reading version is `README.zh-CN.md` in this directory).
 
 [[ 简体中文 ]](https://doc.sun-panel.top/zh_cn/introduce/project.html) |
 [[ English ]](https://doc.sun-panel.top/introduce/project.html)
 
 <div align=center>
 
-<img src="../images/logo.png" width="100" height="100" />
+<img src="../assets/logo.png" width="100" height="100" />
 
 # Sun-Panel
 
@@ -39,10 +46,10 @@ A server, NAS navigation panel, Homepage, Browser homepage.
 
 </div>
 
-![](../images/main-dark.png)
+![](../assets/main-dark.png)
 
 > [!IMPORTANT]
-> In order to maintain the livelihood, the author added some [`PRO`] (https://pro.sun-panel.top) function, so the project temporarily entered a closed source state.; At present, the latest version of the open source is `v1.3.0`, [Please see the latest version of closed source](https://github.com/hslr-s/sun-panel/releases).; When the modular technology is developed, the separation of the PRO and the programs will be opened again, and the closed source will have no effect on ordinary users.; Let's look forward to open source again, and at the same time, we are welcome to supervise and review the security of the program.
+> In order to maintain the livelihood, the author added some [`PRO`](https://pro.sun-panel.top) function, so the project temporarily entered a closed source state.; At present, the latest version of the open source is `v1.3.0`, [Please see the latest version of closed source](https://github.com/hslr-s/sun-panel/releases).; When the modular technology is developed, the separation of the PRO and the programs will be opened again, and the closed source will have no effect on ordinary users.; Let's look forward to open source again, and at the same time, we are welcome to supervise and review the security of the program.
 >
 > 作者为了维持生计，增加了一些 [`PRO`](https://pro.sun-panel.top) 功能，所以项目暂时进入闭源状态。目前开源最新版本为`v1.3.0`，[闭源最新版本请查看](https://github.com/hslr-s/sun-panel/releases)。待开发出模块化技术，然后对PRO和主程序进行分离会再次开源，闭源对普通用户没有任何影响。我们一起期待再次开源吧，同时也欢迎各位大佬对程序的安全性进行监督和审查。
 
@@ -63,16 +70,16 @@ A server, NAS navigation panel, Homepage, Browser homepage.
 
 **Various styles, freely combined**
 
-![](../images/icon-small-new.png)
-![](../images/transparent-info.png)
-![](../images/transparent-small.png)
-![](../images/solid-color-info.png)
-![](../images/full-color-small.jpg)
+![](../assets/icon-small-new.png)
+![](../assets/transparent-info.png)
+![](../assets/transparent-small.png)
+![](../assets/solid-color-info.png)
+![](../assets/full-color-small.jpg)
 
 **Built-in small windows**
 
-![](../images/window-ssh.png)
-![](../images/window-xunlei.png)
+![](../assets/window-ssh.png)
+![](../assets/window-xunlei.png)
 
 ## 🐳 Deployment tutorial
 
@@ -80,11 +87,11 @@ A server, NAS navigation panel, Homepage, Browser homepage.
 
 ## 🏖️ Communication group & community
 
-Author：**[红烧猎人](https://blog.enianteam.com/u/sun/content/11)**
+Author: **[红烧猎人](https://blog.enianteam.com/u/sun/content/11)**
 
 [Github Discussions](https://github.com/hslr-s/sun-panel/discussions)
 
-QQ 交流群：可通过上方链接联系作者（群二维码图片未随本仓库同步）。
+QQ group: contact the author through the link above (the group QR code image was not carried over into this repository).
 
 ## ❤️ Thanks
 

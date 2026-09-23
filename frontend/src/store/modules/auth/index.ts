@@ -15,6 +15,7 @@ const defaultState: AuthState = {
 }
 
 export const useAuthStore = defineStore('auth-store', {
+  // Merged with the defaults: the local cache may hold an old or corrupted shape (missing visitMode, …) which would be undefined if used as AuthState directly
   // 与默认值合并: 本地缓存可能是旧版/损坏结构 (缺 visitMode 等), 直接当 AuthState 用会得到 undefined
   state: (): AuthState => ({ ...defaultState, ...(getStorage() ?? {}) }),
 

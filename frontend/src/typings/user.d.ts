@@ -10,7 +10,9 @@ declare namespace User{
 		status?:number
 		role?:number
 		mail?:string
-		// userId?:string // id代替
+		// userId was replaced by id
+		// userId 已由 id 代替
+		// userId?:string
 		token?:string
 		isAdmin?:number
 	}

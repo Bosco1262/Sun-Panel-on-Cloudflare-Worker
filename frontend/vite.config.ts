@@ -43,17 +43,22 @@ export default defineConfig((env) => {
       proxy: {
         '/api': {
           target: viteEnv.VITE_APP_API_BASE_URL,
-          changeOrigin: true, // 允许跨域
+          // Allow cross-origin
+          // 允许跨域
+          changeOrigin: true,
           rewrite: path => path.replace('/api/', '/api/'),
         },
         '/uploads': {
           target: viteEnv.VITE_APP_API_BASE_URL,
-          changeOrigin: true, // 允许跨域
+          // Allow cross-origin
+          // 允许跨域
+          changeOrigin: true,
           rewrite: path => path.replace('/uploads/', '/uploads/'),
         },
       },
     },
     build: {
+      // The build output goes to dist/ at the repository root, served statically by the Worker's [assets]
       // 构建产物输出到仓库根目录 dist/, 由 Worker [assets] 静态托管
       outDir: '../dist',
       emptyOutDir: true,
@@ -62,6 +67,10 @@ export default defineConfig((env) => {
       commonjsOptions: {
         ignoreTryCatch: false,
       },
+      // Note: terserOptions.compress.drop_console used to be configured here, but without declaring
+      // minify: 'terser' (Vite 4 uses esbuild by default) it had no effect at all and required installing terser
+      // on the side, so it was removed — keeping console.warn/error in the Worker/browser also helps production debugging.
+      //
       // 注: 这里曾配置 terserOptions.compress.drop_console, 但未声明 minify: 'terser'
       // (Vite 4 默认用 esbuild), 该配置完全不生效且需额外安装 terser, 故移除 ——
       // Worker/浏览器里保留 console.warn/error 也有助于线上排障。

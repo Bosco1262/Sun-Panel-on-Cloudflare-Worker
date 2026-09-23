@@ -2,6 +2,7 @@
 import { computed, defineComponent } from 'vue'
 
 function compatibleName(inputString: string): string {
+  // Replace every colon with a regular expression
   // 使用正则表达式替换所有的冒号
   const resultString = inputString.replace(/:/g, '-')
   return resultString

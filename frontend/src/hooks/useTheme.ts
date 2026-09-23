@@ -19,6 +19,7 @@ export function useTheme() {
     return isDark.value ? darkTheme : undefined
   })
 
+  // Aligned with upstream: dialogs and cards share one border radius (Dialog has no radius by default, so it is set to 1rem here, matching RoundCardModal)
   // 对齐上游: 弹窗/卡片统一圆角 (Dialog 默认无圆角, 这里统一为 1rem, 与 RoundCardModal 一致)
   const themeOverrides = computed<GlobalThemeOverrides>(() => {
     return {

@@ -4,6 +4,7 @@ import type { Env } from '../../types'
 import { checkPassword, hashPassword, passwordEncryption, resolveIterations } from '../../utils/password'
 import { bumpAuthEpoch } from '../../utils/authEpoch'
 import { errorByCode, errorByCodeAndMsg, success, successData } from '../../utils/response'
+import { REQUEST_BODY_LIMIT, bodyLimit } from '../../utils/bodyLimit'
 import {
   SETTING_ADMIN_HEAD_IMAGE,
   SETTING_ADMIN_NAME,
@@ -18,6 +19,13 @@ import { authMiddleware } from '../../middleware/auth'
 const app = new Hono<{ Bindings: Env }>()
 
 /**
+ * Verifies the current password (shared by the password change and the username change)
+ *
+ * Returning null means it passed; otherwise the returned response can be sent to the frontend as-is.
+ * Note: code 1009 is deliberately kept out of ERROR_CODE_MAP so that errorByCodeAndMsg passes our message through
+ * verbatim (putting it in the table would let the generic text there override it).
+ *
+ *
  * 校验当前密码 (改密 / 改用户名共用)
  *
  * 返回 null 表示通过, 否则返回可直接回给前端的错误响应。
@@ -49,8 +57,9 @@ async function ensurePasswordOk(c: Context<{ Bindings: Env }>, plain: string) {
   return null
 }
 
+// Current user information
 // 当前用户信息
-app.post('/user/getInfo', authMiddleware(), async (c) => {
+app.post('/user/getInfo', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware(), async (c) => {
   const user = await getUserProfile(c.env.DB, c.get('uid'))
   return successData(c, {
     userId: user.id,
@@ -61,8 +70,9 @@ app.post('/user/getInfo', authMiddleware(), async (c) => {
   })
 })
 
+// Authentication information (called by the frontend's updateLocalUserInfo; in single-user mode visitMode is fixed at 0 = logged-in mode)
 // 认证信息 (前端 updateLocalUserInfo 调用; 单用户模式 visitMode 固定 0=登录模式)
-app.post('/user/getAuthInfo', authMiddleware(), async (c) => {
+app.post('/user/getAuthInfo', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware(), async (c) => {
   const user = await getUserProfile(c.env.DB, c.get('uid'))
   return successData(c, {
     user,
@@ -70,8 +80,9 @@ app.post('/user/getAuthInfo', authMiddleware(), async (c) => {
   })
 })
 
+// Update the profile
 // 修改资料
-app.post('/user/updateInfo', authMiddleware(), async (c) => {
+app.post('/user/updateInfo', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware(), async (c) => {
   const body = await c.req.json<{ headImage?: string; name?: string }>().catch(() => null)
   const name = typeof body?.name === 'string' ? body.name.trim() : ''
   const headImage = typeof body?.headImage === 'string' ? body.headImage : ''
@@ -83,8 +94,9 @@ app.post('/user/updateInfo', authMiddleware(), async (c) => {
   return success(c)
 })
 
+// Change the password (password only, the username is untouched)
 // 修改密码（仅密码, 不改用户名）
-app.post('/user/updatePassword', authMiddleware(), async (c) => {
+app.post('/user/updatePassword', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware(), async (c) => {
   const body = await c.req.json<{ oldPassword?: string; newPassword?: string }>().catch(() => null)
   const oldPassword = typeof body?.oldPassword === 'string' ? body.oldPassword : ''
   const newPassword = typeof body?.newPassword === 'string' ? body.newPassword : ''
@@ -104,19 +116,22 @@ app.post('/user/updatePassword', authMiddleware(), async (c) => {
     )
   }
   else {
+    // Without a pepper the old behaviour is kept (compatibility first), but the risk is written to the log
     // 未配置 pepper 时维持旧行为 (兼容优先), 但把风险写进日志
     console.warn('[user] PASSWORD_PEPPER 未配置, 仍写入旧版三重 MD5 哈希; 建议执行 wrangler secret put PASSWORD_PEPPER')
     await setSetting(c.env.DB, SETTING_ADMIN_PASSWORD, passwordEncryption(newPassword))
   }
 
+  // After a password change every issued token becomes invalid (including the current one: the frontend gets 1001 on its next request and jumps to the login page)
   // 改密后让所有已签发的 token 失效 (含当前这个, 前端会在下一个请求收到 1001 并跳登录页)
   await bumpAuthEpoch(c.env.DB)
 
   return success(c)
 })
 
+// Change the username (requires the current password; the password is untouched)
 // 修改用户名（需当前密码校验, 不改密码）
-app.post('/user/updateUsername', authMiddleware(), async (c) => {
+app.post('/user/updateUsername', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware(), async (c) => {
   const body = await c.req.json<{ username?: string; password?: string }>().catch(() => null)
   const username = typeof body?.username === 'string' ? body.username.trim() : ''
   const password = typeof body?.password === 'string' ? body.password : ''
@@ -130,6 +145,7 @@ app.post('/user/updateUsername', authMiddleware(), async (c) => {
     return failed
 
   await setSetting(c.env.DB, SETTING_ADMIN_USERNAME, username)
+  // The account identifier changed, so old tokens are invalidated as well
   // 账号标识变了, 也让旧 token 失效
   await bumpAuthEpoch(c.env.DB)
   return success(c)

@@ -1,28 +1,33 @@
-# 更新说明（上游）
+# Changelog (upstream)
 
-> 本文件为上游 [hslr-s/sun-panel](https://github.com/hslr-s/sun-panel) 的更新日志存档，
-> 内容与上游仓库根目录的 `UPDATELOG.md` 一致，**只到 v1.1.0**（上游把 v1.2.0 起的日志放在了文档站：
-> [正式版更新日志](https://doc.sun-panel.top/zh_cn/update/update_log.html)，最新发布版本 v1.8.1）。
-> 本仓库（Cloudflare Worker 移植版）的改动请看 `git log`；上游原版 README 见 [README.md](./README.md)。
+[English](CHANGELOG.md) | [简体中文](CHANGELOG.zh-CN.md)
 
-> 老用户版本升级需要看升级说明，并且一定提前备份好重要数据。新用户可以直接使用最新版本。
+> This file archives the changelog of the upstream project [hslr-s/sun-panel](https://github.com/hslr-s/sun-panel).
+> It matches the `UPDATELOG.md` in the upstream repository root and **stops at v1.1.0** (upstream moved the log for
+> v1.2.0 and later to its documentation site:
+> [official release changelog](https://doc.sun-panel.top/zh_cn/update/update_log.html), latest release v1.8.1).
+> For changes in this repository (the Cloudflare Worker port) see `git log`; the archived upstream README is
+> [README.md](./README.md). This English file is a reading translation of the archive.
+
+> Existing users must read the upgrade notes before upgrading and always back up important data first. New users can
+> simply use the latest version.
 
 
 ## v1.1.0
-> 支持上个版本直接升级无需特殊处理
+> Can be upgraded directly from the previous version with no special handling
 
-- [新增] 增加分组，拖拽排序
-- [新增] 搜索框
-- [新增] 应用图标支持URL外链
-- [新增] 图标支持纯透明
-- [新增] 壁纸背景增加遮罩设置
-- [新增] 右键菜单新增打开局域网或者互联网地址
-- [优化] 网址输入框增加https/http提示
-- [优化] 小图标模式，鼠标悬浮显示详情，支持隐藏图标标题
-- [优化] 详情图标样式，支持隐藏描述信息
-- [优化] 添加用户密码时限制字符
-- [其他] 新增arm版本docker支持。[DockerHub](https://hub.docker.com/r/hslr/sun-panel)直接拉取即可
-- [其他] 新增多平台二进制文件运行。[Releases](https://github.com/hslr-s/sun-panel/releases)
+- [New] groups with drag-and-drop sorting
+- [New] search box
+- [New] app icons support external URLs
+- [New] icons support full transparency
+- [New] wallpaper background gains a mask setting
+- [New] the context menu can open LAN or internet addresses
+- [Improved] the URL field hints at https/http
+- [Improved] small-icon mode shows details on hover and can hide icon titles
+- [Improved] detail icon style, with an option to hide the description
+- [Improved] character limits when setting user passwords
+- [Other] an arm Docker build was added; pull it directly from [DockerHub](https://hub.docker.com/r/hslr/sun-panel)
+- [Other] multi-platform binaries were added under [Releases](https://github.com/hslr-s/sun-panel/releases)
 
 ## v1.0.0
-- 首个版本
+- First release

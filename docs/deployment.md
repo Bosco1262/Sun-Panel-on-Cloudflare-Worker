@@ -1,218 +1,241 @@
-# 部署与本地开发
+---
+title: Deployment & Local Development
+status: current
+audience: deployer
+last_verified: 2026-09-23
+---
 
-> 本文承接根 [README.zh-CN](../README.zh-CN.md) / [README](../README.md) 的「🚀 快速开始」章节，是部署与本地开发的完整说明。
-> 目标形态：**单个 Cloudflare Worker 同时提供 API 与前端静态资源**。
+# Deployment & Local Development
 
-## 技术栈
+[English](deployment.md) | [简体中文](deployment.zh-CN.md)
 
-技术栈与「与上游的差异」集中在根 [README 的技术栈表](../README.zh-CN.md#️-技术栈)（单一事实来源，避免两处重复维护）。
-部署时需要知道的只有一件事：**默认账号 `admin` / `12345678`**（首次登录后请立即在「用户信息」里修改）。
+> This document continues the "🚀 Quick Start" section of the root [README.md](../README.md) (also available as `README.zh-CN.md`) and is the complete guide to deployment and local development.
+> Target shape: **a single Cloudflare Worker serving both the API and the frontend static assets**.
 
-## 仓库结构
+## Tech Stack
+
+The tech stack and the differences from upstream are collected in the root [README tech-stack table](../README.md#️-tech-stack) (single source of truth, so they are not maintained in two places).
+The only thing you need to know for deployment: **default account `admin` / `12345678`** (change it in "User Info" right after the first sign-in).
+
+## Repository Structure
 
 ```
-├── src/                     # Worker 后端源码 (Hono)
-│   ├── api/                 # 路由: panel/ 与 system/ 分层，与前端 src/api/ 一一对应
-│   ├── middleware/          # JWT 鉴权中间件
-│   └── utils/               # 响应格式 / 密码 / JWT / 文件 / 系统设置 / 站点图标
-├── migrations/              # D1 数据库迁移
-├── frontend/                # Vue 3 前端 (npm workspace)
-├── dist/                    # 前端构建产物 (gitignored, 由 Worker 静态托管)
-├── docs/                    # 项目文档 (索引见 docs/README.md; history/ 为历史存档, upstream/ 为上游资料)
-├── scratch/                 # 自检脚本 (14 个: 密码/限流/上传/图标/过滤/引擎/Cookie/i18n 等, 见 improvement-plan 附录 C)
-├── reference/               # 上游源码对照副本 (gitignored, 不参与构建)
-├── wrangler.toml            # Worker 配置 (D1/R2/静态资源)
-├── .dev.vars                # 本地开发环境变量 (gitignored, 模板见 .dev.vars.example)
-├── package.json             # 根包: Worker 依赖 + 脚本 + frontend workspace
-└── tsconfig.json            # Worker TypeScript 配置
+├── src/                     # Worker backend source (Hono)
+│   ├── api/                 # Routes: panel/ and system/, mirroring the frontend src/api/
+│   ├── middleware/          # JWT auth middleware
+│   └── utils/               # Response format / password / JWT / files / settings / favicon
+├── migrations/              # D1 migrations
+├── frontend/                # Vue 3 frontend (npm workspace)
+├── dist/                    # Frontend build output (gitignored, served by the Worker)
+├── docs/                    # Documentation (index: docs/README.md; history/ = archive, upstream/ = upstream material)
+├── scratch/                 # Self-check scripts (14: password / rate limit / upload / icons / filtering / engines / cookies / i18n …; see improvement-plan Appendix C)
+├── reference/               # Upstream source copy for reference (gitignored, not part of the build)
+├── wrangler.toml            # Worker config (D1/R2/static assets)
+├── .dev.vars                # Local dev secrets (gitignored, template: .dev.vars.example)
+├── package.json             # Root package: Worker deps + scripts + frontend workspace
+└── tsconfig.json            # Worker TypeScript config
 ```
 
-## 前置要求
+## Prerequisites
 
-1. 注册 [Cloudflare](https://dash.cloudflare.com) 账号
-2. 安装 [Node.js](https://nodejs.org) **22+** 和 [Wrangler](https://developers.cloudflare.com/workers/wrangler/)：
-   ```bash
-   npm install -g wrangler
-   wrangler login
-   ```
+1. Create a [Cloudflare](https://dash.cloudflare.com) account
+2. Install [Node.js](https://nodejs.org) **22+** and [Wrangler](https://developers.cloudflare.com/workers/wrangler/):
+  ```bash
+  npm install -g wrangler
+  wrangler login
+  ```
 
-> 版本下限来自 wrangler 自身：仓库锁定 `wrangler ^4.45.0`，当前 4.x 要求 Node ≥ 22
-> （安装后会提示 `Wrangler requires at least Node.js v22.0.0`；Node 18 已 EOL）。
-> 走方式一（Workers Git 集成）时不需要本地 Node，Cloudflare 构建镜像默认使用 Node 24。
+> The version floor comes from wrangler itself: the repository pins `wrangler ^4.45.0`, and 4.x requires Node ≥ 22
+> (installing under an older Node prints `Wrangler requires at least Node.js v22.0.0`; Node 18 is EOL).
+> Path one (Workers Git integration) needs no local Node — Cloudflare's build image uses Node 24 by default.
 
-## 方式一: Workers Git 集成 (推荐, 自动创建资源 + 自动迁移)
+## Path 1: Workers Git integration (recommended; resources and migrations are automatic)
 
-无需手动创建 D1/R2，也无需本地安装 wrangler：
+No manual D1/R2 creation and no local wrangler install:
 
-1. 进入 Cloudflare Dashboard → **Workers & Pages → Create → Import a repository**，
-   选择本仓库（Worker 名称需与 `wrangler.toml` 中的 `name = "sun-panel-on-cloudflare-worker"` 一致）
+1. Open the Cloudflare Dashboard → **Workers & Pages → Create → Import a repository** and pick this repository
+   (the Worker name must match `name = "sun-panel-on-cloudflare-worker"` in `wrangler.toml`)
 2. **Build command**: `npm run build`
-   > 不要写成 `npm install && npm run build`：Workers Builds 在执行构建命令前会**自动安装依赖**
-   > （官方文档中可用 `SKIP_DEPENDENCY_INSTALL` 关闭这一行为），再装一遍依赖会让构建白白多花几分钟
-   > （实测 install 阶段约 8 分钟）。
+   > Do **not** write `npm install && npm run build`: Workers Builds **installs dependencies automatically** before
+   > running the build command (`SKIP_DEPENDENCY_INSTALL` disables that behaviour according to the official docs), so
+   > installing again just wastes several minutes (the install step alone measured about 8 minutes).
 3. **Deploy command**:
    ```bash
-   npx wrangler deploy && npx wrangler d1 migrations apply sun-panel-on-cloudflare-worker_db --remote
+   npx wrangler deploy && npx wrangler d1 migrations apply sun-panel-on-cloudflare-worker-db --remote
    ```
-   - 先 `deploy` 后迁移：`wrangler.toml` 里没有 `database_id` 时，D1 是在部署阶段由自动资源供应
-     创建的，迁移命令只能作用于已存在的库（顺序颠倒会报
-     `Couldn't find an auto-provisioned D1 DB named 'sun-panel-on-cloudflare-worker_db' for binding 'DB'. Run 'wrangler deploy' to provision it...`）
-   - 部署时 wrangler (>= 4.45) 检测到配置中的 D1/R2 资源不存在会**自动创建**并绑定
-     ([自动资源供应](https://developers.cloudflare.com/changelog/post/2025-10-24-automatic-resource-provisioning/), Open Beta)
-   - `wrangler deploy` 用构建环境注入的 API token 就能完成；但 Workers Builds 自动创建的 token
-     权限只有 Workers Scripts / R2 (edit) 等，**不含 D1**，远程迁移可能因此报鉴权错误。
-     遇到时请在 Worker → **Settings → Build → API token** 换成（或新建）一个带 D1 编辑权限的 token
-4. 首次部署成功后，设置一次 JWT 密钥（Secret 无法由构建创建）：
-   `JWT_SECRET` 请用随机值（可用 `openssl rand -base64 48` 生成，长度 ≥32 字符；过短时 Worker 日志会打弱密钥告警）：
-   Worker → Settings → Variables and Secrets → 添加 `JWT_SECRET`（或本地执行 `npx wrangler secret put JWT_SECRET`）
+   - `deploy` first, migrations second: when `wrangler.toml` has no `database_id`, D1 is created during deployment by
+     automatic resource provisioning, and the migration command can only act on an existing database (swapping the
+     order fails with
+     `Couldn't find an auto-provisioned D1 DB named 'sun-panel-on-cloudflare-worker-db' for binding 'DB'. Run 'wrangler deploy' to provision it...`)
+   - During deployment, wrangler (>= 4.45) detects D1/R2 resources that do not exist yet and **creates and binds them
+     automatically** ([automatic resource provisioning](https://developers.cloudflare.com/changelog/post/2025-10-24-automatic-resource-provisioning/), Open Beta)
+   - `wrangler deploy` works with the API token injected into the build environment, but the token Workers Builds
+     creates automatically only carries Workers Scripts / R2 (edit) and **no D1** permissions, so remote migrations may
+     fail with an authentication error. If that happens, replace (or create) the token under the Worker →
+     **Settings → Build → API token** with one that can edit D1
+4. After the first successful deploy, set the JWT secret once (secrets cannot be created by builds):
+   use a random value for `JWT_SECRET` (`openssl rand -base64 48`, at least 32 characters; a shorter one makes the
+   Worker log a weak-key warning): Worker → Settings → Variables and Secrets → add `JWT_SECRET`
+   (or run `npx wrangler secret put JWT_SECRET` locally)
 
-之后每次 `git push` 都会自动构建、部署并应用新增的 D1 迁移。
+From then on every `git push` builds, deploys and applies new D1 migrations automatically.
 
-> **环境变量无需入库**：`frontend/.env` 已被 `.gitignore` 排除，构建脚本
-> `frontend/add-frontend-version.js` 在发现 `.env` 不存在时会用 `frontend/.env.example`
-> 自动生成一份并写入 `VITE_APP_VERSION`，因此 Workers Build 不会因缺少 `.env` 而失败。
-> 生产运行时只用到 `VITE_GLOB_API_URL=/api`，`VITE_APP_API_BASE_URL` 仅供本地 dev proxy，
-> 默认配置可直接用于线上部署；如需覆盖，请在构建环境中配置对应的环境变量。
+> **No environment files need to be committed**: `frontend/.env` is excluded by `.gitignore`, and the build script
+> `frontend/add-frontend-version.js` generates one from `frontend/.env.example` when `.env` is missing, writing
+> `VITE_APP_VERSION` into it — so Workers Builds never fails over a missing `.env`.
+> At runtime only `VITE_GLOB_API_URL=/api` is used; `VITE_APP_API_BASE_URL` is for the local dev proxy only. The
+> defaults work directly for a hosted deployment; configure the environment variables in the build environment if you
+> need to override them.
 
-## 方式二: 本地 wrangler 部署
+## Path 2: Deploying with local wrangler
 
-### 创建云资源
+### Creating cloud resources
 
-> wrangler >= 4.45 支持自动资源供应：`wrangler.toml` 中未填写 id 时，`wrangler deploy` 会自动创建
-> D1/R2 并关联到 Worker，下列手动创建步骤仅为兼容旧版本，可选。
+> wrangler >= 4.45 supports automatic resource provisioning: when `wrangler.toml` has no id, `wrangler deploy` creates
+> D1/R2 and links them to the Worker. The manual steps below only exist for older versions and are optional.
 
 ```bash
-# 1. 创建 D1 数据库
-npx wrangler d1 create sun-panel-on-cloudflare-worker_db
+# 1. Create the D1 database
+npx wrangler d1 create sun-panel-on-cloudflare-worker-db
 
-# 2. 创建 R2 存储桶
+# 2. Create the R2 bucket
 npx wrangler r2 bucket create sun-panel-on-cloudflare-worker-files
 ```
 
-手动创建后需自行把输出的 `database_id` 加到 `wrangler.toml` 的 `[[d1_databases]]`
-（当前配置里这个字段是留空的）。
-不手动创建也可以：部署阶段由自动资源供应完成创建，本地交互式 `wrangler deploy`
-还会把生成的 id 写回配置文件（可保存或丢弃）；CI 环境不回写，但后续部署同样可用。
+After creating them manually, add the printed `database_id` to `[[d1_databases]]` in `wrangler.toml`
+(that field is currently left empty).
+Creating them by hand is not required: automatic provisioning creates them during deployment, and an interactive
+local `wrangler deploy` even writes the generated id back into the config file (keep it or discard it); CI does not
+write back, yet later deployments work all the same.
 
-## 构建与部署
+## Build & Deploy
 
 ```bash
-# 1. 安装依赖 (单次安装, 含 frontend workspace)
+# 1. Install dependencies (single install, includes the frontend workspace)
 npm install
 
-# 2. 构建前端 (输出到 dist/, 由 Worker 自动托管)
+# 2. Build the frontend (outputs to dist/, served by the Worker)
 npm run build
 
-# 3. 设置 JWT 密钥 (登录签名用, 必填; 建议 ≥32 字符随机值, 如 `openssl rand -base64 48`)
+# 3. Set the JWT secret (signs login tokens, required; use a random value ≥32 chars, e.g. `openssl rand -base64 48`)
 npx wrangler secret put JWT_SECRET
 
-# 3b. (可选但强烈建议) 设置密码 pepper: 之后新密码用 PBKDF2 + 随机盐 + pepper 存储,
-#     旧的三重 MD5 哈希仍可登录, 并在登录成功后自动升级。
-#     ⚠️ 配了就不要再改/删: 换了之后旧哈希无法校验 (会返回明确的 1009 提示而不是「密码错误」),
-#     请与 JWT_SECRET 一起备份。
+# 3b. (optional but strongly recommended) set the password pepper: new passwords are then stored as
+#     PBKDF2 + random salt + pepper; old triple-MD5 hashes can still log in and are upgraded after a successful login.
+#     ⚠️ once set, never change or delete it: old hashes can no longer be verified (you get an explicit 1009
+#     message instead of "wrong password"), so back it up together with JWT_SECRET.
 npx wrangler secret put PASSWORD_PEPPER
 
-# 3c. (可选) PBKDF2 迭代数, 默认 5000 (本机实测约 2.6ms CPU)。
-#     免费版每请求 CPU 上限 10ms, 调太大会让登录报 1102; 升级到 Workers Paid 后可调到 210000。
+# 3c. (optional) PBKDF2 iteration count, default 5000 (≈2.6 ms CPU measured on this machine).
+#     The free plan allows 10 ms CPU per request, so a much larger value makes login fail with 1102;
+#     after upgrading to Workers Paid you can raise it to 210000.
 # npx wrangler secret put PASSWORD_PBKDF2_ITERATIONS
 
-# 4. 部署 (首次部署会按 wrangler.toml 创建并绑定 D1/R2)
+# 4. Deploy (the first deploy creates and binds D1/R2 as described in wrangler.toml)
 npm run deploy
 
-# 5. 应用数据库迁移 (远程 D1; 需 D1 已存在, 因此放在部署之后)
+# 5. Apply database migrations (remote D1; needs the database to exist, hence after deploy)
 npm run migrations:apply
 ```
 
-> **顺序不要颠倒**：未填 `database_id` 时 D1 由第一次 `wrangler deploy` 创建，
-> 先执行 `npm run migrations:apply` 会因为找不到数据库而失败。
-> 已按上一节手动创建过 D1 的话，先迁移再部署也可以。
+> **Do not swap the order**: without a `database_id`, D1 is created by the first `wrangler deploy`, so running
+> `npm run migrations:apply` first fails because the database cannot be found.
+> If you already created D1 manually as described above, migrating before deploying also works.
 
-部署完成后访问输出的 URL（如 `https://sun-panel-on-cloudflare-worker.xxx.workers.dev`），
-使用默认账号 `admin` / `12345678` 登录。
+Once deployed, open the printed URL (e.g. `https://sun-panel-on-cloudflare-worker.xxx.workers.dev`) and sign in with
+the default account `admin` / `12345678`.
 
-> 也可执行 `npm run deploy:all` 一步完成「构建前端 + 部署」（迁移仍需单独执行）。
+> `npm run deploy:all` combines "build the frontend + deploy" in one step (migrations still run separately).
 
-## 本地开发与测试
+## Local Development & Testing
 
 ```bash
-# 1. 安装依赖 (单次安装, 含 frontend workspace)
+# 1. Install dependencies (single install, includes the frontend workspace)
 npm install
 
-# 2. 复制前端环境变量 (仅需一次; CI 构建时会自动由 .env.example 生成)
+# 2. Copy the frontend environment file (once; CI generates it from .env.example)
 copy frontend\.env.example frontend\.env
 
-# 3. 复制 Worker 本地环境变量 (仅需一次, 内容为 JWT_SECRET)
+# 3. Copy the Worker local environment file (once; contains JWT_SECRET)
 copy .dev.vars.example .dev.vars
 
-# 4. 应用本地数据库迁移 (首次)
+# 4. Apply migrations to the local database (first time)
 npm run migrations:apply:local
 
-# 终端 1: Worker + 本地 D1/R2 模拟 (http://127.0.0.1:8787)
+# Terminal 1: Worker + local D1/R2 emulation (http://127.0.0.1:8787)
 npm run dev
 
-# 终端 2: 前端开发 (热更新, http://127.0.0.1:1002)
+# Terminal 2: frontend dev server with HMR (http://127.0.0.1:1002)
 npm run dev:web
 ```
 
-## 代码检查
+## Code Checks
 
 ```bash
-npm run check   # 完整检查: Worker typecheck + 前端 typecheck + 前端 lint
-npm run build   # 构建前端 (输出到 dist/)
+npm run check   # full check: Worker typecheck + frontend typecheck + frontend lint
+npm run build   # build the frontend (outputs to dist/)
 ```
 
-> 说明: 前端开发服务器的 `/api` 与 `/uploads` 请求已通过 Vite 代理转发到 Worker
-> (`frontend/.env` 中 `VITE_APP_API_BASE_URL=http://127.0.0.1:8787/`)。
-> 若只想测试 Worker + 构建产物，可先执行 `npm run build`，然后直接访问 `http://127.0.0.1:8787`。
-> 本地开发密钥在 `.dev.vars` 中 (`JWT_SECRET`)，生产环境请使用 `npx wrangler secret put JWT_SECRET`。
+> Note: the frontend dev server proxies `/api` and `/uploads` to the Worker
+> (`VITE_APP_API_BASE_URL=http://127.0.0.1:8787/` in `frontend/.env`).
+> To test the Worker together with the build output only, run `npm run build` first and open `http://127.0.0.1:8787`.
+> The local development secret lives in `.dev.vars` (`JWT_SECRET`); for production use
+> `npx wrangler secret put JWT_SECRET`.
 
-## 备份与恢复
+## Backup & Restore
 
-数据分两处：**D1**（全部业务数据）与 **R2**（上传的图片/文件 + 站点图标）。
-应用内的「导入导出」只覆盖图标与样式配置，**不含图片**，所以自托管场景建议按下面的方式各备一份。
+Data lives in two places: **D1** (all business data) and **R2** (uploaded images/files + site icons).
+The in-app "Import/Export" only covers icons and style configuration and **does not include images**, so for
+self-hosting you should back up both as described below.
 
-### D1（业务数据）
+### D1 (business data)
 
 ```bash
-# 导出为 SQL（默认输出到当前目录，文件名形如 <库名>-<时间>.sql）
-npx wrangler d1 export sun-panel-on-cloudflare-worker_db --remote --output=backup/$(date +%Y%m%d)-db.sql
+# Export as SQL (written to the current directory by default, named like <db-name>-<timestamp>.sql)
+npx wrangler d1 export sun-panel-on-cloudflare-worker-db --remote --output=backup/$(date +%Y%m%d)-db.sql
 
-# 只导数据（不含建表语句）: 目标库已有结构时用这个
-npx wrangler d1 export sun-panel-on-cloudflare-worker_db --remote --no-schema --output=backup/data.sql
+# Data only (no CREATE statements): use this when the target database already has the schema
+npx wrangler d1 export sun-panel-on-cloudflare-worker-db --remote --no-schema --output=backup/data.sql
 ```
 
-恢复：对一个空库执行导出的 SQL 即可（`npx wrangler d1 execute sun-panel-on-cloudflare-worker_db --remote --file=backup/xxx.sql`），
-恢复后记得按 [storage.md §5](./storage.md#5-结构变更约定单文件基线) 的约定确认结构与当前代码匹配。
+Restore: run the exported SQL against an empty database
+(`npx wrangler d1 execute sun-panel-on-cloudflare-worker-db --remote --file=backup/xxx.sql`), then confirm that the
+schema matches the current code as described in [storage.md §5](./storage.md#5-structure-change-policy-single-file-baseline).
 
-> D1 的 Time Travel 也能救急：控制台或 `npx wrangler d1 time-travel info sun-panel-on-cloudflare-worker_db` 查看可回滚的时间点
-> （默认保留 30 天，付费版 30 天 / 免费版 7 天，以官方文档为准）。
+> D1 Time Travel also helps in an emergency: check the rollback points in the dashboard or with
+> `npx wrangler d1 time-travel info sun-panel-on-cloudflare-worker-db`
+> (30 days by default; check the official docs for the free-plan retention).
 
-### R2（图片与文件）
+### R2 (images and files)
 
-R2 没有「导出成单文件」的命令，两种做法：
+R2 has no "export to a single file" command, so there are two approaches:
 
 ```bash
-# 方案 A: rclone（推荐，支持增量同步）—— 先用 rclone config 配好 S3 兼容端点
+# Option A: rclone (recommended, supports incremental sync) — configure the S3-compatible endpoint with `rclone config` first
 rclone sync r2:sun-panel-on-cloudflare-worker-files ./backup/r2 --progress
 
-# 方案 B: 逐个对象下载（对象不多时够用）
+# Option B: download objects one by one (fine for a small number of objects)
 npx wrangler r2 object get sun-panel-on-cloudflare-worker-files/<key> --file=./backup/r2/<key>
 ```
 
-对象 key 的两种形态见 [storage.md §3](./storage.md#3-r2-对象布局与回收)；
-恢复时把对象按相同 key 传回桶里即可（`rclone sync ./backup/r2 r2:sun-panel-on-cloudflare-worker-files`）。
+The two object-key shapes are described in [storage.md §3](./storage.md#3-r2-object-layout-and-reclamation); to
+restore, upload the objects back into the bucket under the same keys
+(`rclone sync ./backup/r2 r2:sun-panel-on-cloudflare-worker-files`).
 
-> 注意：`file` 表里记录的是 `./uploads/<key>`，所以「D1 + R2」要一起备份/恢复，只恢复一边会出现列表有记录但图片 404，或图片在但列表看不到。
+> Note: the `file` table stores paths as `./uploads/<key>`, so "D1 + R2" must be backed up and restored together —
+> restoring only one side leaves either list entries whose images 404, or images that no list shows.
 
-### Secret
+### Secrets
 
-`JWT_SECRET` 与 `PASSWORD_PEPPER`（如果配了）无法从 Cloudflare 读回，请自行在密码管理器里留存：
-- 丢了 `JWT_SECRET` → 所有人需重新登录；
-- 丢了 `PASSWORD_PEPPER` → 新版密码哈希无法校验（登录会返回明确的 1009 提示），需要重置密码。
+`JWT_SECRET` and `PASSWORD_PEPPER` (if configured) cannot be read back from Cloudflare, so keep them in your password
+manager:
+- losing `JWT_SECRET` → everyone has to sign in again;
+- losing `PASSWORD_PEPPER` → new password hashes can no longer be verified (login returns an explicit 1009 message)
+  and the password must be reset.
 
-## 常见问题
+## FAQ
 
-**构建失败：`Error: ENOENT: no such file or directory, open '.env'`**
+**Build fails: `Error: ENOENT: no such file or directory, open '.env'`**
 
 ```
 > sun-panel-frontend@1.3.0 add-version
@@ -220,39 +243,40 @@ npx wrangler r2 object get sun-panel-on-cloudflare-worker-files/<key> --file=./b
 Error: ENOENT: no such file or directory, open '.env'
 ```
 
-原因：构建脚本 `frontend/add-frontend-version.js` 需要读写 `frontend/.env`，但 `.env` 被
-`.gitignore` 排除，CI 克隆下来的仓库里只有 `.env.example`，脚本直接 `readFileSync` 即崩溃，
-`run-p` 会连带中断 `type-check` 与 `vite build`。
+Cause: the build script `frontend/add-frontend-version.js` reads and writes `frontend/.env`, but `.env` is excluded
+by `.gitignore`, so a fresh CI clone only has `.env.example`; the script calls `readFileSync` and crashes, which
+`run-p` propagates to `type-check` and `vite build`.
 
-解决：当前代码已修复——脚本检测到 `.env` 缺失时会先用 `frontend/.env.example` 生成一份，
-再写入 `VITE_APP_VERSION`；同时 `build` 脚本改为先串行执行 `add-version`，避免 vite 读到
-尚未更新版本号的 `.env`。升级到最新代码即可。
+Fix: the current code already handles this — when `.env` is missing the script generates it from
+`frontend/.env.example` before writing `VITE_APP_VERSION`; the `build` script also runs `add-version` first in
+sequence so vite never reads a `.env` with a stale version. Simply update to the latest code.
 
-**构建耗时过长（install 阶段出现两次、共十余分钟）**
+**Build takes too long (the install step appears twice, ten-plus minutes in total)**
 
-Workers Builds 在执行构建命令前会自动安装依赖，Build command 再写一次
-`npm install` 会重复装依赖。把 Build command 从 `npm install && npm run build` 改为
-`npm run build` 即可。
+Workers Builds installs dependencies before running the build command, so writing `npm install` in the Build command
+installs them twice. Change the Build command from `npm install && npm run build` to `npm run build`.
 
-**本地/首次部署时 `npm run migrations:apply` 报找不到数据库**
+**`npm run migrations:apply` cannot find the database locally / on first deploy**
 
 ```
-Couldn't find an auto-provisioned D1 DB named 'sun-panel-on-cloudflare-worker_db' for binding 'DB'.
+Couldn't find an auto-provisioned D1 DB named 'sun-panel-on-cloudflare-worker-db' for binding 'DB'.
 Run 'wrangler deploy' to provision it, or add 'database_name' / 'database_id' to your config.
 ```
 
-原因：未填 `database_id` 时 D1 由 `wrangler deploy` 创建，迁移命令只作用于已存在的库。
-先执行 `npm run deploy`，再执行 `npm run migrations:apply`。
+Cause: without a `database_id`, D1 is created by `wrangler deploy`, and the migration command only acts on an
+existing database. Run `npm run deploy` first, then `npm run migrations:apply`.
 
-**Workers Builds 的 Deploy command 在迁移步骤报鉴权错误**
+**The Deploy command in Workers Builds fails with an authentication error at the migration step**
 
-自动创建的构建 token 不含 D1 权限。在 Worker → **Settings → Build → API token**
-换成带 D1 编辑权限的 token 后重新构建。
+The automatically created build token has no D1 permissions. Replace it under Worker →
+**Settings → Build → API token** with a token that can edit D1 and rebuild.
 
-## 与上游的差异
+## Differences from Upstream
 
-见根 [README 的「与上游 (Sun-Panel v1.3.0) 的差异」表与「已知限制」](../README.zh-CN.md#-与上游-sun-panel-v130-的差异)（含 v1.3.0 的版本口径说明）。
+See the root [README "Differences from Upstream (Sun-Panel v1.3.0)" table and "Known Limitations"](../README.md#-differences-from-upstream-sun-panel-v130) (including how the v1.3.0 baseline is defined).
 
-> 前端构建产物统一输出到根目录 `dist/`，由 Worker 静态资源托管；`frontend/` 仅存放源码。
+> The frontend build output always goes to `dist/` at the repository root and is served by the Worker's static
+> assets; `frontend/` only contains source code.
 
-> 数据存在哪、能不能删、免费层额度够不够 —— 见 [storage.md](./storage.md)（含 2026-09-21 的实测用量）。
+> Where data lives, what can be deleted, and whether the free tier is enough — see [storage.md](./storage.md)
+> (including usage measured on 2026-09-21).

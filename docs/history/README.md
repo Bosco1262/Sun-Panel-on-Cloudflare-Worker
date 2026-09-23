@@ -1,37 +1,41 @@
-# 历史归档
+# Historical Archive
 
-> 这里存放**只读存档**：内容记录的是「当时的设计与需求」，**不代表当前实现状态**。
-> 想了解现状请看 [docs/README.md](../README.md)（文档索引）与根 [README](../../README.md)（中文版：[README.zh-CN](../../README.zh-CN.md)）。
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-## 归档判定标准
+> This directory holds **read-only archives**: they record "the design and requirements of that time" and **do not describe the current implementation**.
+> For the current state see [docs/README.md](../README.md) (documentation index) and the root [README.md](../../README.md).
 
-一份文档**满足以下任一条**才放进本目录：
+## Archiving Criteria
 
-| 判定 | 说明 | 例子 |
-|------|------|------|
-| 设计已被实现且不再指导改动 | 计划/设计与现状不一致，只留作追溯 | `migration/plan.md`（迁移期选型，其中 Drizzle ORM、前端输出目录等与实现不符） |
-| 需求已被吸收进活跃文档 | 内容仍有价值，但跟踪位置已转移 | `requirements/early-todo.md`（未完成的三条已并入 improvement-plan §9.10~9.12） |
-| 已被新文档完全取代 | 避免同一件事两处维护 | —（暂无） |
+A document belongs here if it **matches any of the following**:
 
-**不放进本目录的**：
+| Criterion | Explanation | Example |
+|-----------|-------------|---------|
+| The design has been implemented and no longer guides changes | The plan/design disagrees with the current state and is kept for traceability only | `migration/plan.md` (migration-era choices; Drizzle ORM, the frontend output directory and more differ from the implementation) |
+| The requirements have been absorbed into an active document | The content still has value, but tracking moved elsewhere | `requirements/early-todo.md` (the three open items were merged into improvement-plan §9.10~9.12) |
+| Fully superseded by a newer document | Avoids maintaining the same thing twice | — (none yet) |
 
-- 仍在跟踪的待办与决策 → [improvement-plan.md](../improvement-plan.md)（它的 §9/§10 是活跃计划，因此留在 `docs/` 根下，不做归档）；
-- 功能使用说明、部署与运维资料 → 对应功能文档（`deployment.md` / `storage.md` / `search-engine.md`）。
+**What does not belong here**:
 
-## 目录结构
+- open to-dos and decisions → [improvement-plan.md](../improvement-plan.md) (its §9/§10 are still active, which is why it stays in the `docs/` root instead of being archived);
+- feature guides, deployment and operations material → the matching feature documents (`deployment` / `storage` / `search-engine`; see the file map in [docs/README.md](../README.md)).
+
+## Directory Structure
 
 ```
 docs/history/
-├── README.md                    # 本文件：归档判定标准 + 索引
-├── migration/                   # 主题：迁移与选型
-│   └── plan.md                  # Go 版 → Cloudflare Worker 的迁移设计（选型、阶段计划、与实现的差异清单）
-└── requirements/                # 主题：需求收集
-    └── early-todo.md            # 移植初期的需求清单与当时的实现状态
+├── README.md / README.zh-CN.md         # This file: archiving criteria + index (English / Chinese)
+├── migration/                          # Topic: migration and technology choices
+│   ├── plan.md                         # Go → Cloudflare Worker migration design (English)
+│   └── plan.zh-CN.md                   # Same document (Chinese)
+└── requirements/                       # Topic: requirement gathering
+    ├── early-todo.md                   # Requirements collected early on, with their status at the time (English)
+    └── early-todo.zh-CN.md             # Same document (Chinese)
 ```
 
-## 归档时的做法
+## How to Archive
 
-1. 移动文件到对应主题目录（没有合适主题就新建一个，如 `incidents/`、`designs/`）；
-2. 在文件**顶部**加一段 `> [!NOTE] **历史文档**` 说明，列清「哪些内容已与实现不一致」；
-3. 修正文件内的相对链接（多一层目录 → 多一个 `../`），并全局搜一遍引用它的地方；
-4. 在本文件的「目录结构」里补一行说明。
+1. Move the file into the matching topic directory (create a new topic such as `incidents/` or `designs/` if needed) — **move the English and the Chinese version together**;
+2. Add a `> [!NOTE] **Historical document**` block at the **top** of the file listing "what no longer matches the implementation", in both language versions;
+3. Fix the relative links inside the file (one more directory level → one more `../`) and search the whole repo for references to it; link within the same language only (the Chinese version links to `*.zh-CN.md`);
+4. Add a line for it to the "Directory Structure" section of this file, in both languages.

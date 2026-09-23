@@ -15,6 +15,7 @@ function updateComponent() {
       .finally(() => {
         loading.value = false
       }).catch(() => {
+      // The component does not exist
       // 组件不存在
         dynamicComponent.value = ''
         return null

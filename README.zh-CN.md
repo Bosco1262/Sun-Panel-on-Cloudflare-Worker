@@ -1,14 +1,10 @@
-# Language Switch
-
-[English](README.md) | [简体中文](README.zh-CN.md)
-
----
-
 <div align=center>
 
-<img src="./docs/images/logo.png" width="100" height="100" />
+<img src="./docs/assets/logo.png" width="100" height="100" />
 
 # Sun-Panel-on-Cloudflare-Worker
+
+[English](README.md) | [简体中文](README.zh-CN.md)
 
 把 [Sun-Panel](https://github.com/hslr-s/sun-panel)（Vue 3 前端 + Go 后端）移植到 **Cloudflare Workers** 的单用户版本。
 
@@ -22,10 +18,10 @@ Worker (Hono) + D1 + R2 + Vue 3
 > [!NOTE]
 > 本仓库是上游 [hslr-s/sun-panel](https://github.com/hslr-s/sun-panel) 的社区移植版本：
 > 后端由 Go (Gin) + SQLite 改写为 Cloudflare Worker (Hono) + D1/R2，前端沿用上游 Vue 3 代码并做适配。
-> 上游 README 原文见 [docs/upstream/README.md](./docs/upstream/README.md)。
-> 深入文档从 [docs/README.md](./docs/README.md)（文档索引）进入。
+> 上游 README 原文存档见 [docs/upstream/README.zh-CN.md](./docs/upstream/README.zh-CN.md)（英文版 `README.md`）。
+> **深入文档为双语**（`X.md` 英文 / `X.zh-CN.md` 中文，每份文档标题下有语言切换）—— 从 [docs/README.zh-CN.md](./docs/README.zh-CN.md)（文档索引）进入。
 
-![](./docs/images/main-dark.png)
+![](./docs/assets/main-dark.png)
 
 ## ☁️ 技术栈
 
@@ -74,7 +70,7 @@ D1 与 R2 会在部署时**自动创建并绑定**（wrangler ≥ 4.45 的自动
    | 配置项 | 值 |
    |--------|-----|
    | Build command | `npm run build` |
-   | Deploy command | `npx wrangler deploy && npx wrangler d1 migrations apply sun-panel-on-cloudflare-worker_db --remote` |
+   | Deploy command | `npx wrangler deploy && npx wrangler d1 migrations apply sun-panel-on-cloudflare-worker-db --remote` |
 
    > 构建命令**不要**写成 `npm install && npm run build`：Workers Builds 在执行构建命令前会自动安装依赖，
    > 再装一遍只会白花几分钟。
@@ -85,7 +81,7 @@ D1 与 R2 会在部署时**自动创建并绑定**（wrangler ≥ 4.45 的自动
 5. 完成 —— 此后只需 `git push`。
 
 > 细节（自动资源供应、迁移步骤所需的 D1 权限、预览环境、本地 wrangler 部署方式、备份恢复与常见问题）
-> 见 **[docs/deployment.md](./docs/deployment.md)**。
+> 见 **[docs/deployment.zh-CN.md](./docs/deployment.zh-CN.md)**。
 
 ## 🗂️ 仓库结构
 
@@ -109,14 +105,16 @@ D1 与 R2 会在部署时**自动创建并绑定**（wrangler ≥ 4.45 的自动
 
 | 文档 | 内容 |
 |------|------|
-| [docs/README.md](./docs/README.md) | **文档索引**：文档地图、职责划分与维护约定（从这里进） |
-| [docs/deployment.md](./docs/deployment.md) | 部署与本地开发完整说明、常见问题、备份与恢复 |
-| [docs/storage.md](./docs/storage.md) | 数据与资源：D1 各表用途、R2 对象布局与回收、本地 `.wrangler` 状态、**Cloudflare 免费层额度与实测用量** |
-| [docs/search-engine.md](./docs/search-engine.md) | 搜索引擎设置（风格设置管理区）使用说明、占位符规则 |
-| [docs/improvement-plan.md](./docs/improvement-plan.md) | 改进计划：待办候选（§9）、全仓库排查结论（§10）、已结项记录与**自检脚本清单**（附录 C） |
-| [docs/history/](./docs/history/) | 历史存档：迁移设计（`migration/plan.md`）、早期需求清单（`requirements/early-todo.md`） |
-| [docs/upstream/README.md](./docs/upstream/README.md) | 上游原版 README（特性、截图、致谢） |
-| [docs/upstream/CHANGELOG.md](./docs/upstream/CHANGELOG.md) | 上游更新日志 |
+| [docs/README.zh-CN.md](./docs/README.zh-CN.md) | **文档索引**：文档地图、职责划分与维护约定（从这里进） |
+| [docs/deployment.zh-CN.md](./docs/deployment.zh-CN.md) | 部署与本地开发完整说明、常见问题、备份与恢复 |
+| [docs/storage.zh-CN.md](./docs/storage.zh-CN.md) | 数据与资源：D1 各表用途、R2 对象布局与回收、本地 `.wrangler` 状态、**Cloudflare 免费层额度与实测用量** |
+| [docs/search-engine.zh-CN.md](./docs/search-engine.zh-CN.md) | 搜索引擎设置（风格设置管理区）使用说明、占位符规则 |
+| [docs/improvement-plan.zh-CN.md](./docs/improvement-plan.zh-CN.md) | 改进计划：待办候选（§9）、全仓库排查结论（§10）、已结项记录与**自检脚本清单**（附录 C） |
+| [docs/history/](./docs/history/) | 历史存档：迁移设计（`migration/plan.zh-CN.md`）、早期需求清单（`requirements/early-todo.zh-CN.md`） |
+| [docs/upstream/README.zh-CN.md](./docs/upstream/README.zh-CN.md) | 上游原版 README（特性、截图、致谢） |
+| [docs/upstream/CHANGELOG.zh-CN.md](./docs/upstream/CHANGELOG.zh-CN.md) | 上游更新日志 |
+
+> 上表每份文档都是双语对：`X.md`（英文）/ `X.zh-CN.md`（中文），标题下有语言切换（与本 README 同款）。
 
 ## 🔀 与上游 (Sun-Panel v1.3.0) 的差异
 
@@ -147,6 +145,7 @@ D1 与 R2 会在部署时**自动创建并绑定**（wrangler ≥ 4.45 的自动
 | 迁移基线 | `migrations/0001_init.sql` 只对**全新库**生效；已部署库的结构变化需按 `docs/improvement-plan.md` §2.2 的约定处理 |
 | 自定义 JS/CSS | 由管理员自己填写并注入所有页面，等同于给自己开了一个 XSS 入口，请只粘贴可信代码 |
 | 会话依赖 Cookie | 登录态存放在 HttpOnly Cookie 里，浏览器禁用 Cookie（或跨站策略拦截）会无法登录；命令行脚本仍可用 `token` 请求头 |
+| 安全姿态与已接受的风险 | 信任边界、问题清单（V-01…，含已评估并刻意接受的风险）与每轮验证的性质见 [docs/security.zh-CN.md](./docs/security.zh-CN.md) |
 
 ## 📄 许可证
 

@@ -13,9 +13,11 @@ const panelState = usePanelState()
 const ms = useMessage()
 const showWallpaperInput = ref(false)
 
+// The upload endpoint follows the shared API base (a hardcoded /api breaks on sub-path or standalone-domain deployments)
 // 上传接口跟随统一 API 基址 (硬编码 /api 在子路径/独立域名部署时会失效)
 const uploadAction = `${import.meta.env.VITE_GLOB_API_URL || '/api'}/file/uploadImg`
 
+// With an empty wallpaper URL, do not build an empty `url()`: simply set no background (the container colour shows through)
 // 壁纸地址为空时不要拼 `url()` 空值, 直接不设置背景 (回退为容器底色)
 const backgroundPreviewStyle = computed(() => {
   const src = panelState.panelConfig.backgroundImageSrc?.trim()
@@ -23,6 +25,7 @@ const backgroundPreviewStyle = computed(() => {
 })
 
 const isSaveing = ref(false)
+// Set to true when changes happen during a save, so one more save follows it and the last edit is not lost
 // 保存期间又发生改动时置为 true, 保存结束后再补一次, 避免丢失最后一次修改
 let savePending = false
 
@@ -48,6 +51,7 @@ const maxWidthUnitOption = [
   },
 ]
 
+// The panel config and the search-engine config share one debounced save (they live in the same row, so they must be submitted together)
 // 面板配置 / 搜索引擎配置共用一次防抖保存 (二者在同一行数据里, 必须一起提交)
 function scheduleSave() {
   if (isSaveing.value) {
@@ -61,6 +65,7 @@ function scheduleSave() {
     panelState.recordState()// 本地记录
     isSaveing.value = false
     uploadCloud()
+    // Something changed again during the save, so schedule one more
     // 保存期间又有改动, 再补一次
     if (savePending)
       scheduleSave()
@@ -69,6 +74,7 @@ function scheduleSave() {
 
 watch(panelState.panelConfig, scheduleSave)
 
+// The engine list / order / current selection / open method changed
 // 搜索引擎列表/排序/当前选中项/打开方式变化
 watch(() => panelState.searchEngine, scheduleSave, { deep: true })
 
@@ -87,18 +93,24 @@ function handleUploadBackgroundFinish({
       apiRespErrMsg(res)
   }
   catch {
+    // The response is not JSON (a gateway error page, say): it must be reported, otherwise the user assumes the upload succeeded
     // 响应不是 JSON (网关错误页等): 必须提示, 否则用户以为上传成功了
     ms.error(t('common.uploadFail'))
   }
   return file
 }
 
-/** 上传请求本身失败 (网络/HTTP 错误) 时 NUpload 触发 error 事件 */
+/**
+ * NUpload fires the error event when the upload request itself fails (network / HTTP error)
+ *
+ * 上传请求本身失败 (网络/HTTP 错误) 时 NUpload 触发 error 事件
+ */
 function handleUploadError() {
   ms.error(t('common.uploadFail'))
 }
 
 function uploadCloud() {
+  // The panel and the search engine are submitted together, and the backend also preserves unsubmitted fields
   // 面板与搜索引擎一并提交, 后端也会对未提交字段做保留
   panelState.savePanelConfig().then((res) => {
     if (res.code === 0)
@@ -109,6 +121,9 @@ function uploadCloud() {
 }
 
 function resetPanelConfig() {
+  // Resetting replaces panelConfig as a whole and triggers the deep watch below, which performs the debounced save;
+  // calling uploadCloud here as well would write to the database twice for one reset
+  //
   // 重置会整体替换 panelConfig 并触发下面的 deep watch, 由它统一做防抖保存;
   // 这里再调一次 uploadCloud 会导致同一次重置写库两次
   panelState.resetPanelConfig()

@@ -45,6 +45,7 @@ export function getLocalState(): Panel.State {
   return {
     ...defaultState(),
     ...localState,
+    // The search-engine config in the local cache is normalised as well, so historical shapes do not linger
     // 本地缓存里的搜索引擎配置同样做一次归一化, 避免历史结构残留
     searchEngine: normalizeSearchEngineConfig(localState?.searchEngine),
   }

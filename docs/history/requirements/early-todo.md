@@ -1,45 +1,50 @@
-# 移植待办 / 需求清单（历史存档）
+# Porting To-Do / Requirements (Historical Archive)
 
-> **历史文档**：这份清单是移植初期收集需求时留下的记录，「已实现」项只作为追溯依据。
-> 仍然**未完成/待明确**的三条需求已并入 [improvement-plan.md §9](../../improvement-plan.md)（9.10 ~ 9.12），
-> 后续请在那里跟踪，不要再往本文件追加内容。
+[English](early-todo.md) | [简体中文](early-todo.zh-CN.md)
+
+> **Historical document**: this list is the record of requirements collected while porting started; the "done" entries
+> only serve as traceability.
+> The three requirements still **open / undecided** were merged into
+> [improvement-plan.md §9](../../improvement-plan.md) (9.10 ~ 9.12) — track them there from now on instead of adding to
+> this file.
 >
-> 来源：移植过程中陆续收集的需求（原 `原项目/移植项目仍存在问题.txt`，该目录已改名为 `reference/upstream-sun-panel/`）。
-> 「状态」一栏按当时代码核对得出。
+> Source: requirements collected during the port (originally `原项目/移植项目仍存在问题.txt`; that directory has been
+> renamed to `reference/upstream-sun-panel/`).
+> The "status" column was derived by checking the code at the time.
 
-## 批次一
+## Batch one
 
-| # | 需求 | 状态 |
-|---|------|------|
-| 1 | 「我的信息」重构为三个区域：**账号**区放「用户名」（合并原「账号」与「昵称」，去掉「编辑」按钮）、分隔线、**修改登录信息**（原「修改密码」，弹窗顶部增加用户名输入且不能为空）；**设置**区放原「语言」「主题」；底部「退出登录」。区域名使用与风格设置中「LOGO」一致的字体 | 部分实现<br>`frontend/src/components/apps/UserInfo/index.vue`：账号 / 设置两个卡片、退出登录置底、区域名字体与「LOGO」一致均已实现；但登录信息**未合并**——仍是独立的「修改用户名」与「修改密码」两个入口与弹窗，密码弹窗里没有用户名输入，「昵称」也不再展示 |
-| 2 | 导入导出中移除「浏览器书签转换工具」 | 已实现（前端已无相关代码） |
+| # | Requirement | Status |
+|---|-------------|--------|
+| 1 | Rework "My Info" into three areas: an **Account** area holding "Username" (merging the former "Account" and "Nickname", without the "Edit" button), a separator, and **Change login info** (formerly "Change password", with a required username field added at the top of the dialog); a **Settings** area holding the former "Language" and "Theme"; "Sign out" at the bottom. Area titles use the same typeface as "LOGO" in Style Settings | Partially implemented<br>`frontend/src/components/apps/UserInfo/index.vue`: the Account / Settings cards, the sign-out at the bottom, and the area titles matching "LOGO" are all in place; but the login information was **not merged** — "Change username" and "Change password" are still two separate entries and dialogs, the password dialog has no username field, and "Nickname" is no longer shown |
+| 2 | Remove the "browser bookmark converter" from Import/Export | Implemented (no such code left in the frontend) |
 
-## 批次二
+## Batch two
 
-| # | 需求 | 状态 |
-|---|------|------|
-| 1 | 自定义页脚的默认链接与名称改为 `https://github.com/Bosco1262/Sun-Panel-on-Cloudflare-Worker` 和 `Sun-Panel-on-Cloudflare-Worker` | 已实现<br>`frontend/src/store/modules/panel/helper.ts`（`defaultFooterHtml`） |
-| 2 | 上传文件管理中图片的背景太花，需减少 50% 透明度 | 待确认（当前棋盘格为 `rgba(0, 0, 0, 0.03)`，位于 `frontend/src/components/apps/UploadFileManager/index.vue`；上游同样有 `.transparent-grid` 棋盘格（`#f0f0f0` / 16px），本移植版是修改了明度并在 `frontend/src/styles/global.less` 增加了白色变体） |
-| 3 | 调整新建的布局 | 待确认（需求描述较模糊，需补充具体要求） |
+| # | Requirement | Status |
+|---|-------------|--------|
+| 1 | Change the default link and name of the custom footer to `https://github.com/Bosco1262/Sun-Panel-on-Cloudflare-Worker` and `Sun-Panel-on-Cloudflare-Worker` | Implemented<br>`frontend/src/store/modules/panel/helper.ts` (`defaultFooterHtml`) |
+| 2 | The image background in the upload-file manager is too busy; reduce its opacity by 50% | To be confirmed (the checkerboard is currently `rgba(0, 0, 0, 0.03)` in `frontend/src/components/apps/UploadFileManager/index.vue`; upstream also has a `.transparent-grid` checkerboard (`#f0f0f0` / 16px), and this port changed the lightness and added a white variant in `frontend/src/styles/global.less`) |
+| 3 | Adjust the layout of "New" (create) | To be confirmed (the requirement is vague; specifics are needed) |
 
-## 批次三
+## Batch three
 
-| # | 需求 | 状态 |
-|---|------|------|
-| 1 | 重新设计「搜索引擎设置」：入口移到「风格设置 → 搜索栏组件」，做成完整管理区（增删改 / 拖拽排序 / 设为当前 / 恢复内置 / 重置 / 实时预览）；搜索框弹层只保留切换与新窗口开关 | 已实现<br>`frontend/src/components/apps/Style/SearchEngineSettings.vue`、`frontend/src/components/deskModule/SearchBox/index.vue`，详见 [search-engine.md](../../search-engine.md)<br>校验提示的 i18n 命名空间问题已修（见下表） |
-| 2 | 关键词占位不再强制 `%s`，兼容 `%s` / `{keyword}` / `{q}`，无占位符时自动追加，并支持粘贴真实搜索网址自动推导模板 | 已实现<br>`frontend/src/utils/searchBox/index.ts` |
-| 3 | 搜索引擎配置从 `module_config` 迁移到 `user_config.search_engine_json`，并修复「改样式会清空搜索引擎配置」的 bug | 已实现<br>`src/api/panel/userConfig.ts`（未提交字段保留原值）。<br>⚠️ 后续调整（见 [improvement-plan.md](../../improvement-plan.md) §5.1）：`module_config` 的一次性迁移读取已随死代码清理**移除**，`module_config` 表也不再创建；从很老版本直升、且从未打开过迁移后新版的实例，自定义引擎需在「风格设置 → 搜索栏组件」里重新配置 |
+| # | Requirement | Status |
+|---|-------------|--------|
+| 1 | Redesign "Search engine settings": move the entry to "Style Settings → Search bar component" and turn it into a full management area (add/edit/delete, drag to sort, set as current, restore built-ins, reset, live preview); the search-box popover keeps only the engine switch and the new-window switch | Implemented<br>`frontend/src/components/apps/Style/SearchEngineSettings.vue`, `frontend/src/components/deskModule/SearchBox/index.vue`, see [search-engine.md](../../search-engine.md)<br>The i18n namespace problem of the validation messages was fixed (see the table below) |
+| 2 | The keyword placeholder is no longer forced to `%s`: support `%s` / `{keyword}` / `{q}`, append automatically when there is no placeholder, and infer the template when a real search URL is pasted | Implemented<br>`frontend/src/utils/searchBox/index.ts` |
+| 3 | Move the search-engine config from `module_config` to `user_config.search_engine_json` and fix the "changing the style wipes the search-engine config" bug | Implemented<br>`src/api/panel/userConfig.ts` (fields that are not submitted keep their value).<br>⚠️ Later change (see [improvement-plan.md](../../improvement-plan.md) §5.1): the one-off `module_config` migration read was **removed** with the dead-code cleanup and the `module_config` table is no longer created; instances upgraded straight from a very old version that never opened the migrated UI must reconfigure their engines under "Style Settings → Search bar component" |
 
-## 已修复（核对时发现，本轮已处理）
+## Fixed (found while reviewing, handled in that round)
 
-| # | 问题 | 处理 |
-|---|------|------|
-| 1 | 搜索引擎表单的校验提示显示为原始 key（如 `deskModule.searchBox.engineNameRequired`）：工具函数返回的 key 前缀是 `deskModule.searchBox.`，但文案只定义在 `deskModule.searchEngine.` 下 | 已修：`validateSearchEngine` 的 5 个 key 改为 `deskModule.searchEngine.*`；`scratch/search-engine-util.test.ts` 同步更新断言，并新增「5 个校验文案在 zh-CN / en-US 里都存在」的用例（两侧 53 passed） |
-| 2 | 弹层管理 UI 移除后遗留了不再被引用的文案 key（`deskModule.searchBox.engineName/engineUrl/engineIconUrl/engineDeleteLastWarning/engineFormIncomplete/searchEngineManage`、`deskModule.searchEngine.sortTip`），其中拖拽提示「拖动调整搜索框中的展示顺序」实际从不显示 | 已修：7 个死文案已从 `zh-CN.json` / `en-US.json` 删除；`deskModule.searchBox.*` 与 `deskModule.searchEngine.*` 现无死文案。若之后要把「拖动排序」提示显示出来，需重新加回 `searchEngine.sortTip` 并在模板里引用 |
-| 3 | 代码块「复制」按钮的文案 key `chat.copyCode` 在 locale 中不存在，界面上会显示原始 key（**初始提交即存在，非搜索引擎改造引入**） | 已修：新增 `chat.copyCode`（`复制` / `Copy`）。由 `scratch/i18n-audit.ts` 发现，现全量审计为「缺失 0 / 中英不齐 0」 |
+| # | Problem | Handling |
+|---|---------|----------|
+| 1 | The search-engine form showed raw keys as validation messages (e.g. `deskModule.searchBox.engineNameRequired`): the helper returned keys prefixed `deskModule.searchBox.` while the strings were only defined under `deskModule.searchEngine.` | Fixed: the five keys of `validateSearchEngine` became `deskModule.searchEngine.*`; `scratch/search-engine-util.test.ts` was updated accordingly and gained a case asserting that all five validation strings exist in both `zh-CN` and `en-US` (53 passed on both sides) |
+| 2 | Removing the popover management UI left unreferenced message keys (`deskModule.searchBox.engineName/engineUrl/engineIconUrl/engineDeleteLastWarning/engineFormIncomplete/searchEngineManage`, `deskModule.searchEngine.sortTip`), and the drag hint "drag to reorder the search box" never appeared | Fixed: the seven dead strings were removed from `zh-CN.json` / `en-US.json`; `deskModule.searchBox.*` and `deskModule.searchEngine.*` now have no dead strings. If the drag hint should be shown later, re-add `searchEngine.sortTip` and reference it in the template |
+| 3 | The message key `chat.copyCode` of the code-block "Copy" button did not exist in the locales, so the UI showed the raw key (**present since the initial commit, not introduced by the search-engine rework**) | Fixed: `chat.copyCode` was added (`复制` / `Copy`). Found by `scratch/i18n-audit.ts`; the full audit now reports "0 missing / 0 zh-en mismatches" |
 
-## 已知问题（核对时发现，待修）
+## Known issues (found while reviewing, still open)
 
-| # | 问题 | 位置 |
-|---|------|------|
-| — | 暂无（`scratch/i18n-audit.ts` 目前报缺失 0、中英不齐 0；57 条死文案均属上游遗留的未使用命名空间，如 `adminSettingUsers.*`、`common.*`，与本轮改造无关） | — |
+| # | Problem | Location |
+|---|---------|----------|
+| — | None for now (`scratch/i18n-audit.ts` reports 0 missing and 0 zh-en mismatches; the 57 dead strings all belong to unused upstream namespaces such as `adminSettingUsers.*`, `common.*`, unrelated to the rework) | — |

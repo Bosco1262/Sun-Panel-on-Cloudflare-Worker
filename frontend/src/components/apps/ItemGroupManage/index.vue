@@ -24,6 +24,7 @@ const defaultMNodal = {
   title: '',
   icon: 'material-symbols:folder-outline',
   sort: 9999,
+  // Group-level card style (aligned with upstream: a new group defaults to the detail icon)
   // 分组级卡片样式 (对齐上游: 新分组默认详情图标)
   cardStyle: 0 as number, // 0=详情图标, 1=小图标, -1=跟随全局
   textColor: '', // 空 = 跟随全局
@@ -51,6 +52,7 @@ const editModalArg = ref<EditModalArg>({
   },
 })
 
+// Text colour: an empty string means "follow the globals"; the colour picker falls back to white for display
 // 文字颜色: 空字符串表示跟随全局, 取色器展示时回退为白色
 const textColorValue = computed<string>({
   get: () => editModalArg.value.model.textColor || '#ffffff',
@@ -68,6 +70,9 @@ function handleResetTextColor() {
 const groups = ref<Panel.ItemIconGroup[]>([])
 
 function handleAddGroup() {
+  // The form and the mode must be reset first: otherwise "edit a group → close → click add" submits the old group's
+  // data as a new group and silently overwrites the original (and editStatus never switches back to "add").
+  //
   // 必须先重置表单与模式: 否则「编辑某分组 → 关闭 → 点添加」会把旧分组数据当成
   // 新分组提交, 静默覆盖原分组 (editStatus 也不会切回「添加」)
   editModalArg.value.model = { ...defaultMNodal }
@@ -77,6 +82,7 @@ function handleAddGroup() {
 
 function handleEditGroup(groupInfo: Panel.ItemIconGroup) {
   editModalArg.value.show = true
+  // Shallow copy: handing the list entry object to the form would show unsaved edits in the list immediately and make cancellation impossible
   // 浅拷贝: 直接把列表项对象交给表单会让未保存的改动即时反映到列表, 且无法取消
   editModalArg.value.model = { ...groupInfo }
   editModalArg.value.editStatus = 2
@@ -97,6 +103,7 @@ function handleSaveSort() {
   }
   saveSort(saveItems).then(({ code, msg }) => {
     if (code === 0) {
+      // Sync the local sort: the list order comes from sort, and without syncing the next drag-save would write back the old value
       // 同步本地 sort: 列表顺序由 sort 决定, 不同步会让下一次拖拽保存写回旧值
       groups.value.forEach((item, i) => {
         item.sort = i + 1
@@ -136,6 +143,7 @@ function handleSaveGroup() {
       return
 
     edit(editModalArg.value.model).then(({ code, msg }) => {
+      // Keep the dialog open on failure so the user can fix the input and retry (the old implementation closed and refreshed even on failure, losing the edit)
       // 失败时保持弹窗打开, 让用户修正后重试 (旧实现失败也关窗+刷新, 改动丢失)
       if (code !== 0) {
         ms.error(msg || t('common.saveFail'))
@@ -166,6 +174,7 @@ onMounted(() => {
 
 <template>
   <div class="h-full flex flex-col gap-2 bg-slate-200 dark:bg-zinc-900 p-2">
+    <!-- Toolbar: action buttons on the left, status hints on the right -->
     <!-- 工具栏: 操作按钮靠左, 状态提示靠右 -->
     <div class="shrink-0 flex items-center gap-2 px-3 py-2 bg-white dark:bg-zinc-800 rounded-xl">
       <NButton type="success" size="small" @click="handleAddGroup">
@@ -194,6 +203,7 @@ onMounted(() => {
       </span>
     </div>
 
+    <!-- Group list: flex-1 fills the remaining height and scrolls internally -->
     <!-- 分组列表: flex-1 自适应剩余高度, 内部滚动 -->
     <div class="flex-1 min-h-0 overflow-auto">
       <VueDraggable
@@ -227,6 +237,7 @@ onMounted(() => {
           </NCard>
         </div>
 
+        <!-- Empty state -->
         <!-- 空状态 -->
         <div v-if="groups.length === 0" class="py-10 text-center text-sm text-slate-400 dark:text-slate-500">
           {{ $t('common.noData') }}
@@ -240,11 +251,13 @@ onMounted(() => {
           <NInput v-model:value="editModalArg.model.title" type="text" :maxlength="20" show-count />
         </NFormItem>
 
+        <!-- Card style -->
         <!-- 卡片风格 -->
         <NFormItem path="cardStyle" :label="$t('apps.itemGroupManage.cardStyle')">
           <NSelect v-model:value="editModalArg.model.cardStyle" :options="cardStyleOptions" />
         </NFormItem>
 
+        <!-- Hide the description -->
         <!-- 隐藏描述信息 -->
         <NFormItem path="hideDescription" :label="$t('apps.baseSettings.hideDescription')">
           <NSwitch
@@ -253,6 +266,7 @@ onMounted(() => {
           />
         </NFormItem>
 
+        <!-- Text colour -->
         <!-- 文字颜色 -->
         <NFormItem path="textColor" :label="$t('common.textColor')">
           <div class="w-full flex items-center">

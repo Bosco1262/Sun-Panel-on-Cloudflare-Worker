@@ -19,6 +19,7 @@ const bindAttrs = computed<{ class: string; style: string }>(() => ({
   style: (attrs.style as string) || '',
 }))
 
+// Write the value back to the parent's prop
 // 更新值父组件传来的值
 const showModal = computed({
   get: () => props.show,

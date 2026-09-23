@@ -23,9 +23,14 @@ const screenWidth = ref(0)
 const isSmallScreen = ref(false)
 const defaultTitle = t('appLauncher.title')
 const height = '500px'
-/** 用户在小屏下手动展开过侧栏后, 不再被 resize 强制折叠 */
+/**
+ * Once the user expanded the sidebar manually on a small screen, a resize no longer forces it to collapse
+ *
+ * 用户在小屏下手动展开过侧栏后, 不再被 resize 强制折叠
+ */
 const userToggledCollapsed = ref(false)
 
+// A computed rather than a ref, so app names follow a language switch
 // computed 而非 ref: 语言切换时应用名要跟着变
 const apps = computed<App[]>(() => [
   {
@@ -85,6 +90,7 @@ function getScreenWidth() {
 function handleResize() {
   screenWidth.value = getScreenWidth()
   if (screenWidth.value < 640) {
+    // Collapse only on the first small-screen entry, otherwise every resize would overwrite the state the user expanded manually
     // 只在首次进入小屏时折叠, 否则每次 resize 都会覆盖用户手动展开的状态
     if (!isSmallScreen.value && !userToggledCollapsed.value)
       collapsed.value = true

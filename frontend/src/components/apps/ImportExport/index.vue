@@ -28,9 +28,14 @@ const version = ref('') // 当前软件版本
 const importObj = ref<ImportJsonResult | null> (null)
 
 const checkedItems = ref<string[]>(['icons']) // 当前准备导入导出的项目
-/** 导入时被后端丢弃的唯一标识 (重复/非法), 导入完成后提示用户 */
+/**
+ * Identifiers the backend dropped during import (duplicates / invalid), reported to the user once the import finishes
+ *
+ * 导入时被后端丢弃的唯一标识 (重复/非法), 导入完成后提示用户
+ */
 const droppedOnlyNames = ref<string[]>([])
 
+// Import icons
 // 导入图标
 async function importIcons(): Promise<string | null> {
   const groups = importObj.value?.geticons()
@@ -45,6 +50,7 @@ async function importIcons(): Promise<string | null> {
     for (let i = 0; i < groups.length; i++) {
       const element = groups[i]
 
+      // Creating the group yields its id
       // 创建组得到组id
       const createGroupResponse = await addGroup<Panel.ItemIconGroup>({
         title: element.title,
@@ -57,6 +63,7 @@ async function importIcons(): Promise<string | null> {
         if (groupId) {
           let addIcons: Panel.ItemInfo[] = []
 
+          // Add the child items in bulk
           // 批量添加子项
           for (let iconI = 0; iconI < element.children.length; iconI++) {
             const iconElement = element.children[iconI]
@@ -70,10 +77,12 @@ async function importIcons(): Promise<string | null> {
               description: iconElement.description,
               openMethod: iconElement.openMethod,
               itemIconGroupId: groupId,
+              // Files exported by older versions have no onlyName field, which stays an empty string (the same as creating an item)
               // 旧版本导出的文件没有 onlyName 字段, 此时为空串 (与新建项目一致)
               onlyName: (iconElement.onlyName ?? '').trim(),
             })
 
+            // Send one request per batchSize items
             // 每 batchSize 个添加一次
             if (addIcons.length === batchSize || iconI === element.children.length - 1) {
               const response = await addMultipleIcons<{ list: Panel.ItemInfo[]; droppedOnlyNames: string[] }>(addIcons)
@@ -81,6 +90,7 @@ async function importIcons(): Promise<string | null> {
               if (response.code !== 0)
                 return response.msg
 
+              // The backend downgrades "duplicate or invalid" identifiers to an empty string and reports them back; they are collected here to inform the user
               // 后端会把「重复或非法」的唯一标识降级为空串并回报, 这里汇总后提示用户
               if (response.data?.droppedOnlyNames?.length)
                 droppedOnlyNames.value.push(...response.data.droppedOnlyNames)
@@ -105,6 +115,10 @@ async function importIcons(): Promise<string | null> {
   }
 }
 
+// Export icons
+// Failures rethrow so the caller can report them: the old implementation returned an empty array silently / skipped
+// failed groups, exporting an incomplete file while still reporting success.
+//
 // 导出图标
 // 失败时抛错由调用方提示: 旧实现静默返回空数组/跳过失败分组, 会导出缺数据的文件却提示「导出成功」
 async function exportIcons(): Promise<IconGroup[]> {
@@ -178,6 +192,7 @@ function handleFileChange(options: { file: UploadFileInfo; fileList: Array<Uploa
     }
     uploadLoading.value = false
   }
+  // A failed read must reset loading too, otherwise the import button stays in its loading state forever
   // 读取失败也必须复位 loading, 否则导入按钮会一直处于 loading
   reader.onerror = () => {
     uploadLoading.value = false
@@ -186,6 +201,7 @@ function handleFileChange(options: { file: UploadFileInfo; fileList: Array<Uploa
   reader.readAsText(file)
 }
 
+// Validate the imported file
 // 验证导入文件
 function importCheck() {
   importWarning.value = []
@@ -202,6 +218,7 @@ function importCheck() {
         if (!importObj.value.isPassCheckConfigVersionNew())
           importWarning.value.push(t('apps.exportImport.softwareVersionLow'))
 
+        // Validation passed, open the dialog
         // 通过了验证,打开弹窗
         importRoundModalShow.value = !importRoundModalShow.value
       }
@@ -214,6 +231,7 @@ function importCheck() {
         ms.error(t('apps.exportImport.errorConfigFileFormat'))
       }
       else {
+        // Unexpected exceptions (a TypeError when the imported file's top level is null / a number, say) must be reported as well
         // 非预期异常 (如导入文件顶层是 null / 数字时的 TypeError) 也必须给出提示
         console.error('import config failed', error)
         ms.error(t('apps.exportImport.errorConfigFileFormat'))
@@ -225,10 +243,12 @@ function importCheck() {
   }
 }
 
+// Start the export
 // 开始导出
 async function handleStartExport() {
   loading.value = true
   try {
+    // Read the software version
     // 获取软件版本号
     const exportResult = exportJson(version.value)
     if (checkedItems.value.includes('icons')) {
@@ -248,6 +268,7 @@ async function handleStartExport() {
   }
 }
 
+// Start the import
 // 开始导入
 async function handleStartImport() {
   loading.value = true
@@ -255,12 +276,14 @@ async function handleStartImport() {
     if (checkedItems.value.includes('icons')) {
       const errMsg = await importIcons()
       if (errMsg !== null) {
+        // Failure: keep the dialog open so the user can fix the file and retry (the old implementation used ms.success for errors and still claimed success)
         // 失败: 保持弹窗打开, 用户可修正后重试 (旧实现用 ms.success 报错且照样提示「操作成功」)
         ms.error(`${t('common.failed')}: ${errMsg}`)
         return
       }
     }
 
+    // Report downgraded identifiers (the import itself succeeded; those items simply have an empty identifier)
     // 唯一标识被降级时提示 (导入本身成功, 只是这些项目的标识为空)
     if (droppedOnlyNames.value.length > 0) {
       const preview = droppedOnlyNames.value.slice(0, 3).join(', ')

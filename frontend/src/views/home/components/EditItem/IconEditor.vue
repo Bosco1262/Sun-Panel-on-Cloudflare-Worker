@@ -22,10 +22,15 @@ const initData: Panel.ItemIcon = {
   backgroundColor: '#2a2a2a6b',
 }
 
+// The upload endpoint follows the shared API base (a hardcoded /api breaks on sub-path or standalone-domain deployments)
 // 上传接口跟随统一 API 基址 (硬编码 /api 在子路径/独立域名部署时会失效)
 const uploadAction = `${import.meta.env.VITE_GLOB_API_URL || '/api'}/file/uploadImg`
 
-/** 补齐默认值与背景色 (空背景色回退默认) */
+/**
+ * Fills in the default values and background colour (an empty background colour falls back to the default)
+ *
+ * 补齐默认值与背景色 (空背景色回退默认)
+ */
 function normalizeItemIcon(icon: Panel.ItemIcon | null | undefined): Panel.ItemIcon {
   return {
     ...initData,
@@ -34,11 +39,17 @@ function normalizeItemIcon(icon: Panel.ItemIcon | null | undefined): Panel.ItemI
   }
 }
 
+// Local edit state + an explicit commit.
+// The old implementation "wrote values onto the temporary object returned by a computed and relied on the computed
+// cache never invalidating", so as soon as a dependency changed or it became a plain function, the icon type/URL
+// was silently lost.
+//
 // 本地编辑态 + 显式 commit。
 // 旧实现是「往 computed 返回的临时对象上写值, 靠 computed 缓存不失效」, 一旦 computed
 // 依赖变化或被改成普通函数, 图标类型/地址就会静默丢失
 const itemIconInfo = ref<Panel.ItemIcon>(normalizeItemIcon(props.itemIcon))
 
+// Re-synchronise when the edited object changes
 // 切换编辑对象时重新同步
 watch(() => props.itemIcon, (v) => {
   itemIconInfo.value = normalizeItemIcon(v)
@@ -53,6 +64,7 @@ function handleIconTypeChange(type: number) {
   commit()
 }
 
+// Gallery selection (aligned with upstream: picking an image switches to image mode and fills in the URL)
 // 图库选择 (对齐上游: 选中后自动切换为图片模式并填充地址)
 const galleryShow = ref(false)
 
@@ -82,6 +94,7 @@ const handleUploadFinish = ({
     }
   }
   catch {
+    // The response is not JSON (a gateway error page, say): it must be reported, otherwise the user assumes the icon was uploaded
     // 响应不是 JSON (网关错误页等): 必须提示, 否则用户以为图标已上传
     ms.error(t('common.uploadFail'))
   }
@@ -89,7 +102,11 @@ const handleUploadFinish = ({
   return file
 }
 
-/** 上传请求本身失败 (网络/HTTP 错误) 时 NUpload 触发 error 事件 */
+/**
+ * NUpload fires the error event when the upload request itself fails (network / HTTP error)
+ *
+ * 上传请求本身失败 (网络/HTTP 错误) 时 NUpload 触发 error 事件
+ */
 function handleUploadError() {
   ms.error(t('common.uploadFail'))
 }
@@ -97,6 +114,7 @@ function handleUploadError() {
 
 <template>
   <div class="w-full">
+    <!-- Icon style options (aligned with upstream: a radio group) -->
     <!-- 图标风格选项 (对齐上游: Radio 组) -->
     <div class="mb-[10px] flex items-center">
       <NRadioGroup
@@ -117,6 +135,7 @@ function handleUploadError() {
     </div>
 
     <div class="w-full flex">
+      <!-- Text -->
       <!-- 文字 -->
       <div v-if="itemIconInfo.itemType === 1">
         <div class="w-auto mr-2 whitespace-nowrap">
@@ -132,6 +151,7 @@ function handleUploadError() {
         />
       </div>
 
+      <!-- Online icon -->
       <!-- 在线图标 -->
       <div v-else-if="itemIconInfo.itemType === 3">
         <div class="w-auto mr-2">
@@ -152,6 +172,7 @@ function handleUploadError() {
         </div>
       </div>
 
+      <!-- Image -->
       <!-- 图片 -->
       <div v-else-if="itemIconInfo.itemType === 2" class="w-full">
         <div class="w-auto whitespace-nowrap">

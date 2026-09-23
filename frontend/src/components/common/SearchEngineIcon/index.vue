@@ -6,6 +6,13 @@ import SvgSrcBing from '@/assets/search_engine_svg/bing.svg'
 import SvgSrcGoogle from '@/assets/search_engine_svg/google.svg'
 
 /**
+ * Search-engine icon
+ *
+ * The icon URL may stop working (a dead external link / a typo by the user) and a plain <img> would show a broken
+ * image, so candidates are tried one by one and the first letter is shown when all of them fail, which keeps
+ * something visible in the UI at all times.
+ *
+ *
  * 搜索引擎图标
  *
  * 图标地址可能失效(外链挂了 / 用户填错), 直接 <img> 会显示破图,
@@ -15,9 +22,17 @@ const props = withDefaults(defineProps<{
   iconSrc?: string
   title?: string
   size?: number
-  /** 图标全部失败时是否回退到内置图标 (默认开启) */
+  /**
+   * Whether to fall back to the built-in icon when every candidate fails (on by default)
+   *
+   * 图标全部失败时是否回退到内置图标 (默认开启)
+   */
   autoFallback?: boolean
-  /** 用户填写的图标地址失效时的兜底候选 (如站点 favicon) */
+  /**
+   * Fallback candidates used when the user's icon URL fails (such as the site favicon)
+   *
+   * 用户填写的图标地址失效时的兜底候选 (如站点 favicon)
+   */
   fallbackCandidates?: string[]
 }>(), {
   iconSrc: '',
@@ -27,6 +42,7 @@ const props = withDefaults(defineProps<{
   fallbackCandidates: () => [],
 })
 
+// Vector icons of the built-in engines: the database stores the bundled svg URL, so match by name here as a fallback
 // 内置引擎的矢量图标: 后台里存的是打包后的 svg 地址, 这里按名称兜底
 const BUILTIN_SVG: Record<string, string> = {
   google: SvgSrcGoogle,
@@ -47,6 +63,7 @@ const configuredIcon = computed(() => {
   const src = (props.iconSrc ?? '').trim()
   if (!src)
     return ''
+  // Bundled svg URLs carry a hash that changes with every build, so match built-in icons by name instead
   // 打包后的内置 svg 地址带 hash, 每次构建都会变; 命中内置图标时改用名称匹配
   if (/\/assets\/(google|baidu|bing)[-.]/i.test(src))
     return builtinIcon.value
@@ -56,6 +73,7 @@ const configuredIcon = computed(() => {
 const fallbackIcon = computed(() => (props.autoFallback ? builtinIcon.value : ''))
 
 const candidates = computed(() => {
+  // A user-supplied icon is tried first and only then the fallbacks; with none configured, the candidates/built-in icon are used directly
   // 用户填了图标就优先用它, 失效后再回退; 没填则直接用候选/内置图标
   const list: string[] = []
   if (configuredIcon.value)

@@ -9,7 +9,10 @@ body {
 	padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* 对齐上游: 透明画布为白色棋盘格 + 浅灰底色 (全局样式, 组件内可覆盖渐变) */
+/* Aligned with upstream: the transparent canvas is a white checkerboard on a light grey base
+   (a global style; components may override the gradient)
+
+   对齐上游: 透明画布为白色棋盘格 + 浅灰底色 (全局样式, 组件内可覆盖渐变) */
 .transparent-grid {
 	background-image: linear-gradient(45deg, #fff 25%, transparent 25%, transparent 75%, #fff 75%),
 		linear-gradient(45deg, #fff 25%, transparent 25%, transparent 75%, #fff 75%);

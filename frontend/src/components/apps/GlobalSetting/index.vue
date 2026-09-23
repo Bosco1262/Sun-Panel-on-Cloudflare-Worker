@@ -31,6 +31,7 @@ onMounted(() => {
       customJs.value = data.customJs || ''
     }
   }).catch(() => {
+    // A failed read keeps the fields empty and reports it, so the user does not overwrite the custom code thinking it is empty
     // 读取失败保持空内容并提示, 避免用户以为自定义代码为空而误覆盖
     ms.error(t('apps.globalSetting.loadFail'))
   })
