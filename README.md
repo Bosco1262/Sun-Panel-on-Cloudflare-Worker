@@ -82,6 +82,13 @@ neither create resources by hand nor install wrangler locally.
 4. **Set one secret after the first successful deploy**: `JWT_SECRET` (used to sign login tokens; use a random
    value, e.g. `openssl rand -base64 48`, at least 32 characters) → Worker → **Settings → Variables and Secrets**.
    Builds cannot create secrets.
+
+   > Also recommended: `PASSWORD_PEPPER` (the password-hash pepper). With it, new passwords are stored as
+   > PBKDF2 + random salt + pepper and old hashes upgrade on the next successful login. ⚠️ Once set, never change or
+   > delete it — keep it backed up together with `JWT_SECRET`.
+   > The optional `PASSWORD_PBKDF2_ITERATIONS` (PBKDF2 iteration count, default 5000) and how to make the pepper
+   > actually take effect are documented under "Worker Secrets" in
+   > [docs/deployment.md](./docs/deployment.md#worker-secrets-keys-and-variables).
 5. Done — from now on a plain `git push` is enough.
 
 > Details (auto provisioning, D1 permissions needed by the migration step, preview builds, the local wrangler

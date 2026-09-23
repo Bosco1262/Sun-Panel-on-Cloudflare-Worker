@@ -74,6 +74,9 @@ last_verified: 2026-09-23
 4. 首次部署成功后，设置一次 JWT 密钥（Secret 无法由构建创建）：
    `JWT_SECRET` 请用随机值（可用 `openssl rand -base64 48` 生成，长度 ≥32 字符；过短时 Worker 日志会打弱密钥告警）：
    Worker → Settings → Variables and Secrets → 添加 `JWT_SECRET`（或本地执行 `npx wrangler secret put JWT_SECRET`）
+5. （可选但强烈建议）再设置 `PASSWORD_PEPPER`（密码哈希 pepper）：配好后新密码以 PBKDF2 + 随机盐 + pepper 存储，
+   旧的三重 MD5 哈希在下次成功登录时自动升级。配置方式、生效条件，以及「配了就不能改/删」的原因见
+   [Worker Secret](#worker-secret密钥与变量) 一节。
 
 之后每次 `git push` 都会自动构建、部署并应用新增的 D1 迁移。
 
@@ -141,6 +144,82 @@ npm run migrations:apply
 
 > 也可执行 `npm run deploy:all` 一步完成「构建前端 + 部署」（迁移仍需单独执行）。
 
+## Worker Secret（密钥与变量）
+
+Worker 从环境变量读取三项配置（类型定义见 `src/types.ts` 的 `Env`），资源与数据的完整清单见
+[storage.zh-CN.md §1](./storage.zh-CN.md#1-cloudflare-侧资源)：
+
+| 名称 | 建议类型 | 必要性 | 作用 |
+|------|----------|--------|------|
+| `JWT_SECRET` | **Secret** | 必填 | 登录 token 的签名密钥（HS256）。缺失或全空白时登录/鉴权一律 fail-closed 返回 503 |
+| `PASSWORD_PEPPER` | **Secret** | 可选，强烈建议 | 密码哈希 pepper（PBKDF2 密钥材料的一半），见下一小节 |
+| `PASSWORD_PBKDF2_ITERATIONS` | 变量即可 | 可选 | PBKDF2 迭代数，默认 5000，取值夹在 1000–1000000 |
+
+```bash
+npx wrangler secret put JWT_SECRET
+npx wrangler secret put PASSWORD_PEPPER
+```
+
+也可以走 Dashboard → Worker → **Settings → Variables and Secrets**（类型选 Secret）。
+`PASSWORD_PBKDF2_ITERATIONS` 只是迭代数、不含秘密，写成普通变量（`wrangler.toml` 的 `[vars]` 或 Dashboard 的 Text）也可以。
+
+> Secret 无法由构建创建：首次部署后必须手工设置一次。此后 `git push` 触发的自动部署会沿用已存在的 Secret，
+> 不会覆盖或清空它们。
+
+### PASSWORD_PEPPER：密码哈希 pepper
+
+**它解决什么**：只拿到 D1 数据库（或备份导出）的人，无法离线爆破管理员密码。
+
+- **未配置时**：密码以**无盐三重 MD5**（`md5(md5(md5(pwd)))`，与上游 Sun-Panel 兼容）存储。
+  这类哈希有公开彩虹表（`12345678` 直接命中），即使不查表，8 位数字口令在 GPU 上也是秒级穷尽。
+- **配置后**：新密码以 PBKDF2-SHA256 + 随机盐 + pepper 存储，即
+  `hash = PBKDF2-SHA256(pepper ‖ 密码, salt, iterations)`，哈希串自描述为
+  `pbkdf2$sha256$<iterations>$<saltB64>$<hashB64>$<pepperId>`（实现见 `src/utils/password.ts`）。
+  攻击者必须同时拿到数据库**和** pepper（只存在于 Worker 环境变量）才能验证任何一个候选口令。
+
+**⚠️ 配了就必须原样保留**：pepper 被换掉后所有 `pbkdf2$…` 哈希都无法校验，登录返回明确的 `1009` 提示
+（而不是「密码错误」）——哈希串末尾的 `pepperId`（`sha256(pepper)` 的前 8 位）就是用来识别这种情况的。
+请与 `JWT_SECRET` 一起存进密码管理器。反向也一样：配置之后**不要删**，否则改密会退回写入三重 MD5
+（只打一条 `console.warn`），安全性一起退回。
+
+**生效条件是「登录一次或改一次密码」**：只设置 secret 不会改写已有哈希——只要库里还是旧格式
+（`^[0-9a-f]{32}$`），`checkPassword()` 会直接走三重 MD5 分支，pepper 完全不参与。所以要让它真正生效：
+
+- 用现有密码**成功登录一次**：命中 `needsRehash()`，登录成功后立刻就地重写为 `pbkdf2$…`（`src/api/login.ts`）；
+- 或在「用户信息」里**改一次密码**：直接写入 v2 哈希（`src/api/system/user.ts`）。
+
+验证是否已生效：
+
+```bash
+npx wrangler d1 execute sun-panel-on-cloudflare-worker-db --remote \
+  --command "SELECT substr(config_value, 1, 45) FROM system_setting WHERE config_name = 'admin_password'"
+```
+
+输出以 `pbkdf2$sha256$` 开头 = 已生效；仍是 `579646aad11fae4dd295812fb4526245`（`12345678` 的三重 MD5、
+迁移种子值）= 还没重算过。
+
+**pepper 丢失、或需要重置密码时**：把 `admin_password` 写回旧格式，再用 `12345678` 登录一次，让系统用
+*当前* pepper 重算，随后立即改成自己的密码：
+
+```bash
+npx wrangler d1 execute sun-panel-on-cloudflare-worker-db --remote \
+  --command "UPDATE system_setting SET config_value = '579646aad11fae4dd295812fb4526245' WHERE config_name = 'admin_password'"
+```
+
+> 这条兜底路径之所以成立，是因为旧格式哈希不需要 pepper 就能校验；但它只在**服务端已配置 pepper** 时
+> 才会把哈希升级成 v2，所以要先把 pepper 设好。
+
+### PASSWORD_PBKDF2_ITERATIONS：PBKDF2 迭代数
+
+- 默认 **5000**。本机 WebCrypto 实测：5k ≈ 2.6 ms、10k ≈ 4.5 ms、100k ≈ 43 ms、210k ≈ 85 ms CPU。
+- **免费层的硬约束是每请求 10 ms CPU**，超限直接 Error 1102（登录失败，见
+  [storage.zh-CN.md §7](./storage.zh-CN.md)）。默认值留了约 3~4 倍余量；
+  免费层不要调到十万级，想调 210000 需要先升级 Workers Paid（CPU 上限 30 s/请求）。
+- 取值会被 `resolveIterations()` 夹到 `[1000, 1000000]`，非法或越界时回落默认 5000。
+- **可以随时调整**：迭代数写进了哈希串，调高后旧哈希仍能校验，并在下次登录成功时自动重算为新值
+  （与 pepper 的「配了就锁死」正相反）。
+- 它**只有在 pepper 已配置时才有意义**：未配置 pepper 时不会生成 v2 哈希，迭代数也就无从生效。
+
 ## 本地开发与测试
 
 ```bash
@@ -150,7 +229,8 @@ npm install
 # 2. 复制前端环境变量 (仅需一次; CI 构建时会自动由 .env.example 生成)
 copy frontend\.env.example frontend\.env
 
-# 3. 复制 Worker 本地环境变量 (仅需一次, 内容为 JWT_SECRET)
+# 3. 复制 Worker 本地环境变量 (仅需一次; 模板里 JWT_SECRET 已给值,
+#    PASSWORD_PEPPER / PASSWORD_PBKDF2_ITERATIONS 以注释形式给出)
 copy .dev.vars.example .dev.vars
 
 # 4. 应用本地数据库迁移 (首次)
@@ -173,7 +253,10 @@ npm run build   # 构建前端 (输出到 dist/)
 > 说明: 前端开发服务器的 `/api` 与 `/uploads` 请求已通过 Vite 代理转发到 Worker
 > (`frontend/.env` 中 `VITE_APP_API_BASE_URL=http://127.0.0.1:8787/`)。
 > 若只想测试 Worker + 构建产物，可先执行 `npm run build`，然后直接访问 `http://127.0.0.1:8787`。
-> 本地开发密钥在 `.dev.vars` 中 (`JWT_SECRET`)，生产环境请使用 `npx wrangler secret put JWT_SECRET`。
+> 本地开发密钥在 `.dev.vars` 中 (`JWT_SECRET`，可选 `PASSWORD_PEPPER` / `PASSWORD_PBKDF2_ITERATIONS`)，
+> 生产环境请使用 `npx wrangler secret put <名称>`（说明见 [Worker Secret](#worker-secret密钥与变量)）。
+> 未配置 pepper 时本地与线上一样走兼容的三重 MD5 路径，只有需要验证 PBKDF2 行为时才要补上；
+> 本地 D1 与线上是两套独立数据，**不需要**与生产用同一个 pepper。
 
 ## 备份与恢复
 
@@ -219,6 +302,11 @@ npx wrangler r2 object get sun-panel-on-cloudflare-worker-files/<key> --file=./b
 - 丢了 `JWT_SECRET` → 所有人需重新登录；
 - 丢了 `PASSWORD_PEPPER` → 新版密码哈希无法校验（登录会返回明确的 1009 提示），需要重置密码。
 
+`PASSWORD_PBKDF2_ITERATIONS` **不需要备份**：它不含秘密，随时可改，调高后旧哈希仍会校验并在下次登录自动重算。
+
+另外，**D1 备份与 `PASSWORD_PEPPER` 必须成对保存**：从备份恢复出来的库是 `pbkdf2$…` 格式，少了 pepper
+就会出现「密码明明是对的却登录不了（1009）」。详见 [Worker Secret](#worker-secret密钥与变量)。
+
 ## 常见问题
 
 **构建失败：`Error: ENOENT: no such file or directory, open '.env'`**
@@ -257,6 +345,21 @@ Run 'wrangler deploy' to provision it, or add 'database_name' / 'database_id' to
 
 自动创建的构建 token 不含 D1 权限。在 Worker → **Settings → Build → API token**
 换成带 D1 编辑权限的 token 后重新构建。
+
+**登录返回 1009：`PASSWORD_PEPPER` 未配置 / 与现有哈希不匹配**
+
+```
+服务端未配置 PASSWORD_PEPPER，无法校验当前密码哈希，请执行 wrangler secret put PASSWORD_PEPPER 后重试
+PASSWORD_PEPPER 与当前密码哈希不匹配，请恢复原有 secret 后重试
+```
+
+原因：`system_setting.admin_password` 里存的是 `pbkdf2$sha256$…` 格式，但 Worker 没有配置 pepper，
+或配置的 pepper 与哈希串末尾记录的 `pepperId` 不一致（pepper 被换过/删过）。这两种情况服务端都会
+fail-closed 并明确报错，而不是伪装成「密码错误」。
+
+解决：把 pepper 恢复成配置时的那一个（`npx wrangler secret put PASSWORD_PEPPER`）。确实找不回来时按
+[Worker Secret](#worker-secret密钥与变量) 里的重置步骤操作（写回旧格式哈希 → 用 `12345678` 登录 →
+系统用当前 pepper 重算 → 立刻改密）。
 
 ## 与上游的差异
 

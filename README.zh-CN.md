@@ -77,7 +77,12 @@ D1 与 R2 会在部署时**自动创建并绑定**（wrangler ≥ 4.45 的自动
    > 迁移命令必须放在 `deploy` **之后**：D1 是在部署阶段被自动创建出来的，顺序颠倒会报
    > `Couldn't find an auto-provisioned D1 DB named 'sun-panel'`。
 4. **首次部署成功后补一个 Secret**：`JWT_SECRET`（登录签名用，随机值，例如 `openssl rand -base64 48`，长度 ≥32 字符）
-   → Worker → **Settings → Variables and Secrets** 添加。Secret 无法由构建流程创建。
+  → Worker → **Settings → Variables and Secrets** 添加。Secret 无法由构建流程创建。
+
+   > 建议同时加上 `PASSWORD_PEPPER`（密码哈希 pepper）：配好后新密码以 PBKDF2 + 随机盐 + pepper 存储，
+   > 旧哈希在下次成功登录时自动升级。⚠️ 配了就不要再改/删，请与 `JWT_SECRET` 一起备份。
+   > 可选的 `PASSWORD_PBKDF2_ITERATIONS`（PBKDF2 迭代数，默认 5000）以及 pepper 的生效条件见
+   > [docs/deployment.zh-CN.md 的「Worker Secret」](./docs/deployment.zh-CN.md#worker-secret密钥与变量)。
 5. 完成 —— 此后只需 `git push`。
 
 > 细节（自动资源供应、迁移步骤所需的 D1 权限、预览环境、本地 wrangler 部署方式、备份恢复与常见问题）

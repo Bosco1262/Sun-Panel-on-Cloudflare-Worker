@@ -77,6 +77,10 @@ No manual D1/R2 creation and no local wrangler install:
    use a random value for `JWT_SECRET` (`openssl rand -base64 48`, at least 32 characters; a shorter one makes the
    Worker log a weak-key warning): Worker → Settings → Variables and Secrets → add `JWT_SECRET`
    (or run `npx wrangler secret put JWT_SECRET` locally)
+5. (optional but strongly recommended) also set `PASSWORD_PEPPER` (the password-hash pepper): new passwords are then
+   stored as PBKDF2 + random salt + pepper, and old triple-MD5 hashes upgrade on the next successful login. How to
+   configure it, when it takes effect, and why it must never be changed afterwards are covered in
+   [Worker Secrets](#worker-secrets-keys-and-variables) below.
 
 From then on every `git push` builds, deploys and applies new D1 migrations automatically.
 
@@ -147,6 +151,95 @@ the default account `admin` / `12345678`.
 
 > `npm run deploy:all` combines "build the frontend + deploy" in one step (migrations still run separately).
 
+## Worker Secrets (Keys and Variables)
+
+The Worker reads three settings from the environment (the types are in `Env` in `src/types.ts`); the full resource
+inventory is in [storage.md §1](./storage.md#1-cloudflare-side-resources):
+
+| Name | Recommended type | Required | Purpose |
+|------|------------------|----------|---------|
+| `JWT_SECRET` | **Secret** | yes | Signing key for login tokens (HS256). When missing or blank, login and auth fail closed with 503 |
+| `PASSWORD_PEPPER` | **Secret** | optional, strongly recommended | Password-hash pepper (half of the PBKDF2 key material), see the next section |
+| `PASSWORD_PBKDF2_ITERATIONS` | a plain variable is fine | optional | PBKDF2 iteration count, default 5000, clamped to 1000–1000000 |
+
+```bash
+npx wrangler secret put JWT_SECRET
+npx wrangler secret put PASSWORD_PEPPER
+```
+
+You can also use Dashboard → Worker → **Settings → Variables and Secrets** (pick the Secret type).
+`PASSWORD_PBKDF2_ITERATIONS` is just an iteration count with nothing secret in it, so a plain variable (`[vars]` in
+`wrangler.toml` or the Text type in the dashboard) works too.
+
+> Builds cannot create secrets: set them by hand once after the first deploy. Every automatic deploy triggered by a
+> later `git push` keeps the existing secrets — it never overwrites or clears them.
+
+### PASSWORD_PEPPER: the password-hash pepper
+
+**What it buys you**: someone who only has the D1 database (or a backup export) cannot brute-force the admin password
+offline.
+
+- **Without it**, passwords are stored as **unsalted triple MD5** (`md5(md5(md5(pwd)))`, compatible with upstream
+  Sun-Panel). Those hashes are in public rainbow tables (`12345678` is a direct hit), and even without a table an
+  8-digit numeric password falls to a GPU in seconds.
+- **With it**, new passwords use PBKDF2-SHA256 + random salt + pepper, i.e.
+  `hash = PBKDF2-SHA256(pepper ‖ password, salt, iterations)`, and the hash string is self-describing:
+  `pbkdf2$sha256$<iterations>$<saltB64>$<hashB64>$<pepperId>` (implementation in `src/utils/password.ts`).
+  An attacker must obtain the database **and** the pepper (which lives only in the Worker environment) before any
+  candidate password can even be tested.
+
+**⚠️ Once set, keep it exactly as it is**: after the pepper is replaced, no `pbkdf2$…` hash can be verified and login
+returns an explicit `1009` message instead of "wrong password" — the `pepperId` at the end of the hash string (the
+first 8 hex digits of `sha256(pepper)`) exists precisely to detect that case. Store it in your password manager
+together with `JWT_SECRET`. The reverse also holds: **do not delete** it after configuring it, or password changes
+fall back to writing triple MD5 (with nothing but a `console.warn`), taking the security level down with them.
+
+**It only takes effect after "one login or one password change"**: setting the secret alone does not rewrite any
+existing hash — as long as the stored value is still in the old format (`^[0-9a-f]{32}$`), `checkPassword()` takes
+the triple-MD5 branch and the pepper plays no part at all. To make it real:
+
+- **sign in once** with the current password: `needsRehash()` hits and the hash is rewritten in place as `pbkdf2$…`
+  right after the successful login (`src/api/login.ts`);
+- or **change the password once** under "User Info", which writes a v2 hash directly (`src/api/system/user.ts`).
+
+To verify:
+
+```bash
+npx wrangler d1 execute sun-panel-on-cloudflare-worker-db --remote \
+  --command "SELECT substr(config_value, 1, 45) FROM system_setting WHERE config_name = 'admin_password'"
+```
+
+A value starting with `pbkdf2$sha256$` means it took effect; if it is still `579646aad11fae4dd295812fb4526245`
+(the triple MD5 of `12345678`, the migration seed), nothing has been recomputed yet.
+
+**If the pepper is lost, or you need to reset the password**: write `admin_password` back to the legacy format, log in
+once as `12345678` so the system recomputes it with the *current* pepper, then immediately change it to your own
+password:
+
+```bash
+npx wrangler d1 execute sun-panel-on-cloudflare-worker-db --remote \
+  --command "UPDATE system_setting SET config_value = '579646aad11fae4dd295812fb4526245' WHERE config_name = 'admin_password'"
+```
+
+> This fallback works because legacy hashes verify without any pepper; but it only upgrades the hash to v2 when the
+> server **has** a pepper configured, so set the pepper first.
+
+### PASSWORD_PBKDF2_ITERATIONS: the PBKDF2 iteration count
+
+- Default **5000**. Measured with WebCrypto on this machine: 5k ≈ 2.6 ms, 10k ≈ 4.5 ms, 100k ≈ 43 ms,
+  210k ≈ 85 ms of CPU.
+- **The free tier's hard limit is 10 ms CPU per request**; exceeding it fails with Error 1102 (login breaks). The
+  default deliberately keeps a 3–4× margin; do not push it into the 100k range on the free tier — reaching 210000
+  requires Workers Paid first (CPU limit becomes 30 s per request). See
+  [storage.md §7](./storage.md).
+- `resolveIterations()` clamps the value to `[1000, 1000000]` and falls back to the default 5000 when it is invalid
+  or out of range.
+- **You can change it at any time**: the iteration count is part of the hash string, so raising it still verifies old
+  hashes and they are recomputed with the new value on the next successful login (the exact opposite of the pepper's
+  "set once, never touch" rule).
+- It **only means anything once a pepper is configured**: without a pepper no v2 hash is ever produced, so the
+  iteration count never comes into play.
+
 ## Local Development & Testing
 
 ```bash
@@ -156,7 +249,8 @@ npm install
 # 2. Copy the frontend environment file (once; CI generates it from .env.example)
 copy frontend\.env.example frontend\.env
 
-# 3. Copy the Worker local environment file (once; contains JWT_SECRET)
+# 3. Copy the Worker local environment file (once; the template gives JWT_SECRET a value and lists
+#    PASSWORD_PEPPER / PASSWORD_PBKDF2_ITERATIONS as comments)
 copy .dev.vars.example .dev.vars
 
 # 4. Apply migrations to the local database (first time)
@@ -179,8 +273,12 @@ npm run build   # build the frontend (outputs to dist/)
 > Note: the frontend dev server proxies `/api` and `/uploads` to the Worker
 > (`VITE_APP_API_BASE_URL=http://127.0.0.1:8787/` in `frontend/.env`).
 > To test the Worker together with the build output only, run `npm run build` first and open `http://127.0.0.1:8787`.
-> The local development secret lives in `.dev.vars` (`JWT_SECRET`); for production use
-> `npx wrangler secret put JWT_SECRET`.
+> The local development secrets live in `.dev.vars` (`JWT_SECRET`, optionally `PASSWORD_PEPPER` /
+> `PASSWORD_PBKDF2_ITERATIONS`); for production use `npx wrangler secret put <NAME>`
+> (see [Worker Secrets](#worker-secrets-keys-and-variables)).
+> Without a pepper, local development takes the same compatible triple-MD5 path as production; you only need it to
+> exercise the PBKDF2 behaviour. The local D1 is a separate database, so it does **not** have to reuse the production
+> pepper.
 
 ## Backup & Restore
 
@@ -233,6 +331,13 @@ manager:
 - losing `PASSWORD_PEPPER` → new password hashes can no longer be verified (login returns an explicit 1009 message)
   and the password must be reset.
 
+`PASSWORD_PBKDF2_ITERATIONS` needs **no backup**: it holds nothing secret, can be changed at any time, and raising it
+still verifies old hashes (they are recomputed on the next login).
+
+Also, **the D1 backup and `PASSWORD_PEPPER` must be kept together**: a database restored from a backup holds
+`pbkdf2$…` hashes, so a missing pepper means "the password is right but login fails with 1009". See
+[Worker Secrets](#worker-secrets-keys-and-variables).
+
 ## FAQ
 
 **Build fails: `Error: ENOENT: no such file or directory, open '.env'`**
@@ -270,6 +375,23 @@ existing database. Run `npm run deploy` first, then `npm run migrations:apply`.
 
 The automatically created build token has no D1 permissions. Replace it under Worker →
 **Settings → Build → API token** with a token that can edit D1 and rebuild.
+
+**Login returns 1009: `PASSWORD_PEPPER` missing or not matching the stored hashes**
+
+The API answers with these two messages (quoted verbatim; the server texts are Chinese):
+
+```
+服务端未配置 PASSWORD_PEPPER，无法校验当前密码哈希，请执行 wrangler secret put PASSWORD_PEPPER 后重试
+PASSWORD_PEPPER 与当前密码哈希不匹配，请恢复原有 secret 后重试
+```
+
+Cause: `system_setting.admin_password` holds a `pbkdf2$sha256$…` hash, but the Worker has no pepper configured, or
+the configured pepper does not match the `pepperId` recorded at the end of the hash string (the pepper was replaced
+or removed). Both cases fail closed with an explicit error instead of pretending the password is wrong.
+
+Fix: restore the pepper that was configured (`npx wrangler secret put PASSWORD_PEPPER`). If it is truly gone, follow
+the reset steps in [Worker Secrets](#worker-secrets-keys-and-variables) (write the legacy hash back → sign in as
+`12345678` → the system recomputes with the current pepper → change the password immediately).
 
 ## Differences from Upstream
 
