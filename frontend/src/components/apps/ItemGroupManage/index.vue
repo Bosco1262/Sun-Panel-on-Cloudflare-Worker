@@ -7,6 +7,7 @@ import { deletes, edit, getList, saveSort } from '@/api/panel/itemIconGroup'
 import { RoundCardModal, SvgIcon } from '@/components/common'
 import { PanelPanelConfigStyleEnum } from '@/enums'
 import { t } from '@/locales'
+import { reportApiError, reportThrownError } from '@/utils/request/apiMessage'
 
 interface EditModalArg {
   show: boolean
@@ -112,9 +113,9 @@ function handleSaveSort() {
       sortStatus.value = false
     }
     else {
-      ms.error(`${t('common.saveFail')}:${msg}`)
+      reportApiError({ code, msg }, text => ms.error(text), 'common.saveFail')
     }
-  }).catch(() => ms.error(t('common.saveFail')))
+  }).catch(error => reportThrownError(error, text => ms.error(text), 'common.saveFail'))
 }
 
 function handleDelete(groupInfo: Panel.ItemIconGroup) {
@@ -125,12 +126,12 @@ function handleDelete(groupInfo: Panel.ItemIconGroup) {
     negativeText: t('common.cancel'),
     onPositiveClick: () => {
       if (groupInfo.id) {
-        deletes([groupInfo.id]).then(({ code }) => {
+        deletes([groupInfo.id]).then(({ code, msg }) => {
           if (code !== 0)
-            ms.error(t('common.deleteFail'))
+            reportApiError({ code, msg }, text => ms.error(text), 'common.deleteFail')
           else
             refreshList()
-        }).catch(() => ms.error(t('common.deleteFail')))
+        }).catch(error => reportThrownError(error, text => ms.error(text), 'common.deleteFail'))
       }
     },
 
@@ -146,7 +147,7 @@ function handleSaveGroup() {
       // Keep the dialog open on failure so the user can fix the input and retry (the old implementation closed and refreshed even on failure, losing the edit)
       // 失败时保持弹窗打开, 让用户修正后重试 (旧实现失败也关窗+刷新, 改动丢失)
       if (code !== 0) {
-        ms.error(msg || t('common.saveFail'))
+        reportApiError({ code, msg }, text => ms.error(text), 'common.saveFail')
         return
       }
 
@@ -154,7 +155,7 @@ function handleSaveGroup() {
       editModalArg.value.model = { ...defaultMNodal }
       editModalArg.value.editStatus = 1
       refreshList()
-    }).catch(() => ms.error(t('common.saveFail')))
+    }).catch(error => reportThrownError(error, text => ms.error(text), 'common.saveFail'))
   })
 }
 
@@ -163,8 +164,8 @@ function refreshList() {
     if (code === 0 && data?.list)
       groups.value = data.list
     else if (code !== 0)
-      ms.error(`${t('apps.itemGroupManage.getListFail')}:${msg}`)
-  }).catch(() => ms.error(t('apps.itemGroupManage.getListFail')))
+      reportApiError({ code, msg }, text => ms.error(text), 'apps.itemGroupManage.getListFail')
+  }).catch(error => reportThrownError(error, text => ms.error(text), 'apps.itemGroupManage.getListFail'))
 }
 
 onMounted(() => {
@@ -245,7 +246,7 @@ onMounted(() => {
       </VueDraggable>
     </div>
 
-    <RoundCardModal v-model:show="editModalArg.show" size="small" type="small" :title="editModalArg.editStatus === 1 ? '添加' : '编辑'" style="width: 400px;">
+    <RoundCardModal v-model:show="editModalArg.show" size="small" type="small" :title="editModalArg.editStatus === 1 ? $t('common.add') : $t('common.edit')" style="width: 400px;">
       <NForm ref="formRef" :model="editModalArg.model" :rules="editModalArg.rules">
         <NFormItem path="title" :label="$t('apps.itemGroupManage.groupName')">
           <NInput v-model:value="editModalArg.model.title" type="text" :maxlength="20" show-count />

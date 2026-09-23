@@ -139,7 +139,7 @@ app.post('/itemIcon/edit', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddleware()
     return errorByCode(c, 1400)
 
   if (!body.itemIconGroupId || body.itemIconGroupId === 0)
-    return error(c, '参数错误[Group is mandatory]')
+    return errorByCode(c, 1404)
 
   const db = c.env.DB
   const iconJson = JSON.stringify(body.icon ?? {})
@@ -197,7 +197,7 @@ app.post('/itemIcon/addMultiple', bodyLimit(REQUEST_BODY_LIMIT.large), authMiddl
 
   for (const item of list) {
     if (!item.itemIconGroupId || item.itemIconGroupId === 0)
-      return error(c, '参数错误[Group is mandatory]')
+      return errorByCode(c, 1404)
   }
 
   const db = c.env.DB

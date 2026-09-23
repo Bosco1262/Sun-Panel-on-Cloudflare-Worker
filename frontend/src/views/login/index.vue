@@ -29,7 +29,9 @@ const loginPost = async () => {
       authStore.setUserInfo(res.data)
 
       setTimeout(() => {
-        ms.success(`Hi ${res.data.name},${t('login.welcomeMessage')}`)
+        // The whole welcome line is translated: an English "Hi xxx," prefix used to leak into the Chinese UI
+        // 整句走 i18n: 原先写死的英文 "Hi xxx," 前缀会出现在中文界面里
+        ms.success(t('login.welcomeMessage', { name: res.data.name }))
         loading.value = false
         router.push({ path: '/' })
       }, 500)

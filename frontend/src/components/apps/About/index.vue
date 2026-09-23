@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NDivider, NGradientText, NTag } from 'naive-ui'
+import { NDivider, NTag } from 'naive-ui'
 import { onMounted, ref } from 'vue'
 import { get } from '@/api/system/about'
 import { useAppStore } from '@/store'
@@ -16,6 +16,15 @@ interface Version {
   versionName: string
   versionCode: number
 }
+
+/**
+ * This port's own addresses: the About page leads with them
+ *
+ * 本移植版自己的地址: 关于页以它们为主
+ */
+const REPO_URL = 'https://github.com/Bosco1262/Sun-Panel-on-Cloudflare-Worker'
+const REPO_ISSUES_URL = `${REPO_URL}/issues`
+const REPO_DOCS_URL = `${REPO_URL}/blob/main/docs/README.md`
 
 const appStore = useAppStore()
 const versionName = ref('')
@@ -35,50 +44,104 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="pt-5">
-    <div class="flex flex-col items-center justify-center">
+  <div class="pt-5 px-4 pb-6">
+    <!-- Identity: this project first, the upstream project is credited further down -->
+    <!-- 身份: 先标明本项目, 上游项目在下面致谢 -->
+    <div class="flex flex-col items-center justify-center text-center">
       <img :src="srcSvglogo" width="100" height="100" alt="">
-      <div class="text-3xl font-semibold">
-        {{ $t('common.appName') }}
+      <div class="text-2xl font-semibold">
+        {{ $t('apps.about.portName') }}
       </div>
-      <div class="text-xl">
-        <NGradientText type="info">
-          <a href="https://github.com/hslr-s/sun-panel/releases" class="font-semibold" :title="$t('apps.about.viewUpdateLog')" target="_blank">v{{ versionName }}</a>
-        </NGradientText>
+      <div class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+        {{ $t('apps.about.portSubtitle') }}
       </div>
-      <div class="mt-2">
-        <a href="https://github.com/hslr-s/sun-panel/releases" target="_blank" class="link">{{ $t('apps.about.checkUpdate') }}</a>
-      </div>
-      <!-- Keep the upstream link as credit while pointing at this port's repository, so issues are not filed upstream -->
-      <!-- 上游链接保留作为致谢, 同时标明本移植版仓库, 避免用户把问题提到上游 -->
-      <div class="mt-2 text-sm text-slate-500 dark:text-slate-400">
-        {{ $t('apps.about.thisProject') }}
-        <a href="https://github.com/Bosco1262/Sun-Panel-on-Cloudflare-Worker" target="_blank" class="link">Sun-Panel-on-Cloudflare-Worker</a>
+      <!-- Version number only: this port has no release page to link to -->
+      <!-- 只显示版本号: 本移植版没有 release 页面可跳转 -->
+      <div class="mt-2 text-lg text-slate-500 dark:text-slate-400">
+        v{{ versionName }}
       </div>
     </div>
 
     <NDivider style="margin:10px 0">
       •
     </NDivider>
-    <div class="flex flex-col items-center justify-center text-base">
-      <div>
-        {{ $t('apps.about.author') }}<a href="https://github.com/hslr-s" target="_blank" class="link">红烧猎人</a> | <a href="https://github.com/hslr-s/sun-panel/blob/master/doc/donate.md" target="_blank" class="text-red-600 hover:text-red-900">{{ $t('apps.about.donate') }}</a>
-      </div>
-      <div>
-        {{ $t('apps.about.issue') }}<a href="https://github.com/hslr-s/sun-panel/issues" target="_blank" class="link">Github Issues</a>
-      </div>
-      <div>
-        {{ $t('apps.about.discussions') }}<a href="https://github.com/hslr-s/sun-panel/discussions" target="_blank" class="link">Github Discussions</a>
-      </div>
-      <div>
-        {{ $t('apps.about.QQGroup') }}<a href="http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=K6UII6aEPZUeDRIPOEpOSJZH-Vmr_RPu&authKey=jEXhnVekLbDDx5UkQzKtd3bRmhZggkGBxmvW4NT5LLIAFP7toMmqABwvkANGHbLb&noverify=0&group_code=831615449" target="_blank" class="link">{{ $t("apps.about.addQQGroupUrl") }}</a>
-        |
-        <span class="link cursor-pointer" @click="qqGroupQRShow = !qqGroupQRShow">
-          {{ $t('apps.about.QR') }}
-        </span>
+
+    <!-- Primary block: this repository -->
+    <!-- 主区块: 本仓库 -->
+    <div class="mx-auto max-w-[460px]">
+      <div class="mb-2 flex items-center gap-[6px] font-bold">
+        <span class="h-[14px] w-[3px] rounded-sm bg-emerald-600 dark:bg-emerald-500" />
+        {{ $t('apps.about.thisRepoTitle') }}
       </div>
 
-      <div class="flex mt-[10px] flex-wrap justify-center">
+      <div class="flex flex-col gap-[6px] text-[14px]">
+        <div class="flex items-baseline gap-2">
+          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.repoAddress') }}</span>
+          <a :href="REPO_URL" target="_blank" class="link break-all">Sun-Panel-on-Cloudflare-Worker</a>
+        </div>
+
+        <div class="flex items-baseline gap-2">
+          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.repoIssue') }}</span>
+          <a :href="REPO_ISSUES_URL" target="_blank" class="link">Github Issues</a>
+        </div>
+
+        <div class="flex items-baseline gap-2">
+          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.docsIndex') }}</span>
+          <a :href="REPO_DOCS_URL" target="_blank" class="link">docs/README.md</a>
+        </div>
+      </div>
+    </div>
+
+    <NDivider style="margin:10px 0">
+      •
+    </NDivider>
+
+    <!-- Secondary block: upstream author and the original project (smaller and faded, so the hierarchy stays clear) -->
+    <!-- 次区块: 上游原作者与原版项目 (缩小字号并降低透明度, 保持层级清晰) -->
+    <div class="mx-auto max-w-[460px] text-[12.5px] opacity-[0.78]">
+      <div class="mb-2 flex items-center gap-[6px] font-bold">
+        <span class="h-[12px] w-[3px] rounded-sm bg-slate-400 dark:bg-slate-500" />
+        {{ $t('apps.about.upstreamTitle') }}
+      </div>
+
+      <div class="flex flex-col gap-[6px]">
+        <div class="flex items-baseline gap-2">
+          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.author') }}</span>
+          <span>
+            <a href="https://github.com/hslr-s" target="_blank" class="link">红烧猎人</a>
+            <span class="mx-[5px] text-slate-400 dark:text-slate-500">|</span>
+            <a href="https://github.com/hslr-s/sun-panel/blob/master/doc/donate.md" target="_blank" class="text-red-600 hover:text-red-900">{{ $t('apps.about.donate') }}</a>
+          </span>
+        </div>
+
+        <div class="flex items-baseline gap-2">
+          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.upstreamRepo') }}</span>
+          <a href="https://github.com/hslr-s/sun-panel" target="_blank" class="link">hslr-s/sun-panel</a>
+        </div>
+
+        <div class="flex items-baseline gap-2">
+          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.issue') }}</span>
+          <a href="https://github.com/hslr-s/sun-panel/issues" target="_blank" class="link">Github Issues</a>
+        </div>
+
+        <div class="flex items-baseline gap-2">
+          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.discussions') }}</span>
+          <a href="https://github.com/hslr-s/sun-panel/discussions" target="_blank" class="link">Github Discussions</a>
+        </div>
+
+        <div class="flex items-baseline gap-2">
+          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.QQGroup') }}</span>
+          <span>
+            <a href="http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=K6UII6aEPZUeDRIPOEpOSJZH-Vmr_RPu&authKey=jEXhnVekLbDDx5UkQzKtd3bRmhZggkGBxmvW4NT5LLIAFP7toMmqABwvkANGHbLb&noverify=0&group_code=831615449" target="_blank" class="link">{{ $t('apps.about.addQQGroupUrl') }}</a>
+            <span class="mx-[5px] text-slate-400 dark:text-slate-500">|</span>
+            <span class="link cursor-pointer" @click="qqGroupQRShow = !qqGroupQRShow">
+              {{ $t('apps.about.QR') }}
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <div class="mt-[10px] flex flex-wrap justify-center">
         <div class="flex items-center mx-[10px]">
           <img class="w-[20px] h-[20px] mr-[5px]" :src="srcGithub" alt="">
           <a href="https://github.com/hslr-s/sun-panel" target="_blank" class="link">Github</a>
@@ -100,22 +163,22 @@ onMounted(() => {
           <a href="https://www.youtube.com/channel/UCKwbFmKU25R602z6P2fgPYg" target="_blank" class="link">YouTube</a>
         </div>
       </div>
-
-      <div class="mt-5">
-        <NTag :bordered="false" size="small">
-          {{ $t("apps.about.frontVersionText") }}: FV-{{ frontVersion }}
-        </NTag>
-      </div>
-
-      <RoundCardModal v-model:show="qqGroupQRShow" title="交流群二维码" style="width: 300px;">
-        <div class="text-center">
-          - 如果失效请返回联系作者 -
-        </div>
-        <div class="flex justify-center">
-          <img :src="srcQQGroupQR" class="h-[260px]">
-        </div>
-      </RoundCardModal>
     </div>
+
+    <div class="mt-5 flex justify-center">
+      <NTag :bordered="false" size="small">
+        {{ $t("apps.about.frontVersionText") }}: FV-{{ frontVersion }}
+      </NTag>
+    </div>
+
+    <RoundCardModal v-model:show="qqGroupQRShow" :title="$t('apps.about.qqGroupQrTitle')" style="width: 300px;">
+      <div class="text-center">
+        {{ $t('apps.about.qqGroupQrTip') }}
+      </div>
+      <div class="flex justify-center">
+        <img :src="srcQQGroupQR" class="h-[260px]">
+      </div>
+    </RoundCardModal>
   </div>
 </template>
 

@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { NAlert, NButton, NInput, useMessage } from 'naive-ui'
 import { getCustomCode, saveCustomCode } from '@/api/system/setting'
 import { t } from '@/locales'
+import { reportApiError, reportThrownError } from '@/utils/request/apiMessage'
 
 const ms = useMessage()
 const saveLoading = ref(false)
@@ -16,10 +17,10 @@ async function handleSave() {
     if (code === 0)
       ms.success(t('common.saveSuccess'))
     else
-      ms.error(`${t('common.saveFail')}:${msg}`)
+      reportApiError({ code, msg }, text => ms.error(text), 'common.saveFail')
   }
-  catch {
-    ms.error(t('common.saveFail'))
+  catch (error) {
+    reportThrownError(error, text => ms.error(text), 'common.saveFail')
   }
   saveLoading.value = false
 }
@@ -30,10 +31,10 @@ onMounted(() => {
       customCss.value = data.customCss || ''
       customJs.value = data.customJs || ''
     }
-  }).catch(() => {
+  }).catch((error) => {
     // A failed read keeps the fields empty and reports it, so the user does not overwrite the custom code thinking it is empty
     // 读取失败保持空内容并提示, 避免用户以为自定义代码为空而误覆盖
-    ms.error(t('apps.globalSetting.loadFail'))
+    reportThrownError(error, text => ms.error(text), 'apps.globalSetting.loadFail')
   })
 })
 </script>

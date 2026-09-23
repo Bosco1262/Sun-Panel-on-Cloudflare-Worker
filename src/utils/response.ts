@@ -17,6 +17,12 @@ export const ERROR_CODE_MAP: Record<number, string> = {
   1301: 'Unsupported file format',
   1400: 'Parameter format error',
   1401: 'Unique name already exists',
+  // Port-only extension (not in the Go version's ErrorCode.go): a required field was missing. It replaces the
+  // hardcoded "参数错误[Group is mandatory]" string, which used to reach the client untranslated.
+  //
+  // 本移植版新增 (Go 版 ErrorCode.go 里没有): 缺少必填字段。用于取代原先硬编码的
+  // 「参数错误[Group is mandatory]」—— 那句话会原样(且是英文)流到客户端。
+  1404: 'Missing required parameter',
 }
 
 /**

@@ -7,6 +7,7 @@ import { RoundCardModal, SearchEngineIcon, SvgIcon } from '@/components/common'
 import { SearchEngineOpenMethodEnum } from '@/enums/panel'
 import { usePanelState } from '@/store'
 import { t } from '@/locales'
+import { reportApiError } from '@/utils/request/apiMessage'
 import {
   buildSearchUrl,
   createDefaultSearchEngineConfig,
@@ -176,7 +177,7 @@ function handleResetAll() {
       if (res?.code === 0)
         ms.success(t('common.saveSuccess'))
       else
-        ms.error(t('common.saveFail'))
+        reportApiError(res, text => ms.error(text), 'common.saveFail')
     },
   })
 }

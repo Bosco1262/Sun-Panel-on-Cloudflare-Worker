@@ -15,6 +15,7 @@ import { PanelPanelConfigStyleEnum, PanelStateNetworkModeEnum } from '@/enums'
 import { VisitMode } from '@/enums/auth'
 import { router } from '@/router'
 import { t } from '@/locales'
+import { reportApiError, reportThrownError } from '@/utils/request/apiMessage'
 
 interface ItemGroup extends Panel.ItemIconGroup {
   sortStatus?: boolean
@@ -155,7 +156,7 @@ function getList() {
       return
 
     items.value = data.list
-  }).catch(() => ms.error(t('panelHome.getListFail')))
+  }).catch(error => reportThrownError(error, text => ms.error(text), 'panelHome.getListFail'))
 }
 
 // Fetches the icons of a group from the backend (the group is located by id, not by array index, so filtering cannot mix groups up)
@@ -212,9 +213,9 @@ function handleRightMenuSelect(key: string | number) {
               getList()
             }
             else {
-              ms.error(`${t('common.deleteFail')}:${msg}`)
+              reportApiError({ code, msg }, text => ms.error(text), 'common.deleteFail')
             }
-          }).catch(() => ms.error(t('common.deleteFail')))
+          }).catch(error => reportThrownError(error, text => ms.error(text), 'common.deleteFail'))
         },
       })
 
@@ -279,12 +280,12 @@ function handleSaveSort(itemGroup: ItemGroup) {
         itemGroup.sortStatus = false
       }
       else {
-        ms.error(`${t('common.saveFail')}:${msg}`)
+        reportApiError({ code, msg }, text => ms.error(text), 'common.saveFail')
       }
-    }).catch(() => {
+    }).catch((error) => {
       // Refresh back to the server order after a failed save, so the UI does not stay inconsistent with the backend
       // 保存失败时刷新回服务端顺序, 避免界面与后端长期不一致
-      ms.error(t('common.saveFail'))
+      reportThrownError(error, text => ms.error(text), 'common.saveFail')
       getList()
     })
   }
@@ -334,7 +335,7 @@ onMounted(() => {
 
   // Sync the cloud config (including the search-engine config); on failure the locally cached config is kept and reported, without affecting panel rendering
   // 更新同步云端配置 (含搜索引擎配置); 失败时保留本地缓存配置并提示, 不影响面板渲染
-  panelState.updatePanelConfigByCloud().catch(() => ms.error(t('panelHome.getConfigFail')))
+  panelState.updatePanelConfigByCloud().catch(error => reportThrownError(error, text => ms.error(text), 'panelHome.getConfigFail'))
 
   // Set the title
   // 设置标题

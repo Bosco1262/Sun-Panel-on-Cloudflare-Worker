@@ -34,12 +34,12 @@ onMounted(() => {
 
 <template>
   <div class="h-full">
-    <NSpin :show="loading" style="height: 100%;" content-style="height: 100%;" :delay="500" description="loading...">
+    <NSpin :show="loading" style="height: 100%;" content-style="height: 100%;" :delay="500" :description="$t('common.loading')">
       <component :is="dynamicComponent" v-if="dynamicComponent" />
       <div
         v-else-if="!dynamicComponent"
       >
-        Component not found!
+        {{ $t('common.componentNotFound') }}
       </div>
     </NSpin>
   </div>

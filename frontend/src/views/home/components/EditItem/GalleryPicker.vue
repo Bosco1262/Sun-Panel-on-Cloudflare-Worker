@@ -2,7 +2,7 @@
 import { NButton, NCard, NEllipsis, NEmpty, NFlex, NImage, NInput, NModal, NSpin, useMessage } from 'naive-ui'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { getList } from '@/api/system/file'
-import { t } from '@/locales'
+import { reportThrownError } from '@/utils/request/apiMessage'
 
 interface Props {
   visible: boolean
@@ -81,7 +81,7 @@ async function fetchList() {
   }
   catch (error) {
     imageList.value = []
-    ms.error(t('common.networkError'))
+    reportThrownError(error, text => ms.error(text), 'common.networkError')
   }
   loading.value = false
 }

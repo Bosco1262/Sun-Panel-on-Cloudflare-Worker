@@ -9,6 +9,7 @@
   },
   "apiErrorCode": {
     "1000": "未登录",
+    "1001": "登录状态已过期，请重新登录",
     "1003": "用户名或密码错误",
     "1004": "账号已停用或未激活",
     "1005": "当前无权限操作",
@@ -22,7 +23,10 @@
     "1300": "上传失败",
     "1301": "上传失败，不被支持的文件格式",
     "1400": "参数格式错误",
-    "1401": "唯一标识已被占用"
+    "1401": "唯一标识已被占用",
+    "1402": "请求内容过大，请减少数据量后重试",
+    "1403": "服务端密钥配置异常：JWT_SECRET 未配置或不可用，请检查 Worker Secret",
+    "1404": "缺少必填参数"
   },
   "appLauncher": {
     "title": "系统应用"
@@ -34,13 +38,20 @@
       "addQQGroupUrl": "点击添加",
       "appName": "关于",
       "author": "作者：",
-      "checkUpdate": "检查新版本",
       "discussions": "交流社区：",
+      "docsIndex": "文档索引：",
       "donate": "🧧打赏",
       "frontVersionText": "前端版本号",
       "issue": "建议反馈：",
-      "thisProject": "本项目（Cloudflare Worker 移植版）：",
-      "viewUpdateLog": "点此查看更新说明"
+      "portName": "Sun-Panel-on-Cloudflare-Worker",
+      "portSubtitle": "Sun-Panel · Cloudflare Worker 移植版",
+      "qqGroupQrTip": "- 如果失效请返回联系作者 -",
+      "qqGroupQrTitle": "交流群二维码",
+      "repoAddress": "仓库地址：",
+      "repoIssue": "问题反馈：",
+      "thisRepoTitle": "本仓库（Cloudflare Worker 移植版）",
+      "upstreamRepo": "项目地址：",
+      "upstreamTitle": "上游原作者 · 原版 Sun-Panel"
     },
     "baseSettings": {
       "appName": "风格设置",
@@ -145,6 +156,7 @@
     "addSuccess": "添加成功",
     "appName": "Sun-Panel",
     "cancel": "取消",
+    "componentNotFound": "组件不存在",
     "confirm": "确定",
     "continue": "继续",
     "delete": "删除",
@@ -159,6 +171,7 @@
     "image": "图片",
     "inputPlaceholder": "请输入",
     "language": "语言",
+    "loading": "加载中...",
     "networkError": "网络错误，请稍后重试",
     "noData": "暂无数据",
     "refreshPage": "请刷新页面",
@@ -270,7 +283,6 @@
     "onlineIcon": "在线图标",
     "onlineIconLibrary": "在线图标库",
     "onlyName": "唯一标识",
-    "onlyNameExisted": "唯一标识已被占用",
     "onlyNameTip": "英文标识，可用作OpenAPI，对应字段：\"onlyName\"；也可配合自定义js、css、页脚进行美化卡片",
     "openMethod": "打开方式",
     "preview": "效果预览(仅供参考)",
@@ -283,7 +295,7 @@
     "loginButton": "登录",
     "passwordPlaceholder": "密码",
     "usernamePlaceholder": "账号",
-    "welcomeMessage": "欢迎回来！"
+    "welcomeMessage": "{name}，欢迎回来！"
   },
   "panelHome": {
     "changeToLanModel": "切换为内网模式",

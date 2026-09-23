@@ -6,7 +6,7 @@ import { useAuthStore, usePanelState } from '@/store'
 import { VisitMode } from '@/enums/auth'
 import { SearchEngineOpenMethodEnum } from '@/enums/panel'
 import { buildSearchUrl, createDefaultEngines } from '@/utils/searchBox'
-import { t } from '@/locales'
+import { reportThrownError } from '@/utils/request/apiMessage'
 
 const props = withDefaults(defineProps<{
   background?: string
@@ -59,7 +59,7 @@ function persistSearchEngine() {
   // 访客模式的临时切换不落库 (本移植版 visitMode 恒为登录模式, 属上游遗留分支)
   if (isVisitor.value)
     return
-  panelState.saveSearchEngine().catch(() => ms.error(t('common.saveFail')))
+  panelState.saveSearchEngine().catch(error => reportThrownError(error, text => ms.error(text), 'common.saveFail'))
 }
 
 const newWindowOpen = computed({

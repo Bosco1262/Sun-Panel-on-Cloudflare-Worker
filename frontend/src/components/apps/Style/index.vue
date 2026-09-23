@@ -6,7 +6,7 @@ import SearchEngineSettings from './SearchEngineSettings.vue'
 import { useAuthStore, usePanelState } from '@/store'
 import { PanelPanelConfigStyleEnum } from '@/enums/panel'
 import { t } from '@/locales'
-import { apiRespErrMsg } from '@/utils/request/apiMessage'
+import { apiRespErrMsg, reportApiError } from '@/utils/request/apiMessage'
 
 const authStore = useAuthStore()
 const panelState = usePanelState()
@@ -116,7 +116,7 @@ function uploadCloud() {
     if (res.code === 0)
       ms.success(t('apps.baseSettings.configSaved'))
     else
-      ms.error(t('apps.baseSettings.configFailed', { message: res.msg }))
+      reportApiError(res, text => ms.error(t('apps.baseSettings.configFailed', { message: text })), 'common.saveFail')
   })
 }
 
@@ -142,7 +142,7 @@ function resetPanelConfig() {
           {{ $t('apps.baseSettings.textContent') }}
         </div>
         <div class="flex items-center mt-[5px]">
-          <NInput v-model:value="panelState.panelConfig.logoText" type="text" show-count :maxlength="20" placeholder="请输入文字" />
+          <NInput v-model:value="panelState.panelConfig.logoText" type="text" show-count :maxlength="20" :placeholder="$t('common.inputPlaceholder')" />
         </div>
       </div>
     </NCard>

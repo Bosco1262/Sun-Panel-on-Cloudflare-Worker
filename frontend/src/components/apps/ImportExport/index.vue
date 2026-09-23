@@ -10,6 +10,7 @@ import { edit as addGroup, getList as getGroupList } from '@/api/panel/itemIconG
 import { addMultiple as addMultipleIcons, getListByGroupId } from '@/api/panel/itemIcon'
 
 import { t } from '@/locales'
+import { reportApiError, reportThrownError } from '@/utils/request/apiMessage'
 
 interface ItemGroup extends Panel.ItemIconGroup {
   items?: Panel.ItemInfo[]
@@ -35,16 +36,28 @@ const checkedItems = ref<string[]>(['icons']) // 当前准备导入导出的项�
  */
 const droppedOnlyNames = ref<string[]>([])
 
-// Import icons
-// 导入图标
-async function importIcons(): Promise<string | null> {
+/**
+ * Imports the icons
+ *
+ * Failures are reported right here (the request layer already showed translated codes, the rest is shown by
+ * `reportApiError`) so a single failure never produces two dialogs; the caller only learns whether it must abort.
+ *
+ *
+ * 导入图标
+ *
+ * 失败就在这里提示 (有译文的错误码请求层已弹过, 其余由 `reportApiError` 弹),
+ * 同一次失败因此不会弹两遍; 调用方只需要知道是否要中止。
+ *
+ * @returns whether the import was aborted
+ */
+async function importIcons(): Promise<boolean> {
   const groups = importObj.value?.geticons()
   const batchSize = 50
 
   droppedOnlyNames.value = []
 
   if (!groups)
-    return null
+    return false
 
   try {
     for (let i = 0; i < groups.length; i++) {
@@ -87,8 +100,10 @@ async function importIcons(): Promise<string | null> {
             if (addIcons.length === batchSize || iconI === element.children.length - 1) {
               const response = await addMultipleIcons<{ list: Panel.ItemInfo[]; droppedOnlyNames: string[] }>(addIcons)
 
-              if (response.code !== 0)
-                return response.msg
+              if (response.code !== 0) {
+                reportApiError(response, text => ms.error(text), 'common.failed')
+                return true
+              }
 
               // The backend downgrades "duplicate or invalid" identifiers to an empty string and reports them back; they are collected here to inform the user
               // 后端会把「重复或非法」的唯一标识降级为空串并回报, 这里汇总后提示用户
@@ -101,17 +116,16 @@ async function importIcons(): Promise<string | null> {
         }
       }
       else {
-        return createGroupResponse.msg
+        reportApiError(createGroupResponse, text => ms.error(text), 'common.failed')
+        return true
       }
     }
 
-    return null
+    return false
   }
   catch (error) {
-    if (error instanceof Error)
-      return `${t('common.failed')}: ${error.message}`
-    else
-      return t('common.unknownError')
+    reportThrownError(error, text => ms.error(text), 'common.failed')
+    return true
   }
 }
 
@@ -121,10 +135,16 @@ async function importIcons(): Promise<string | null> {
 //
 // 导出图标
 // 失败时抛错由调用方提示: 旧实现静默返回空数组/跳过失败分组, 会导出缺数据的文件却提示「导出成功」
-async function exportIcons(): Promise<IconGroup[]> {
+async function exportIcons(): Promise<IconGroup[] | null> {
   const { code, msg, data } = await getGroupList<Common.ListResponse<ItemGroup[]>>()
-  if (code !== 0 || !data?.list)
-    throw new Error(msg || t('common.failed'))
+  if (code !== 0 || !data?.list) {
+    // Reported here for the same reason as importIcons: the request layer shows translated codes, and re-throwing
+    // would make the caller show the raw (English) backend msg a second time.
+    //
+    // 与 importIcons 同理在这里提示: 有译文的错误码请求层已弹过, 再抛出会让调用方把英文原文再显示一遍
+    reportApiError({ code, msg }, text => ms.error(text), 'common.failed')
+    return null
+  }
 
   const missingGroups: string[] = []
   const iconGroups = await Promise.all(data.list.map(async (element) => {
@@ -253,6 +273,11 @@ async function handleStartExport() {
     const exportResult = exportJson(version.value)
     if (checkedItems.value.includes('icons')) {
       const iconGroups = await exportIcons()
+      // null = the group list could not be read and the failure was already reported
+      // null = 分组列表读取失败且已经提示过
+      if (!iconGroups)
+        return
+
       exportResult.addIconsData(iconGroups)
     }
 
@@ -274,13 +299,13 @@ async function handleStartImport() {
   loading.value = true
   try {
     if (checkedItems.value.includes('icons')) {
-      const errMsg = await importIcons()
-      if (errMsg !== null) {
-        // Failure: keep the dialog open so the user can fix the file and retry (the old implementation used ms.success for errors and still claimed success)
-        // 失败: 保持弹窗打开, 用户可修正后重试 (旧实现用 ms.success 报错且照样提示「操作成功」)
-        ms.error(`${t('common.failed')}: ${errMsg}`)
+      // Failure: keep the dialog open so the user can fix the file and retry (the old implementation used ms.success
+      // for errors and still claimed success); the failure itself was reported inside importIcons
+      //
+      // 失败: 保持弹窗打开, 用户可修正后重试 (旧实现用 ms.success 报错且照样提示「操作成功」);
+      // 失败提示本身已在 importIcons 里给出
+      if (await importIcons())
         return
-      }
     }
 
     // Report downgraded identifiers (the import itself succeeded; those items simply have an empty identifier)

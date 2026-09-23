@@ -49,21 +49,53 @@ function flatten(obj: Record<string, unknown>, prefix = '', out = new Set<string
 // Keys appearing in the source (including t('x') / $t('x') / t(`x`); dynamic concatenations such as apiErrorCode are handled separately)
 // 源码里出现的 key（含 t('x') / $t('x') / t(`x`) 与 apiErrorCode 这种动态拼接的部分单独处理）
 const KEY_CALL = /(?<![\w.])\$?t\(\s*['"`]([^'"`$]+)['"`]/g
+
+// Error-text helpers take the fallback key as an argument, so the t(...) scan above cannot see it
+// 错误文案辅助函数把 fallback key 当参数传入, 上面的 t(...) 扫描看不到
+const FALLBACK_KEY_CALL = /\b(?:apiErrorText|reportApiError|reportThrownError)\s*\(/g
+const STRING_LITERAL = /(['"])([^'"\n]+)\1/g
+
+/**
+ * Collects the string literals passed to the error-text helpers inside one file
+ *
+ * 收集单个文件里传给错误文案辅助函数的字符串字面量
+ */
+function collectFallbackKeys(code: string, add: (key: string) => void) {
+  for (const match of code.matchAll(FALLBACK_KEY_CALL)) {
+    const start = (match.index ?? 0) + match[0].length
+    let depth = 1
+    let i = start
+    while (i < code.length && depth > 0) {
+      if (code[i] === '(')
+        depth++
+      else if (code[i] === ')')
+        depth--
+      i++
+    }
+    for (const literal of code.slice(start, i - 1).matchAll(STRING_LITERAL)) {
+      if (literal[2].includes('.'))
+        add(literal[2])
+    }
+  }
+}
+
 const used = new Map<string, string[]>()
 let dynamicCallCount = 0
 
 for (const file of walk(SRC_DIR)) {
   const code = readFileSync(file, 'utf8')
   const rel = relative(process.cwd(), file).replace(/\\/g, '/')
-  for (const match of code.matchAll(KEY_CALL)) {
-    const key = match[1]
+  const markUsed = (key: string) => {
     if (!key.includes('.'))
-      continue
+      return
     const list = used.get(key) ?? []
     if (!list.includes(rel))
       list.push(rel)
     used.set(key, list)
   }
+  for (const match of code.matchAll(KEY_CALL))
+    markUsed(match[1])
+  collectFallbackKeys(code, markUsed)
   // Count template-string calls, whose keys cannot be resolved statically
   // 记录模板字符串拼接的调用, 这类 key 无法静态解析
   dynamicCallCount += (code.match(/\$?t\(\s*`[^`]*\$\{/g) ?? []).length

@@ -10,6 +10,7 @@ import { RoundCardModal, SvgIcon } from '@/components/common/'
 import { updatePassword, updateUsername } from '@/api/system/user'
 import { updateLocalUserInfo } from '@/utils/cmn'
 import { t } from '@/locales'
+import { reportApiError, reportThrownError } from '@/utils/request/apiMessage'
 
 const userStore = useUserStore()
 const authStore = useAuthStore()
@@ -126,12 +127,16 @@ function handleUpdatePassword(e: MouseEvent) {
         ms.success(t('common.success'))
       }
       else {
-        ms.error(msg)
+        // For "old password error" and friends the request layer already showed the translated text; showing the raw
+        // `msg` here would add a second dialog in English.
+        //
+        // 「旧密码错误」等错误码已由请求层显示了译文, 再显示原始 msg 会多弹一个英文弹窗
+        reportApiError({ code, msg }, text => ms.error(text), 'common.saveFail')
       }
     }).finally(() => {
       updatePasswordModalState.value.loading = false
-    }).catch(() => {
-      ms.error(t('common.serverError'))
+    }).catch((error) => {
+      reportThrownError(error, text => ms.error(text), 'common.serverError')
     })
   })
 }
@@ -161,12 +166,14 @@ function handleUpdateUsername(e: MouseEvent) {
         ms.success(t('common.success'))
       }
       else {
-        ms.error(msg)
+        // See handleUpdatePassword: the translated text comes from the request layer
+        // 同 handleUpdatePassword: 译文由请求层给出
+        reportApiError({ code, msg }, text => ms.error(text), 'common.saveFail')
       }
     }).finally(() => {
       updateUsernameModalState.value.loading = false
-    }).catch(() => {
-      ms.error(t('common.serverError'))
+    }).catch((error) => {
+      reportThrownError(error, text => ms.error(text), 'common.serverError')
     })
   })
 }

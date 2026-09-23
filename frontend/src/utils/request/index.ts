@@ -1,6 +1,6 @@
 import type { AxiosError, AxiosProgressEvent, AxiosResponse, GenericAbortSignal } from 'axios'
 import request from './axios'
-import { apiRespErrMsg, message } from './apiMessage'
+import { apiErrorText, apiRespErrMsg, markErrorReported, message } from './apiMessage'
 import { t } from '@/locales'
 import { useAppStore, useAuthStore } from '@/store'
 import { router } from '@/router'
@@ -36,7 +36,6 @@ function http<T = any>(
       if (loginMessageShow === false) {
         loginMessageShow = true
         message.warning(t('api.loginExpires'), {
-        // message.warning('登录过期', {
           onLeave() {
             loginMessageShow = false
           },
@@ -55,7 +54,9 @@ function http<T = any>(
     }
 
     if (res.data.code === 1005) {
-      message.warning(res.data.msg)
+      // The backend msg is English; the code is what carries the meaning for the user
+      // 后端 msg 是英文, 对用户有意义的是 code
+      message.warning(t('apiErrorCode.1005'))
       return res.data
     }
 
@@ -74,17 +75,21 @@ function http<T = any>(
   }
 
   // Transport-level failure (network drop / 5xx): business codes are handled by successHandler above.
-  // The old implementation typed the argument as Response<Error>, so the server's msg could never be read and
-  // only a generic "network error" was shown.
+  // 413 (body too large) and 503 (JWT_SECRET unusable) still carry a business `code`, so the text is resolved the same
+  // way — straight from the code, never from the English `msg`.
   //
   // HTTP 层失败 (网络中断 / 5xx): 业务错误码在上面的 successHandler 里处理。
-  // 旧实现把参数标成 Response<Error>, 于是永远读不到服务端返回的 msg, 只显示通用「网络错误」
+  // 413 (请求体过大) 与 503 (JWT_SECRET 不可用) 同样带着业务 code, 因此文案按同样方式解析 ——
+  // 一律由 code 决定, 不用英文 msg。
   const failHandler = (error: AxiosError<Response>) => {
-    message.error(error.response?.data?.msg || t('common.networkError'), {
+    const body = error.response?.data
+    message.error(body ? apiErrorText(body, 'common.networkError') : t('common.networkError'), {
       duration: 8000,
       closable: true,
     })
-    throw error
+    // Marked so the caller's catch does not show the same failure a second time (see reportThrownError)
+    // 打上标记, 调用方的 catch 就不会把同一次失败再提示一遍 (见 reportThrownError)
+    throw markErrorReported(error)
   }
 
   method = method || 'GET'

@@ -9,6 +9,7 @@ import { SvgIcon } from '@/components/common'
 import { edit, getSiteFaviconCandidates, saveSiteFavicon } from '@/api/panel/itemIcon'
 import { getList as getGroupList } from '@/api/panel/itemIconGroup'
 import { t } from '@/locales'
+import { reportApiError, reportThrownError } from '@/utils/request/apiMessage'
 
 interface Props {
   visible: boolean
@@ -146,14 +147,13 @@ async function editApi() {
       emit('done', data)
     }
     else {
-      if (code === 1401)
-        ms.error(t('iconItem.onlyNameExisted'))
-      else
-        ms.error(`${t('common.saveFail')}:${msg}`)
+      // 1401 (duplicate unique name) and the other codes are reported by the request layer with their translation
+      // 1401 (唯一标识被占用) 等错误码由请求层带译文提示
+      reportApiError({ code, msg }, text => ms.error(text), 'common.saveFail')
     }
   }
   catch (error) {
-    ms.error(t('common.saveFail'))
+    reportThrownError(error, text => ms.error(text), 'common.saveFail')
   }
   submitLoading.value = false
 }
@@ -197,9 +197,9 @@ const saveFaviconLoading = ref(false)
 async function getIconByUrl(url: string, loadingIndex: number) {
   getIconLoading.value[loadingIndex] = true
   try {
-    const { code, data } = await getSiteFaviconCandidates<{ candidates: Panel.FaviconCandidate[] }>(url)
+    const { code, msg, data } = await getSiteFaviconCandidates<{ candidates: Panel.FaviconCandidate[] }>(url)
     if (code !== 0) {
-      ms.error(t('iconItem.geticonFail'))
+      reportApiError({ code, msg }, text => ms.error(text), 'iconItem.geticonFail')
       return
     }
 
@@ -221,7 +221,7 @@ async function getIconByUrl(url: string, loadingIndex: number) {
     faviconPickerVisible.value = true
   }
   catch (error) {
-    ms.error(t('iconItem.geticonFail'))
+    reportThrownError(error, text => ms.error(text), 'iconItem.geticonFail')
   }
   finally {
     getIconLoading.value[loadingIndex] = false
@@ -239,7 +239,7 @@ async function handleFaviconSelected(candidate: Panel.FaviconCandidate) {
 async function saveFavicon(candidate: Panel.FaviconCandidate, pageUrl: string): Promise<boolean> {
   saveFaviconLoading.value = true
   try {
-    const { code, data } = await saveSiteFavicon<{ iconUrl: string }>(candidate.url, pageUrl)
+    const { code, msg, data } = await saveSiteFavicon<{ iconUrl: string }>(candidate.url, pageUrl)
     if (code === 0 && data?.iconUrl) {
       model.value.icon = {
         itemType: 2,
@@ -247,10 +247,10 @@ async function saveFavicon(candidate: Panel.FaviconCandidate, pageUrl: string): 
       }
       return true
     }
-    ms.error(t('iconItem.geticonFail'))
+    reportApiError({ code, msg }, text => ms.error(text), 'iconItem.geticonFail')
   }
   catch (error) {
-    ms.error(t('iconItem.geticonFail'))
+    reportThrownError(error, text => ms.error(text), 'iconItem.geticonFail')
   }
   finally {
     saveFaviconLoading.value = false
@@ -275,7 +275,7 @@ function getGroupListOptions() {
   getGroupList<Common.ListResponse<Panel.ItemIconGroup[]>>().then(({ data, code, msg }) => {
     if (code !== 0 || !data?.list) {
       if (code !== 0)
-        ms.error(`${t('iconItem.getGroupFail')}:${msg}`)
+        reportApiError({ code, msg }, text => ms.error(text), 'iconItem.getGroupFail')
       return
     }
 
@@ -293,7 +293,7 @@ function getGroupListOptions() {
         label: element.title as string,
       })
     }
-  }).catch(() => ms.error(t('iconItem.getGroupFail')))
+  }).catch(error => reportThrownError(error, text => ms.error(text), 'iconItem.getGroupFail'))
 }
 </script>
 

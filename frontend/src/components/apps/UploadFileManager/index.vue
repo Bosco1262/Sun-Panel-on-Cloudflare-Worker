@@ -6,6 +6,7 @@ import { getStorageSettings, saveStorageSettings } from '@/api/system/setting'
 import { RoundCardModal, SvgIcon } from '@/components/common'
 import { copyToClipboard, timeFormat } from '@/utils/cmn'
 import { t } from '@/locales'
+import { reportApiError, reportThrownError } from '@/utils/request/apiMessage'
 import { usePanelState } from '@/store'
 
 interface InfoModalState {
@@ -39,10 +40,10 @@ async function getFileList() {
     if (code === 0 && data?.list)
       imageList.value = data.list
     else if (code !== 0)
-      ms.error(`${t('common.failed')}:${msg}`)
+      reportApiError({ code, msg }, text => ms.error(text), 'common.failed')
   }
-  catch {
-    ms.error(t('common.failed'))
+  catch (error) {
+    reportThrownError(error, text => ms.error(text), 'common.failed')
   }
   finally {
     // It must be reset: the old implementation left loading true forever when the request failed, so the page spun forever
@@ -80,11 +81,11 @@ async function deletesImges(id: number) {
       ms.success(t('common.success'))
     }
     else {
-      ms.error(`${t('common.failed')}:${msg}`)
+      reportApiError({ code, msg }, text => ms.error(text), 'common.failed')
     }
   }
   catch (error) {
-    ms.error(t('common.failed'))
+    reportThrownError(error, text => ms.error(text), 'common.failed')
   }
 }
 
@@ -120,7 +121,7 @@ async function cleanUnusedImages() {
     for (let round = 0; round < 50; round++) {
       const { code, msg, data } = await cleanUnused<{ checked: number; deleted: number; remaining: number }>()
       if (code !== 0) {
-        ms.error(`${t('common.failed')}:${msg}`)
+        reportApiError({ code, msg }, text => ms.error(text), 'common.failed')
         return
       }
 
@@ -132,8 +133,8 @@ async function cleanUnusedImages() {
     ms.success(t('apps.uploadsFileManager.cleanUnusedDone', { count: deletedTotal }))
     getFileList()
   }
-  catch {
-    ms.error(t('common.failed'))
+  catch (error) {
+    reportThrownError(error, text => ms.error(text), 'common.failed')
   }
   finally {
     cleaning.value = false
@@ -154,11 +155,11 @@ async function handleSetWallpaper(imgSrc: string) {
     // Roll back on failure, otherwise the UI shows the new wallpaper while the cloud still has the old one
     // 失败回滚, 否则界面显示新壁纸但云端仍是旧的
     panelStore.panelConfig.backgroundImageSrc = previous
-    ms.error(`${t('common.failed')}:${msg}`)
+    reportApiError({ code, msg }, text => ms.error(text), 'common.failed')
   }
-  catch {
+  catch (error) {
     panelStore.panelConfig.backgroundImageSrc = previous
-    ms.error(t('common.failed'))
+    reportThrownError(error, text => ms.error(text), 'common.failed')
   }
 }
 
@@ -183,12 +184,12 @@ async function handleAutoCleanChange(value: boolean) {
     }
     else {
       autoCleanUnused.value = previous
-      ms.error(`${t('common.failed')}:${msg}`)
+      reportApiError({ code, msg }, text => ms.error(text), 'common.failed')
     }
   }
-  catch {
+  catch (error) {
     autoCleanUnused.value = previous
-    ms.error(t('common.failed'))
+    reportThrownError(error, text => ms.error(text), 'common.failed')
   }
   finally {
     savingSetting.value = false
