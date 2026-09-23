@@ -29,7 +29,7 @@
     "markdown-it": "^13.0.1",
     "markdown-it-link-attributes": "^4.0.1",
     "moment": "^2.29.4",
-    "naive-ui": "^2.36.0",
+    "naive-ui": "^2.45.3",
     "pinia": "^2.0.33",
     "vue": "^3.2.47",
     "vue-draggable-plus": "^0.2.6",

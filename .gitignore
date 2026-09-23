@@ -1,4 +1,5 @@
 # Logs
+# 日志
 logs
 *.log
 npm-debug.log*
@@ -19,6 +20,7 @@ coverage
 /cypress/screenshots/
 
 # Editor directories and files
+# 编辑器目录和文件
 .idea
 *.suo
 *.ntvs*
@@ -28,11 +30,17 @@ coverage
 .pnpm-store
 
 # Environment variables files
+# 环境变量文件
+.env.local
 .history
 .dev.vars
 .env
 .env.*
 !.env.example
 
+# Local reference (not included in deployment)
 # 本地对照参考 (不参与部署)
 /reference/
+
+# CodeBuddy
+/.codebuddy/
