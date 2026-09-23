@@ -74,21 +74,17 @@ onMounted(() => {
         {{ $t('apps.about.thisRepoTitle') }}
       </div>
 
-      <div class="flex flex-col gap-[6px] text-[14px]">
-        <div class="flex items-baseline gap-2">
-          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.repoAddress') }}</span>
-          <a :href="REPO_URL" target="_blank" class="link break-all">Sun-Panel-on-Cloudflare-Worker</a>
-        </div>
+      <!-- Label column is sized by the widest label (grid auto), so longer English labels cannot spill over the links -->
+      <!-- 标签列宽度由最长标签决定 (grid auto), 更长的英文标签不会压到右侧链接 -->
+      <div class="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2 gap-y-[6px] text-[14px]">
+        <span class="whitespace-nowrap text-slate-500 dark:text-slate-400">{{ $t('apps.about.repoAddress') }}</span>
+        <a :href="REPO_URL" target="_blank" class="link min-w-0 break-words">Sun-Panel-on-Cloudflare-Worker</a>
 
-        <div class="flex items-baseline gap-2">
-          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.repoIssue') }}</span>
-          <a :href="REPO_ISSUES_URL" target="_blank" class="link">Github Issues</a>
-        </div>
+        <span class="whitespace-nowrap text-slate-500 dark:text-slate-400">{{ $t('apps.about.repoIssue') }}</span>
+        <a :href="REPO_ISSUES_URL" target="_blank" class="link min-w-0">Github Issues</a>
 
-        <div class="flex items-baseline gap-2">
-          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.docsIndex') }}</span>
-          <a :href="REPO_DOCS_URL" target="_blank" class="link">docs/README.md</a>
-        </div>
+        <span class="whitespace-nowrap text-slate-500 dark:text-slate-400">{{ $t('apps.about.docsIndex') }}</span>
+        <a :href="REPO_DOCS_URL" target="_blank" class="link min-w-0">docs/README.md</a>
       </div>
     </div>
 
@@ -104,41 +100,33 @@ onMounted(() => {
         {{ $t('apps.about.upstreamTitle') }}
       </div>
 
-      <div class="flex flex-col gap-[6px]">
-        <div class="flex items-baseline gap-2">
-          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.author') }}</span>
-          <span>
-            <a href="https://github.com/hslr-s" target="_blank" class="link">红烧猎人</a>
-            <span class="mx-[5px] text-slate-400 dark:text-slate-500">|</span>
-            <a href="https://github.com/hslr-s/sun-panel/blob/master/doc/donate.md" target="_blank" class="text-red-600 hover:text-red-900">{{ $t('apps.about.donate') }}</a>
+      <!-- Same auto-sized label column as above -->
+      <!-- 与上面一致: 标签列按最长标签自适应 -->
+      <div class="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2 gap-y-[6px]">
+        <span class="whitespace-nowrap text-slate-500 dark:text-slate-400">{{ $t('apps.about.author') }}</span>
+        <span class="min-w-0">
+          <a href="https://github.com/hslr-s" target="_blank" class="link">红烧猎人</a>
+          <span class="mx-[5px] text-slate-400 dark:text-slate-500">|</span>
+          <a href="https://github.com/hslr-s/sun-panel/blob/master/doc/donate.md" target="_blank" class="text-red-600 hover:text-red-900">{{ $t('apps.about.donate') }}</a>
+        </span>
+
+        <span class="whitespace-nowrap text-slate-500 dark:text-slate-400">{{ $t('apps.about.upstreamRepo') }}</span>
+        <a href="https://github.com/hslr-s/sun-panel" target="_blank" class="link min-w-0">hslr-s/sun-panel</a>
+
+        <span class="whitespace-nowrap text-slate-500 dark:text-slate-400">{{ $t('apps.about.issue') }}</span>
+        <a href="https://github.com/hslr-s/sun-panel/issues" target="_blank" class="link min-w-0">Github Issues</a>
+
+        <span class="whitespace-nowrap text-slate-500 dark:text-slate-400">{{ $t('apps.about.discussions') }}</span>
+        <a href="https://github.com/hslr-s/sun-panel/discussions" target="_blank" class="link min-w-0">Github Discussions</a>
+
+        <span class="whitespace-nowrap text-slate-500 dark:text-slate-400">{{ $t('apps.about.QQGroup') }}</span>
+        <span class="min-w-0">
+          <a href="http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=K6UII6aEPZUeDRIPOEpOSJZH-Vmr_RPu&authKey=jEXhnVekLbDDx5UkQzKtd3bRmhZggkGBxmvW4NT5LLIAFP7toMmqABwvkANGHbLb&noverify=0&group_code=831615449" target="_blank" class="link">{{ $t('apps.about.addQQGroupUrl') }}</a>
+          <span class="mx-[5px] text-slate-400 dark:text-slate-500">|</span>
+          <span class="link cursor-pointer" @click="qqGroupQRShow = !qqGroupQRShow">
+            {{ $t('apps.about.QR') }}
           </span>
-        </div>
-
-        <div class="flex items-baseline gap-2">
-          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.upstreamRepo') }}</span>
-          <a href="https://github.com/hslr-s/sun-panel" target="_blank" class="link">hslr-s/sun-panel</a>
-        </div>
-
-        <div class="flex items-baseline gap-2">
-          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.issue') }}</span>
-          <a href="https://github.com/hslr-s/sun-panel/issues" target="_blank" class="link">Github Issues</a>
-        </div>
-
-        <div class="flex items-baseline gap-2">
-          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.discussions') }}</span>
-          <a href="https://github.com/hslr-s/sun-panel/discussions" target="_blank" class="link">Github Discussions</a>
-        </div>
-
-        <div class="flex items-baseline gap-2">
-          <span class="w-[74px] shrink-0 text-slate-500 dark:text-slate-400">{{ $t('apps.about.QQGroup') }}</span>
-          <span>
-            <a href="http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=K6UII6aEPZUeDRIPOEpOSJZH-Vmr_RPu&authKey=jEXhnVekLbDDx5UkQzKtd3bRmhZggkGBxmvW4NT5LLIAFP7toMmqABwvkANGHbLb&noverify=0&group_code=831615449" target="_blank" class="link">{{ $t('apps.about.addQQGroupUrl') }}</a>
-            <span class="mx-[5px] text-slate-400 dark:text-slate-500">|</span>
-            <span class="link cursor-pointer" @click="qqGroupQRShow = !qqGroupQRShow">
-              {{ $t('apps.about.QR') }}
-            </span>
-          </span>
-        </div>
+        </span>
       </div>
 
       <div class="mt-[10px] flex flex-wrap justify-center">
