@@ -434,11 +434,22 @@ function handleEditItem(item: Panel.ItemInfo) {
   currentAddItenIconGroupId.value = undefined
 }
 
-function handleAddItem(itemIconGroupId?: number) {
+/**
+ * Opens the "add item" dialog for a group
+ *
+ * The whole group is handed over so the dialog can show its name before the group list request answers. An entry point
+ * without a group context clears the field explicitly instead of silently reusing the group used last time.
+ *
+ *
+ * 打开「新增项目」弹窗
+ *
+ * 整个分组对象一起传下去: 弹窗在分组列表请求回来之前就能显示组名;
+ * 不带分组上下文的入口则明确清空, 而不是静默沿用上一次用过的分组。
+ */
+function handleAddItem(group?: Pick<ItemGroup, 'id' | 'title'>) {
   editItemInfoData.value = null
   editItemInfoShow.value = true
-  if (itemIconGroupId)
-    currentAddItenIconGroupId.value = itemIconGroupId
+  currentAddItenIconGroupId.value = group?.id
 }
 </script>
 
@@ -511,7 +522,7 @@ function handleAddItem(itemIconGroupId?: number) {
                 class="group-buttons ml-2 delay-100 transition-opacity flex"
                 :class="view.group.hoverStatus ? 'opacity-100' : 'opacity-0'"
               >
-                <span class="mr-2 cursor-pointer" :title="t('common.add')" @click="handleAddItem(view.group.id)">
+                <span class="mr-2 cursor-pointer" :title="t('common.add')" @click="handleAddItem(view.group)">
                   <SvgIcon class="text-white font-xl" icon="typcn:plus" />
                 </span>
                 <!-- No sorting while filtering: dragging would only affect the matching subset and saving would corrupt the full list order -->
@@ -552,7 +563,7 @@ function handleAddItem(itemIconGroupId?: number) {
                       :icon-text-info-hide-description="getGroupHideDescription(view.group)"
                       :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
                       :card-style="0"
-                      @click="handleAddItem(view.group.id)"
+                      @click="handleAddItem(view.group)"
                     />
                   </div>
                 </VueDraggable>
@@ -590,7 +601,7 @@ function handleAddItem(itemIconGroupId?: number) {
                       :icon-text-info-hide-description="getGroupHideDescription(view.group)"
                       :icon-text-icon-hide-title="panelState.panelConfig.iconTextIconHideTitle || false"
                       :card-style="1"
-                      @click="handleAddItem(view.group.id)"
+                      @click="handleAddItem(view.group)"
                     />
                   </div>
                 </VueDraggable>
@@ -685,7 +696,17 @@ function handleAddItem(itemIconGroupId?: number) {
       </div>
     </NBackTop>
 
-    <EditItem v-model:visible="editItemInfoShow" :item-info="editItemInfoData" :item-group-id="currentAddItenIconGroupId" @done="handleEditSuccess" />
+    <!-- The group list already loaded on the home page is handed over so the dialog can fill its dropdown immediately
+         (the dialog still refreshes it in the background and re-checks it before saving) -->
+    <!-- 首页已加载的分组列表一并传下去, 弹窗打开瞬间即可填满下拉
+         (弹窗仍会在后台刷新, 并在保存前复查) -->
+    <EditItem
+      v-model:visible="editItemInfoShow"
+      :item-info="editItemInfoData"
+      :item-group-id="currentAddItenIconGroupId"
+      :item-groups="items"
+      @done="handleEditSuccess"
+    />
 
     <!-- Dialog -->
     <!-- 弹窗 -->

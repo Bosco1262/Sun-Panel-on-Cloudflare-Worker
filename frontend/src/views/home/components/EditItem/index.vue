@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineEmits, defineProps, ref, watch } from 'vue'
+import { computed, defineEmits, defineProps, nextTick, ref, watch } from 'vue'
 import type { FormInst, FormRules } from 'naive-ui'
 import { NAlert, NButton, NCheckbox, NColorPicker, NFlex, NForm, NFormItem, NGrid, NGridItem, NInput, NInputGroup, NModal, NSelect, NSpace, NTooltip, useMessage } from 'naive-ui'
 import IconEditor from './IconEditor.vue'
@@ -15,6 +15,21 @@ interface Props {
   visible: boolean
   itemInfo: Panel.Info | null
   itemGroupId?: number
+  /**
+   * The parent's already loaded group list (the home page's items, unfiltered).
+   *
+   * Filling the dropdown from it the moment the dialog opens removes both the bare id (naive-ui renders the raw value
+   * when no option matches) and the window where the group cannot be switched yet. The dialog still refreshes the list
+   * in the background, so a rename / deletion made on another device is corrected as soon as it answers.
+   *
+   *
+   * 父组件已加载的完整分组列表 (首页 items, 未经过滤)。
+   *
+   * 打开瞬间即用它填满下拉: 既不会显示裸 id (naive-ui 找不到匹配项时会直接渲染原始值),
+   * 也不存在"接口回来前不能切换分组"的窗口。弹窗仍会在后台刷新一次列表,
+   * 其它设备上的改名 / 删除会在响应回来后自动纠正。
+   */
+  itemGroups?: Panel.ItemIconGroup[]
 }
 
 const props = defineProps<Props>()
@@ -26,6 +41,23 @@ const itemIconGroupOptions = ref<{
   label: string
   value: number
 }[]>([])
+
+/**
+ * Group list state
+ *
+ * `loading` / `failed` only happen when there is no usable list at all (the parent list is empty *and* the dialog's own
+ * request has not answered yet); with a list in hand a failed refresh stays silent and the select keeps working.
+ *
+ *
+ * 分组列表状态
+ *
+ * 只有在完全没有可用列表时才会出现 loading / failed (父列表为空 且 弹窗自己的请求还没结果);
+ * 手里有列表时刷新失败保持静默, 下拉照常可用。
+ */
+type GroupListState = 'loading' | 'ready' | 'failed'
+const groupListState = ref<GroupListState>('loading')
+const groupSelectDisabled = computed(() => groupListState.value !== 'ready')
+const groupListFailed = computed(() => groupListState.value === 'failed')
 
 // "More options" collapse area (aligned with upstream: card background colour / group / unique identifier, without the card type)
 // 更多选项折叠区 (对齐上游: 卡片背景色 / 分组 / 唯一标识, 不含卡片类型)
@@ -70,6 +102,31 @@ const rules: FormRules = {
     required: true,
     trigger: ['blur', 'change'],
     message: t('form.required'),
+    /**
+     * The group id is a number, so it cannot be left to async-validator's type inference.
+     *
+     * A rule that carries any key besides `required` (here: `trigger`) no longer takes async-validator's
+     * "required only" shortcut: it falls back to the `string` validator, which rejects a number as a type error
+     * and reports it with the rule's own `message` — so a correctly selected group still showed "必填项" and the
+     * item could never be saved. Declaring the accepted shapes explicitly fixes that and mirrors the backend,
+     * which also treats 0 / missing as "no group" (error code 1404, see src/api/panel/itemIcon.ts).
+     *
+     *
+     * 分组 id 是数字, 不能交给 async-validator 做类型推断。
+     *
+     * 规则里只要出现 `required` 以外的键 (这里是 `trigger`), async-validator 就不再走「仅 required」的快捷
+     * 分支, 而是退回 `string` 校验器: 数字会被判成类型错误, 并按该规则的 `message` 报出来 —— 于是明明选好了
+     * 分组也一直提示「必填项」, 项目根本无法保存。这里显式声明可接受的值形态, 并与后端保持一致:
+     * 0 / 缺失都视为「没有分组」(错误码 1404, 见 src/api/panel/itemIcon.ts)。
+     */
+    validator: (_rule, value) => {
+      // A numeric string is accepted as well (imported data can carry the id as text)
+      // 同时接受数字字符串 (导入的数据里 id 可能是文本)
+      const id = typeof value === 'string' ? Number(value) : value
+      return (typeof id === 'number' && Number.isFinite(id) && id > 0)
+        ? true
+        : new Error(t('form.required'))
+    },
   },
 }
 
@@ -137,7 +194,8 @@ watch(() => model.value.onlyName, (v) => {
 })
 
 async function editApi() {
-  submitLoading.value = true
+  // The loading flag is owned by the submit flow (it also covers the pre-save group re-check)
+  // loading 由提交流程统一管理 (它还要覆盖保存前的分组复查)
   try {
     const { code, data, msg } = await edit<Panel.ItemInfo>(model.value)
     if (code === 0) {
@@ -155,7 +213,6 @@ async function editApi() {
   catch (error) {
     reportThrownError(error, text => ms.error(text), 'common.saveFail')
   }
-  submitLoading.value = false
 }
 
 // Icon validity check (aligned with upstream's selectOneIcon)
@@ -173,14 +230,40 @@ function validateIcon(): boolean {
 
 const handleValidateButtonClick = (e: MouseEvent) => {
   e.preventDefault()
-  formRef.value?.validate((errors) => {
-    if (errors)
-      return
-    if (!validateIcon()) {
-      ms.error(t('iconItem.selectOneIcon'))
-      return
+  if (submitLoading.value)
+    return
+  // Covers the whole chain (form validation → icon check → group re-check → save), so the button never looks idle
+  // 覆盖整条链路 (表单校验 → 图标校验 → 分组复查 → 写入), 中途按钮不会看起来闲置
+  submitLoading.value = true
+
+  formRef.value?.validate(async (errors) => {
+    try {
+      if (errors)
+        return
+      if (!validateIcon()) {
+        ms.error(t('iconItem.selectOneIcon'))
+        return
+      }
+
+      // Pre-save re-check: fetch the list again (which also refreshes the dropdown)
+      // 保存前复查: 重新拉一次分组列表 (顺带刷新下拉)
+      if (await loadGroupOptions() === 'failed') {
+        // The list is unreachable: block the save rather than writing into a group that may already be gone
+        // 列表不可用: 阻断保存, 不做"可能写进已删除分组"的猜测
+        ms.error(t('iconItem.getGroupFailRetry'))
+        return
+      }
+
+      // The value did not survive the re-check: clear it, reveal the field and show the field-level error
+      // 复查后值已失效: 清空 + 展开分组字段 + 字段级「必填项」
+      if (enforceGroupInvariant(true))
+        return
+
+      await editApi()
     }
-    editApi()
+    finally {
+      submitLoading.value = false
+    }
   })
 }
 
@@ -264,36 +347,191 @@ watch(() => props.visible, (newValue) => {
   if (newValue !== true)
     return
 
-  model.value = props.itemInfo ? { ...props.itemInfo } : { ...restoreDefault }
+  // Rebuild the model. The icon is copied one level deep so the background colour picked here only affects the preview
+  // inside the dialog — the home page card changes when the save succeeds, and only then (cancel / failure leave it be).
+  //
+  // 重建模型。icon 做一层浅拷贝: 这里改的背景色只影响弹窗内的预览,
+  // 首页卡片要等保存成功后才跟着变 (取消 / 保存失败都不影响它)。
+  model.value = props.itemInfo
+    ? { ...props.itemInfo, icon: props.itemInfo.icon ? { ...props.itemInfo.icon } : null }
+    : { ...restoreDefault }
   if (props.itemGroupId)
     model.value.itemIconGroupId = props.itemGroupId
 
-  getGroupListOptions()
+  // Reset the three switches on every open: the preview is on, the transparent canvas is off, and the collapse area
+  // only opens for an item that already carries a unique identifier or a custom background colour
+  //
+  // 每次打开都复位三个开关: 预览默认开、画布透明默认关;
+  // 更多选项只在"已设置唯一标识或自定义背景色"时展开。
+  previewShow.value = true
+  canvasTransparent.value = false
+  showMoreOptions.value = hasCustomBackground() || !!model.value.onlyName
+
+  // Seed from the parent's list first (usable immediately), then refresh in the background
+  // 先用父列表播种 (打开瞬间可用), 再在后台刷新一次
+  seedOptionsFromInherited()
+  groupListState.value = hasGroupOptions() ? 'ready' : 'loading'
+  enforceGroupInvariant()
+
+  loadGroupOptions()
 })
 
-function getGroupListOptions() {
-  getGroupList<Common.ListResponse<Panel.ItemIconGroup[]>>().then(({ data, code, msg }) => {
-    if (code !== 0 || !data?.list) {
-      if (code !== 0)
-        reportApiError({ code, msg }, text => ms.error(text), 'iconItem.getGroupFail')
-      return
+/**
+ * Whether a custom card background colour is set
+ *
+ * The default counts as "not set": IconEditor fills an empty colour with the default and writes it back on every
+ * commit, so merely editing an icon (or editing any existing item) leaves the default value in place.
+ *
+ *
+ * 是否设置了自定义卡片背景色
+ *
+ * 默认值视为"未设置": IconEditor 会把空背景色补成默认值并在每次 commit 时写回,
+ * 所以只要编辑过图标 (或编辑任何既有项目), 背景色都会等于默认值。
+ */
+function hasCustomBackground(): boolean {
+  // An absent colour counts as "not set" — it must not be compared against the default as if it were a value
+  // 没有背景色视为"未设置" —— 不能拿空值去和默认值比较
+  const bg = model.value.icon?.backgroundColor
+  return !!bg && bg.toLowerCase() !== defaultBackground.toLowerCase()
+}
+
+function hasGroupOptions(): boolean {
+  return itemIconGroupOptions.value.length > 0
+}
+
+/**
+ * Whether the current value matches one of the available options (the group invariant)
+ *
+ * 当前分组值能否匹配到可用列表中的某一项 (分组值不变量)
+ */
+function isGroupValueValid(): boolean {
+  return itemIconGroupOptions.value.some(option => option.value === model.value.itemIconGroupId)
+}
+
+/**
+ * Fills the options from the parent's list, so the dropdown works the moment the dialog opens
+ *
+ * 用父组件传来的列表填满下拉选项: 打开瞬间即可显示正确分组名并切换
+ */
+function seedOptionsFromInherited() {
+  itemIconGroupOptions.value = (props.itemGroups ?? [])
+    .filter(group => typeof group.id === 'number')
+    .map(group => ({ value: group.id as number, label: group.title ?? '' }))
+}
+
+/**
+ * Value handed to the group select
+ *
+ * With no usable list at all the model may hold an id that no option can render, and naive-ui would then print the raw
+ * number on screen. Only the display is suppressed — the model keeps the value, so the preselection is not thrown away
+ * and the very same value renders as its group name again as soon as a list arrives.
+ *
+ *
+ * 交给分组下拉的显示值
+ *
+ * 完全没有可用列表时, 模型里的 id 没有任何选项可渲染, naive-ui 会直接把数字显示在界面上。
+ * 这里只屏蔽显示、不动模型: 预选不会丢, 列表一到, 同一份值就会重新渲染成组名。
+ */
+const groupSelectValue = computed<number | undefined>({
+  get: () => (hasGroupOptions() ? model.value.itemIconGroupId : undefined),
+  set: (value) => {
+    model.value.itemIconGroupId = value
+  },
+})
+
+/**
+ * Group invariant: with a usable list at hand the value must match one of its entries, otherwise it is cleared
+ *
+ * It never invents a group (the old "fall back to the first one" behaviour is gone) and never leaves a bare id on
+ * screen. With the collapse area closed the clearing stays silent and the save flow is the one that reports it; with
+ * the area open — or when the save flow asks for it — the field-level "required" error is rendered right away.
+ *
+ *
+ * 分组值不变量: 只要有可用列表, 值就必须匹配其中一项, 否则清空。
+ *
+ * 既不臆造分组 (旧的"没有分组就落到第一个分组"已移除), 也不让裸 id 留在界面上。
+ * 折叠区关闭时静默清空, 由保存流程负责提示; 折叠区展开 (或保存流程要求时) 立即渲染字段级「必填项」。
+ *
+ * @returns whether the value was cleared / 是否发生了清空
+ */
+function enforceGroupInvariant(expandSection = false): boolean {
+  if (!hasGroupOptions() || isGroupValueValid())
+    return false
+
+  model.value.itemIconGroupId = undefined
+
+  if (expandSection || showMoreOptions.value) {
+    showMoreOptions.value = true
+    // naive-ui only validates mounted form items: wait for the field to render, then validate so the message appears
+    // naive-ui 只校验已挂载的表单项: 等字段渲染出来再校验, 提示才会出现
+    nextTick(() => {
+      // Called with a callback: without one validate() rejects and leaves an unhandled rejection behind
+      // 用回调形式调用: 不传 callback 时 validate() 会 reject, 留下未处理的 promise 拒绝
+      formRef.value?.validate(() => {})
+    })
+  }
+  return true
+}
+
+/**
+ * Failure handling for a group-list request
+ *
+ * With a list already available the refresh failure stays silent — the list keeps working, so a message would only be
+ * noise. With nothing available at all the select is disabled and explained inline instead.
+ *
+ *
+ * 分组列表请求失败时的分流
+ *
+ * 手里已有列表时静默降级 —— 列表照常可用, 再弹提示只是噪音;
+ * 完全无列表可用时禁用下拉, 并在字段下方给出一行解释。
+ */
+function markGroupLoadFailure() {
+  if (hasGroupOptions()) {
+    console.warn('[EditItem] 分组列表刷新失败, 继续使用已有列表')
+    groupListState.value = 'ready'
+  }
+  else {
+    groupListState.value = 'failed'
+  }
+}
+
+/**
+ * Fetches the group list: the background refresh when the dialog opens, and the pre-save re-check
+ *
+ * @returns 'failed' as well when a list is already available — the caller decides whether that blocks anything
+ */
+async function loadGroupOptions(): Promise<'ok' | 'failed'> {
+  try {
+    const { data, code, msg } = await getGroupList<Common.ListResponse<Panel.ItemIconGroup[]>>()
+    if (code !== 0) {
+      // A code with a translation was already reported by the request layer (reportApiError skips those)
+      // 有译文的 code 已由请求层提示过 (reportApiError 会跳过这类)
+      reportApiError({ code, msg }, text => ms.error(text), 'iconItem.getGroupFail')
+      markGroupLoadFailure()
+      return 'failed'
     }
 
-    itemIconGroupOptions.value = []
-
-    for (let i = 0; i < data.list.length; i++) {
-      const element = data.list[i]
-      // With no group specified the first one is used (the old code wrote back to a module-level restoreDefault, which is a side effect)
-      // 未指定分组时默认落到第一个分组 (不再回写模块级 restoreDefault, 避免副作用)
-      if (i === 0 && !model.value.itemIconGroupId)
-        model.value.itemIconGroupId = element.id
-
-      itemIconGroupOptions.value.push({
-        value: element.id as number,
-        label: element.title as string,
-      })
+    // Success without a list is a malformed response: treated as a failure, without a second message of its own
+    // 成功但没有 list 属于响应结构异常: 按失败处理, 不再单独多弹一条提示
+    if (!data?.list) {
+      markGroupLoadFailure()
+      return 'failed'
     }
-  }).catch(error => reportThrownError(error, text => ms.error(text), 'iconItem.getGroupFail'))
+
+    itemIconGroupOptions.value = data.list
+      .filter(element => typeof element.id === 'number')
+      .map(element => ({ value: element.id as number, label: element.title ?? '' }))
+    groupListState.value = 'ready'
+    // A value that no longer exists in the fresh list is cleared (and reported when the field is visible)
+    // 值已不在最新列表中时清空 (字段可见时顺带提示)
+    enforceGroupInvariant()
+    return 'ok'
+  }
+  catch (error) {
+    reportThrownError(error, text => ms.error(text), 'iconItem.getGroupFail')
+    markGroupLoadFailure()
+    return 'failed'
+  }
 }
 </script>
 
@@ -448,7 +686,20 @@ function getGroupListOptions() {
                 <template #label>
                   <span class="font-bold">{{ t('iconItem.iconGroup') }}</span>
                 </template>
-                <NSelect v-model:value="model.itemIconGroupId" :options="itemIconGroupOptions" />
+                <!-- Bound to `groupSelectValue` (not the model field directly): with no usable list the raw id would be
+                     rendered on screen — the model keeps the value either way -->
+                <!-- 绑定 groupSelectValue (而非直接绑模型字段): 没有任何可用列表时, 直接绑会把裸 id 渲染到界面上;
+                     两种绑定下模型里的值都不变 -->
+                <NSelect
+                  v-model:value="groupSelectValue"
+                  :options="itemIconGroupOptions"
+                  :disabled="groupSelectDisabled"
+                />
+                <!-- Only shown when there is no usable list at all; a failed refresh with a list in hand stays silent -->
+                <!-- 只在完全没有可用列表时出现; 手里有列表时刷新失败是静默降级 -->
+                <div v-if="groupListFailed" class="mt-[4px] text-xs text-slate-400">
+                  {{ $t('iconItem.getGroupFail') }}
+                </div>
               </NFormItem>
             </NGridItem>
           </NGrid>

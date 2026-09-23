@@ -262,6 +262,7 @@
     "faviconPickerTip": "This site declares multiple icons. Pick one to save (only the selected one is saved)",
     "faviconPickerTitle": "Choose site icon",
     "getGroupFail": "Failed to get group information",
+    "getGroupFailRetry": "Failed to get group information, please try again later",
     "getIcon": "Get icon",
     "geticonFail": "Failed to get icon",
     "icon": {

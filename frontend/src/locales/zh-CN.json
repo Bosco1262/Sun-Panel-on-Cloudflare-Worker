@@ -262,6 +262,7 @@
     "faviconPickerTip": "该站点声明了多个图标，请选择一张保存（只会保存选中的这张）",
     "faviconPickerTitle": "选择站点图标",
     "getGroupFail": "分组信息获取失败",
+    "getGroupFailRetry": "分组信息获取失败，请稍后重试",
     "getIcon": "获取图标",
     "geticonFail": "图标获取失败",
     "icon": {
