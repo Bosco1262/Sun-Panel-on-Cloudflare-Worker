@@ -51,9 +51,37 @@ const maxWidthUnitOption = [
   },
 ]
 
+// Text inputs do not save on every keystroke: while any text input is focused, watch-triggered saves
+// are suspended and flushed once when the last input loses focus (clicking outside the input)
+// 
+// 文本输入框不逐键保存: 任一文本输入框聚焦期间, watch 触发的保存先挂起,
+// 最后一个输入框失焦 (点击输入框外) 时再统一保存
+const textEditingCount = ref(0)
+let dirtyWhileEditing = false
+
+function handleTextInputFocus() {
+  textEditingCount.value++
+}
+
+function handleTextInputBlur() {
+  // Tab-switching fires the old input's blur before the new input's focus, so wait one tick before deciding
+  // Tab 切换时旧输入框的 blur 先于新输入框的 focus 触发, 延迟一拍再判断是否真的离开了输入
+  setTimeout(() => {
+    if (textEditingCount.value > 0 || !dirtyWhileEditing)
+      return
+    dirtyWhileEditing = false
+    scheduleSave()
+  }, 0)
+}
+
 // The panel config and the search-engine config share one debounced save (they live in the same row, so they must be submitted together)
 // 面板配置 / 搜索引擎配置共用一次防抖保存 (二者在同一行数据里, 必须一起提交)
 function scheduleSave() {
+  if (textEditingCount.value > 0) {
+    dirtyWhileEditing = true
+    return
+  }
+
   if (isSaveing.value) {
     savePending = true
     return
@@ -120,6 +148,18 @@ function uploadCloud() {
   })
 }
 
+// Manual save: run immediately instead of waiting for the debounce, still merging with an in-flight auto save
+// 手动保存: 立即执行而不等防抖, 同时与进行中的自动保存合并, 避免重复提交
+function saveNow() {
+  dirtyWhileEditing = false
+  if (isSaveing.value) {
+    savePending = true
+    return
+  }
+  panelState.recordState()
+  uploadCloud()
+}
+
 function resetPanelConfig() {
   // Resetting replaces panelConfig as a whole and triggers the deep watch below, which performs the debounced save;
   // calling uploadCloud here as well would write to the database twice for one reset
@@ -142,7 +182,7 @@ function resetPanelConfig() {
           {{ $t('apps.baseSettings.textContent') }}
         </div>
         <div class="flex items-center mt-[5px]">
-          <NInput v-model:value="panelState.panelConfig.logoText" type="text" show-count :maxlength="20" :placeholder="$t('common.inputPlaceholder')" />
+          <NInput v-model:value="panelState.panelConfig.logoText" type="text" show-count :maxlength="20" :placeholder="$t('common.inputPlaceholder')" @focus="handleTextInputFocus" @blur="handleTextInputBlur" />
         </div>
       </div>
     </NCard>
@@ -278,7 +318,7 @@ function resetPanelConfig() {
         <NSwitch v-model:value="showWallpaperInput" />
       </div>
       <div v-if="showWallpaperInput" class="mt-1">
-        <NInput v-model:value="panelState.panelConfig.backgroundImageSrc" type="text" size="small" clearable />
+        <NInput v-model:value="panelState.panelConfig.backgroundImageSrc" type="text" size="small" clearable @focus="handleTextInputFocus" @blur="handleTextInputBlur" />
       </div>
 
       <div class="flex items-center mt-[10px]">
@@ -310,7 +350,7 @@ function resetPanelConfig() {
             <span class="mr-[10px]">{{ $t('apps.baseSettings.maxWidth') }}</span>
             <div class="flex">
               <NInputGroup>
-                <NInputNumber v-model:value="panelState.panelConfig.maxWidth" size="small" :style="{ width: '100px' }" placeholder="1200" />
+                <NInputNumber v-model:value="panelState.panelConfig.maxWidth" size="small" :style="{ width: '100px' }" placeholder="1200" @focus="handleTextInputFocus" @blur="handleTextInputBlur" />
                 <NSelect v-model:value="panelState.panelConfig.maxWidthUnit" :style="{ width: '80px' }" :options="maxWidthUnitOption" size="small" />
               </NInputGroup>
             </div>
@@ -346,6 +386,8 @@ function resetPanelConfig() {
         v-model:value="panelState.panelConfig.footerHtml"
         type="textarea"
         clearable
+        @focus="handleTextInputFocus"
+        @blur="handleTextInputBlur"
       />
     </NCard>
 
@@ -361,7 +403,7 @@ function resetPanelConfig() {
         {{ $t('apps.baseSettings.resetWarnText') }}
       </NPopconfirm>
 
-      <NButton size="small" quaternary type="success" class="ml-[10px]" @click="uploadCloud">
+      <NButton size="small" quaternary type="success" class="ml-[10px]" @click="saveNow">
         {{ $t('common.save') }}
       </NButton>
     </NCard>
