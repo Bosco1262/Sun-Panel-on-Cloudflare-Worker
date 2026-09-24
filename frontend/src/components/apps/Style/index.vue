@@ -84,11 +84,43 @@ function handleTextInputBlur() {
   }, 0)
 }
 
+// Sliders and color pickers emit values continuously while being used; saves triggered by the
+// watch are suspended during the interaction and flushed once when it ends (slider released /
+// color panel closed), so one gesture commits exactly one save.
+//
+// 滑块与颜色选择器在使用过程中持续产生变更, 交互期间 watch 触发的保存先挂起,
+// 交互结束 (松手 / 关闭选色盘) 时再统一保存, 一次操作只提交一次。
+const interactingCount = ref(0)
+
+function handleInteractionStart() {
+  interactingCount.value++
+}
+
+function handleInteractionEnd() {
+  setTimeout(() => {
+    interactingCount.value = Math.max(0, interactingCount.value - 1)
+    if (interactingCount.value > 0 || isAnyTextInputFocused() || !dirtyWhileEditing)
+      return
+    dirtyWhileEditing = false
+    scheduleSave()
+  }, 0)
+}
+
+// Closing the color panel is the color picker's "blur"; opening it suspends saves
+// 关闭选色盘相当于颜色选择器的「失焦」; 打开选色盘期间挂起保存
+function handleColorPanelShow(show: boolean) {
+  if (show)
+    handleInteractionStart()
+  else
+    handleInteractionEnd()
+}
+
 // Switching sidebar apps unmounts the inputs and can swallow the last blur, so flush any suspended
 // change before unmount; the debounced save still runs afterwards (the closure survives unmount)
 //
 // 切换侧栏应用会卸载输入框, 最后一次 blur 可能被吞, 卸载前补交挂起的改动 (防抖保存随后仍会执行)
 onBeforeUnmount(() => {
+  interactingCount.value = 0
   if (dirtyWhileEditing) {
     dirtyWhileEditing = false
     scheduleSave()
@@ -98,7 +130,7 @@ onBeforeUnmount(() => {
 // The panel config and the search-engine config share one debounced save (they live in the same row, so they must be submitted together)
 // 面板配置 / 搜索引擎配置共用一次防抖保存 (二者在同一行数据里, 必须一起提交)
 function scheduleSave() {
-  if (isAnyTextInputFocused()) {
+  if (isAnyTextInputFocused() || interactingCount.value > 0) {
     dirtyWhileEditing = true
     return
   }
@@ -239,6 +271,7 @@ function resetPanelConfig() {
           size="small"
           :modes="['hex']"
           :swatches="['#cccccc', '#000000', '#ffffff', '#2080F0']"
+          @update:show="handleColorPanelShow"
         />
       </div>
       <div v-if="panelState.panelConfig.searchBoxShow" class="flex items-center mt-[5px]">
@@ -250,6 +283,7 @@ function resetPanelConfig() {
           size="small"
           :modes="['hex']"
           :swatches="['#cccccc', '#000000', '#ffffff', '#F0A020']"
+          @update:show="handleColorPanelShow"
         />
       </div>
       <div class="mt-[12px] pt-[12px] border-t border-slate-200 dark:border-zinc-700">
@@ -305,6 +339,7 @@ function resetPanelConfig() {
               '#2080F0',
               '#F0A020',
             ]"
+            @update:show="handleColorPanelShow"
           />
         </div>
       </div>
@@ -344,12 +379,12 @@ function resetPanelConfig() {
 
       <div class="flex items-center mt-[10px]">
         <span class="mr-[10px]">{{ $t('apps.baseSettings.vague') }}</span>
-        <NSlider v-model:value="panelState.panelConfig.backgroundBlur" class="max-w-[200px]" :step="2" :max="20" />
+        <NSlider v-model:value="panelState.panelConfig.backgroundBlur" class="max-w-[200px]" :step="2" :max="20" @dragstart="handleInteractionStart" @dragend="handleInteractionEnd" />
       </div>
 
       <div class="flex items-center mt-[10px]">
         <span class="mr-[10px]">{{ $t('apps.baseSettings.mask') }}</span>
-        <NSlider v-model:value="panelState.panelConfig.backgroundMaskNumber" class="max-w-[200px]" :step="0.1" :max="1" />
+        <NSlider v-model:value="panelState.panelConfig.backgroundMaskNumber" class="max-w-[200px]" :step="0.1" :max="1" @dragstart="handleInteractionStart" @dragend="handleInteractionEnd" />
       </div>
     </NCard>
 
@@ -380,19 +415,19 @@ function resetPanelConfig() {
         <NGridItem span="12 400:12">
           <div class="flex items-center mt-[10px]">
             <span class="mr-[10px]">{{ $t('apps.baseSettings.leftRightMargin') }}</span>
-            <NSlider v-model:value="panelState.panelConfig.marginX" class="max-w-[200px]" :step="1" :max="100" />
+            <NSlider v-model:value="panelState.panelConfig.marginX" class="max-w-[200px]" :step="1" :max="100" @dragstart="handleInteractionStart" @dragend="handleInteractionEnd" />
           </div>
         </NGridItem>
         <NGridItem span="12 400:12">
           <div class="flex items-center mt-[10px]">
             <span class="mr-[10px]">{{ $t('apps.baseSettings.topMargin') }} (%)</span>
-            <NSlider v-model:value="panelState.panelConfig.marginTop" class="max-w-[200px]" :step="1" :max="50" />
+            <NSlider v-model:value="panelState.panelConfig.marginTop" class="max-w-[200px]" :step="1" :max="50" @dragstart="handleInteractionStart" @dragend="handleInteractionEnd" />
           </div>
         </NGridItem>
         <NGridItem span="12 400:6">
           <div class="flex items-center mt-[10px]">
             <span class="mr-[10px]">{{ $t('apps.baseSettings.bottomMargin') }} (%)</span>
-            <NSlider v-model:value="panelState.panelConfig.marginBottom" class="max-w-[200px]" :step="1" :max="50" />
+            <NSlider v-model:value="panelState.panelConfig.marginBottom" class="max-w-[200px]" :step="1" :max="50" @dragstart="handleInteractionStart" @dragend="handleInteractionEnd" />
           </div>
         </NGridItem>
       </NGrid>
