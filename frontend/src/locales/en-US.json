@@ -293,6 +293,7 @@
     "urlNoHttpStartWarn": "Notice: the link does not start with the standard \"http://\" or \"https://\". If it is correct, please ignore this notice"
   },
   "login": {
+    "emptyCredentials": "Account/password cannot be empty",
     "loginButton": "Login",
     "passwordPlaceholder": "Password",
     "usernamePlaceholder": "Username",

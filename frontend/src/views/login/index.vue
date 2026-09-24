@@ -21,6 +21,13 @@ const form = ref<Login.LoginReqest>({
 })
 
 const loginPost = async () => {
+  // Empty credentials are rejected locally: no request goes out, and the loading state never starts
+  // 空凭据本地直接拒绝: 不发请求, loading 也不会启动
+  if (!form.value.username.trim() || !form.value.password.trim()) {
+    ms.error(t('login.emptyCredentials'))
+    return
+  }
+
   loading.value = true
   try {
     const res = await login<Login.LoginResponse>(form.value)

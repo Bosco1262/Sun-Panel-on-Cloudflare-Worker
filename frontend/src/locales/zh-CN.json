@@ -293,6 +293,7 @@
     "urlNoHttpStartWarn": "提醒：链接没有以标准的\"http://\"或\"https://\"开头，如果确认无误请忽略本提醒"
   },
   "login": {
+    "emptyCredentials": "账号/密码不能为空",
     "loginButton": "登录",
     "passwordPlaceholder": "密码",
     "usernamePlaceholder": "账号",

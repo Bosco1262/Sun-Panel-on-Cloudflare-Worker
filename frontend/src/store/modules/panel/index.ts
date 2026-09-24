@@ -54,20 +54,31 @@ export const usePanelState = defineStore('panel', {
         return
       }
 
-      // Only "the cloud has no record yet" (-1) resets to the defaults.
-      // Any other code (1200 database error and similar) must keep the locally cached config — the old
-      // implementation wiped the user's configuration together with the local cache, and rethrows so the caller can notify.
+      // Only "the cloud has no record yet" (-1) resets to the defaults. Any other code must keep the locally
+      // cached config — the old implementation wiped the user's configuration together with the local cache.
       //
-      // 只有「云端尚无记录」(-1) 才重置为默认。
-      // 其它错误码 (1200 数据库错误等) 必须保留本地缓存配置 —— 旧实现会把用户配置
-      // 连同本地缓存一起清掉, 并抛给调用方以便提示
+      // 只有「云端尚无记录」(-1) 才重置为默认。其它错误码必须保留本地缓存配置 ——
+      // 旧实现会把用户配置连同本地缓存一起清掉
       if (res.code === -1) {
         this.resetPanelConfig()
         this.recordState()
         return
       }
 
-      throw new Error(res.msg || 'get user config failed')
+      // Every response reaching this line as a normal value was already surfaced by the request layer:
+      // 1000/1001 redirect to /login, 1005 warns, every translated code gets a dialog there. Reporting the
+      // same failure again would push a second toast through a separate message container (the discrete API
+      // vs the app's provider) — both render fixed at the same viewport position, so the two overlap and only
+      // one stays readable. Failures with no surfacing at all (unknown code / non-JSON body) never reach this
+      // line: the request layer rejects them, and the caller's catch (panelHome.getConfigFail) remains the
+      // sole user-visible signal.
+      //
+      // 能以正常值走到这一行的响应都已被请求层上报: 1000/1001 会跳登录页, 1005 有 warning, 有译文的码有弹窗。
+      // 同一次失败再报一遍, 会经另一个独立的消息容器 (discrete API 与应用的 provider) 弹出第二条 ——
+      // 两者都固定渲染在视口同一位置, 互相重叠, 只剩一条可读。
+      // 完全未被上报过的失败 (未知 code / 非 JSON 响应) 走不到这里: 请求层会 reject,
+      // 调用方的 catch (panelHome.getConfigFail) 仍是唯一的用户可见信号。
+      return
     },
 
     /**
