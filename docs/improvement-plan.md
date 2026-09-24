@@ -2,7 +2,7 @@
 title: Improvement Plan
 status: current
 audience: developer
-last_verified: 2026-09-23
+last_verified: 2026-09-24
 ---
 
 # Improvement Plan (backlog · completed work · self-checks)
@@ -17,7 +17,7 @@ last_verified: 2026-09-23
 >
 > **How to read it**:
 > - looking for **work that is not done yet** → §9 "candidate backlog" (9.10~9.12 need clarification) and §10.3 "still open";
-> - looking for **what a round fixed** → §10.1 / §10.2 / §10.5 and §10.6;
+> - looking for **what a round fixed** → §10.1 / §10.2 / §10.5 and §10.6 / §10.7;
 > - looking for **the evidence of that time** → the "outcome" paragraphs of §1~§8 and the self-check script list in Appendix C.
 >
 > **Current state**: §2 ~ §6 are all closed (§2.5 cancelled by decision D5, §5.3 decided against); in §9, 9.0 ~ 9.5, 9.8
@@ -43,9 +43,13 @@ last_verified: 2026-09-23
 | **D6** | **The password pepper is optional: no pepper, no upgrade**; PBKDF2 iterations default to 5000 (≈2.6 ms measured; the free plan allows 10 ms CPU) and can be overridden with `PASSWORD_PBKDF2_ITERATIONS` | behaviour is identical to the old version until `PASSWORD_PEPPER` is set, so nobody locks themselves out; once set, logins upgrade hashes automatically, see §3.2 |
 | **D7** | **No Worker-side edge cache** (`caches.default`), browser cache headers only: date-hashed keys use `immutable`, site icons a normal `max-age` | measurements showed the edge cache keeps serving deleted images for up to 24 hours; if an edge cache is needed, configure a Cloudflare Cache Rule and accept the same deletion delay, see §4.3 |
 | **D8** | **Add an "automatically reclaim unreferenced images when deleting items/groups" switch, on by default** (`system_setting.storage_auto_clean_unused`, toggled in the upload-file manager page) | users who want to keep images for later can turn automatic reclamation off: deletion then only soft-deletes D1 and leaves R2 alone, and the "Clean unused files" button is there for manual work. A failed settings read counts as "off" (conservative), see §9.0 |
+| **D9** | **Text inputs in the base settings (Style) now save on blur**: logo text / wallpaper URL / max width / footer HTML no longer restart the debounced save on every keystroke — the change is submitted once the focus leaves the input (clicking outside); switches / sliders / selects / color pickers and the search-engine list keep their save-on-change behaviour; the manual "Save" button merges with an in-flight autosave instead of firing a second request | typing no longer writes intermediate states to the database; the "editing" state is derived live from `document.activeElement` (no focus/blur event pairing, so an unbalanced event counter can never deadlock saving), see §10.7 |
 
 > D8 was added on user request after the plan had been closed (it was not part of the original plan); it is implemented
 > and verified, see §9.0.
+>
+> D9 was also added on user request after the plan had been closed (not part of the original plan); it is implemented
+> and verified, see §10.7.
 
 > D2 and D3 are two halves of one change: once rate limiting moved, KV had no purpose left in this project (a
 > repository-wide check confirmed `LOGIN_RATE` only appeared in `src/api/login.ts` and `src/types.ts`), so both were
@@ -956,6 +960,24 @@ by the build pipeline before deployment.
 **Request count**: adding or editing one item goes from 3 to 4 requests (the extra one is the pre-save re-check, confirmed by the user).
 **Accepted trade-offs**: D3b turns "the group list endpoint is unavailable" into "adding / editing is temporarily impossible" (blocking instead of guessing); D1a's display isolation (`groupSelectValue`) keeps a bare id off the screen when there is no usable list at all while the model keeps the value — the very same value renders as its group name again the moment a list arrives (verified: with no list and a 500 the field is empty and disabled, and removing the interception lets the next save write the item into that group).
 
+### 10.7 The fourth batch of this round (base-settings save timing: save on blur)
+
+> Trigger: the user asked whether the text inputs of the base settings could "save when the focus leaves the input instead
+> of on every keystroke". The investigation confirmed that the base settings (`Style/index.vue`) is the only module that
+> saves on every change (keystrokes restart a 1 s debounce); Global settings, user info, group management and the
+> search-engine edit dialog all save through an explicit button/confirmation and are out of scope.
+
+| Decision | Conclusion and outcome | Verification |
+|------|-----------|------|
+| **Text inputs save on blur** | the 4 text-like inputs (logo text `logoText`, wallpaper URL `backgroundImageSrc`, max width `maxWidth`, footer HTML `footerHtml`) got a `data-hold-save` marker plus `@blur`; `scheduleSave()` gained a suspension gate: while the focus sits inside any marked input (`document.activeElement.closest('[data-hold-save]')`) it only sets `dirtyWhileEditing` and returns; the blur checkpoint flushes the change | end-to-end: no `userConfig/set` requests while typing; the request fires within the debounce window after blur and the "configuration saved" toast appears |
+| **Event counters dropped for a live focus check** | the first version counted focus/blur events (+1 / −1) to track "editing"; `handleTextInputBlur` missed the −1, so the counter only ever grew and **every save was suspended forever** (symptom: neither blur nor clicking other controls produced the "saved" toast). The fix reads `document.activeElement` at every decision point instead: the state is no longer accumulated from history, so lost/duplicated events and unmounts can no longer deadlock saving | the stuck `textEditingCount` was confirmed as the root cause through the Vue component instance; all scenarios pass again after the fix |
+| **Tab switching and unmount fallback** | the blur checkpoint waits one tick (`setTimeout(0)`): on Tab switches the old input's blur fires before the new input's focus, so the decision must read the settled focus state to avoid a premature save; switching sidebar apps unmounts the component and can swallow the last blur, so `onBeforeUnmount` flushes any suspended change (the debounce callback closure keeps running after unmount) | Tab switching: no request in between, one save after leaving; typing and then switching apps: the save fires and the value is still there when switching back |
+| **Manual save merged with autosave** | the "Save" button now calls `saveNow()`: while `isSaveing` it sets `savePending` for the autosave chain to flush one more round instead of firing a second concurrent request; without a save in flight the behaviour is unchanged (immediate `recordState()` + `uploadCloud()`) | 5 consecutive operations produced exactly 5 `userConfig/set` requests, no duplicates |
+
+**Scope**: `frontend/src/components/apps/Style/index.vue` only. The "save on change" path of switches / sliders / selects / color pickers / the search-engine list is untouched (clicking those controls always blurs a focused text input first, so the suspension gate never triggers for them); adding cards (EditItem) and the explicitly saved modules (global settings, user info, group management) are unaffected.
+
+**End-to-end verification** (local `wrangler dev` + `vite dev`, driven with Playwright): typing saves nothing → blur saves and toasts → Tab switching does not save prematurely → switches/sliders save instantly → manual save sends no duplicate request → switching apps flushes the change → the value is still there after switching back.
+
 ---
 
 ## Appendix A: state of `0001_init.sql` (after §5.1)
@@ -1110,4 +1132,5 @@ npm run deploy:all # build + deploy
 | round (docs polish · language switch) | the `# Language Switch` heading that had been placed above the switch was removed from all 22 bilingual documents (the `docs/` root, `history/` and `upstream/` pairs); what remains is the single-line switch `[English](X.md) | [简体中文](X.zh-CN.md)` at the very top of each file (right below the front matter where there is one). The maintenance rule in `docs/README` and the "fifth batch" row above were reworded to describe the format without the heading; a repo-wide scan confirms that no `# Language Switch` heading is left and that every pair still carries its switch line |
 | round (docs housekeeping + URL surface) | `wrangler.toml` gained `workers_dev = true` and `preview_urls = false` (version URLs disabled: old deployments are no longer publicly reachable under `*.workers.dev`; re-enable if non-production branch preview builds are ever used); `docs/images/` renamed to `docs/assets/` with the root READMEs and the upstream archive links updated; light YAML front matter (`title` / `status` / `audience` / `last_verified`) added to the 10 content documents; `docs/README` gained the stable-path rule (paths referenced by `src/` comments and `migrations/` are contracts), the flat-structure decision (Diátaxis mapping in the index instead of subfolders), the front-matter convention and the `docs/assets/` naming rule |
 | round (docs polish · switch placement + strict same-language links) | the language switch now sits **directly under the H1 title** in all 22 bilingual documents (the `docs/` root, `history/` and `upstream/` pairs), exactly like the root README (`# Title` → blank → `[English](X.md) | [简体中文](X.zh-CN.md)` → blank → `---`), replacing the previous "very first line" placement; front matter and bodies are unchanged. Every cross-language link outside the switch line was removed so that "same-language linking" holds strictly: the root README pair, `docs/README`, `docs/deployment`, `docs/history/README`, `docs/improvement-plan` and `docs/upstream` now mention the other language with code spans instead of links, and the Chinese link text `docs/storage.md` was corrected to `docs/storage.zh-CN.md`. The wording about the switch position was updated in both root READMEs and in the `docs/README` maintenance rules (`under the title`, not `at the top`); verified by a script checking the head structure of all 22 documents (H1 → switch → `---`), the existence of every relative link, and that no cross-language link survives outside the switch line |
+| round (base settings save on blur) | the 4 text inputs of the base settings (`Style/index.vue`) — logo text / wallpaper URL / max width / footer HTML — switched from "debounced autosave on every keystroke" to "save on blur" (decision D9, recorded in §10.7): a `data-hold-save` marker, the "editing" state derived live from `document.activeElement`, a `@blur` checkpoint (deferred one tick against premature Tab saves) and an `onBeforeUnmount` flush; the manual "Save" button now goes through `saveNow()` and merges with the autosave; the first cut's unbalanced focus/blur event counter (which suspended every save forever) was caught and fixed by live end-to-end testing; switches / sliders / color pickers / the search-engine list keep their save-on-change behaviour, and the explicitly saved modules (global settings, user info, group management, card editing) are unaffected. Verified with local `wrangler dev` + Playwright |
 

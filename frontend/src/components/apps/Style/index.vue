@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { UploadFileInfo } from 'naive-ui'
 import { NButton, NCard, NColorPicker, NGrid, NGridItem, NInput, NInputGroup, NInputNumber, NPopconfirm, NSelect, NSlider, NSwitch, NUpload, NUploadDragger, useMessage } from 'naive-ui'
 import SearchEngineSettings from './SearchEngineSettings.vue'
@@ -51,33 +51,54 @@ const maxWidthUnitOption = [
   },
 ]
 
-// Text inputs do not save on every keystroke: while any text input is focused, watch-triggered saves
-// are suspended and flushed once when the last input loses focus (clicking outside the input)
-// 
-// 文本输入框不逐键保存: 任一文本输入框聚焦期间, watch 触发的保存先挂起,
-// 最后一个输入框失焦 (点击输入框外) 时再统一保存
-const textEditingCount = ref(0)
+// Text inputs do not save on every keystroke: while a text input keeps the focus, watch-triggered saves
+// are suspended and flushed once the focus leaves the inputs (clicking outside).
+//
+// The "editing" state is derived live from document.activeElement instead of paired focus/blur events:
+// the events can fire unevenly (and are lost on unmount), so an event counter could stay unbalanced
+// and suspend every save forever.
+//
+//
+// 文本输入框不逐键保存: 任一文本输入框持有焦点期间, watch 触发的保存先挂起,
+// 焦点离开输入框 (点击输入框外) 时再统一保存。
+//
+// 「编辑中」状态由 document.activeElement 实时推导, 不依赖 focus/blur 事件配对:
+// 事件可能不成对触发 (卸载时还会丢失), 事件计数一旦失衡会让保存永久挂起。
+const TEXT_HOLD_SELECTOR = '[data-hold-save]'
+
 let dirtyWhileEditing = false
 
-function handleTextInputFocus() {
-  textEditingCount.value++
+function isAnyTextInputFocused() {
+  const active = document.activeElement
+  return !!active && active.closest(TEXT_HOLD_SELECTOR) !== null
 }
 
 function handleTextInputBlur() {
-  // Tab-switching fires the old input's blur before the new input's focus, so wait one tick before deciding
+  // Tab-switching fires the old input's blur before the new input's focus, so check after one tick
   // Tab 切换时旧输入框的 blur 先于新输入框的 focus 触发, 延迟一拍再判断是否真的离开了输入
   setTimeout(() => {
-    if (textEditingCount.value > 0 || !dirtyWhileEditing)
+    if (isAnyTextInputFocused() || !dirtyWhileEditing)
       return
     dirtyWhileEditing = false
     scheduleSave()
   }, 0)
 }
 
+// Switching sidebar apps unmounts the inputs and can swallow the last blur, so flush any suspended
+// change before unmount; the debounced save still runs afterwards (the closure survives unmount)
+//
+// 切换侧栏应用会卸载输入框, 最后一次 blur 可能被吞, 卸载前补交挂起的改动 (防抖保存随后仍会执行)
+onBeforeUnmount(() => {
+  if (dirtyWhileEditing) {
+    dirtyWhileEditing = false
+    scheduleSave()
+  }
+})
+
 // The panel config and the search-engine config share one debounced save (they live in the same row, so they must be submitted together)
 // 面板配置 / 搜索引擎配置共用一次防抖保存 (二者在同一行数据里, 必须一起提交)
 function scheduleSave() {
-  if (textEditingCount.value > 0) {
+  if (isAnyTextInputFocused()) {
     dirtyWhileEditing = true
     return
   }
@@ -182,7 +203,7 @@ function resetPanelConfig() {
           {{ $t('apps.baseSettings.textContent') }}
         </div>
         <div class="flex items-center mt-[5px]">
-          <NInput v-model:value="panelState.panelConfig.logoText" type="text" show-count :maxlength="20" :placeholder="$t('common.inputPlaceholder')" @focus="handleTextInputFocus" @blur="handleTextInputBlur" />
+          <NInput v-model:value="panelState.panelConfig.logoText" data-hold-save type="text" show-count :maxlength="20" :placeholder="$t('common.inputPlaceholder')" @blur="handleTextInputBlur" />
         </div>
       </div>
     </NCard>
@@ -318,7 +339,7 @@ function resetPanelConfig() {
         <NSwitch v-model:value="showWallpaperInput" />
       </div>
       <div v-if="showWallpaperInput" class="mt-1">
-        <NInput v-model:value="panelState.panelConfig.backgroundImageSrc" type="text" size="small" clearable @focus="handleTextInputFocus" @blur="handleTextInputBlur" />
+        <NInput v-model:value="panelState.panelConfig.backgroundImageSrc" data-hold-save type="text" size="small" clearable @blur="handleTextInputBlur" />
       </div>
 
       <div class="flex items-center mt-[10px]">
@@ -350,7 +371,7 @@ function resetPanelConfig() {
             <span class="mr-[10px]">{{ $t('apps.baseSettings.maxWidth') }}</span>
             <div class="flex">
               <NInputGroup>
-                <NInputNumber v-model:value="panelState.panelConfig.maxWidth" size="small" :style="{ width: '100px' }" placeholder="1200" @focus="handleTextInputFocus" @blur="handleTextInputBlur" />
+                <NInputNumber v-model:value="panelState.panelConfig.maxWidth" data-hold-save size="small" :style="{ width: '100px' }" placeholder="1200" @blur="handleTextInputBlur" />
                 <NSelect v-model:value="panelState.panelConfig.maxWidthUnit" :style="{ width: '80px' }" :options="maxWidthUnitOption" size="small" />
               </NInputGroup>
             </div>
@@ -384,9 +405,9 @@ function resetPanelConfig() {
 
       <NInput
         v-model:value="panelState.panelConfig.footerHtml"
+        data-hold-save
         type="textarea"
         clearable
-        @focus="handleTextInputFocus"
         @blur="handleTextInputBlur"
       />
     </NCard>
