@@ -661,6 +661,15 @@ async function loadGroupOptions(): Promise<'ok' | 'failed'> {
           <NSelect v-model:value="model.openMethod" :options="options" />
         </NFormItem>
 
+        <!-- More options toggle (aligned with upstream: it sits below the open method, the fields unfold under it) -->
+        <!-- 更多选项开关 (对齐上游: 位于打开方式下方, 展开的字段在其下方出现) -->
+        <NCheckbox v-model:checked="showMoreOptions" size="small" class="mb-2">
+          {{ $t('iconItem.moreOptions') }}
+          <span class="text-xs text-gray-400">
+            ({{ $t('iconItem.cardBackground') }} , {{ $t('iconItem.iconGroup') }} , {{ $t('iconItem.onlyName') }})
+          </span>
+        </NCheckbox>
+
         <!-- More options (card background colour, group, unique identifier) -->
         <!-- 更多选项 (卡片背景色 , 分组 , 唯一标识) -->
         <div v-if="showMoreOptions">
@@ -672,12 +681,12 @@ async function loadGroupOptions(): Promise<'ok' | 'failed'> {
                 <template #label>
                   <span class="font-bold">{{ $t('iconItem.cardBackground') }}</span>
                 </template>
+                <!-- Aligned with upstream v1.8.1: default modes (rgb/hex/hsl) with alpha editing and its swatch list -->
+                <!-- 对齐上游 v1.8.1: 默认模式 (rgb/hex/hsl) + 可编辑透明度, 色板与其一致 -->
                 <NColorPicker
                   v-model:value="backgroundColorValue"
-                  :show-alpha="false"
                   size="small"
-                  :modes="['hex']"
-                  :swatches="['#2a2a2a6b', '#000000', '#ffffff', '#18A058', '#2080F0', '#F0A020']"
+                  :swatches="['#2a2a2a6b', '#000000', '#ffffff', '#18A058', '#2080F0', '#F0A020', '#D03050', '#C418D1']"
                 />
               </NFormItem>
             </NGridItem>
@@ -716,13 +725,6 @@ async function loadGroupOptions(): Promise<'ok' | 'failed'> {
             {{ $t('iconItem.onlyNameTip') }}
           </div>
         </div>
-
-        <NCheckbox v-model:checked="showMoreOptions" size="small" class="mb-2">
-          {{ $t('iconItem.moreOptions') }}
-          <span class="text-xs text-gray-400">
-            ({{ $t('iconItem.cardBackground') }} , {{ $t('iconItem.iconGroup') }} , {{ $t('iconItem.onlyName') }})
-          </span>
-        </NCheckbox>
       </NForm>
     </div>
 

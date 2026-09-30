@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { VueDraggable } from 'vue-draggable-plus'
 import { NBackTop, NButton, NButtonGroup, NDropdown, NModal, NSkeleton, NSpin, useDialog, useMessage } from 'naive-ui'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import type { DropdownMixedOption } from 'naive-ui/es/dropdown/src/interface'
+import { computed, h, nextTick, onMounted, ref, watch } from 'vue'
+import type { VNode } from 'vue'
 import { AppIcon, AppStarter, EditItem } from './components'
 import { Clock, SearchBox } from '@/components/deskModule'
 import { SvgIcon } from '@/components/common'
@@ -177,24 +179,7 @@ function updateItemIconGroupByNet(group: ItemGroup) {
 
 function handleRightMenuSelect(key: string | number) {
   dropdownShow.value = false
-  const target = currentRightSelectItem.value
-  // Same as handleItemClick: fall back step by step when the candidate URL is empty, so window.open(undefined) never happens
-  // 同 handleItemClick: 候选地址为空时逐级回退, 避免 window.open(undefined)
-  const preferLan = panelState.networkMode === PanelStateNetworkModeEnum.lan
-  const jumpUrl = (preferLan ? (target?.lanUrl || target?.url) : (target?.url || target?.lanUrl)) || ''
   switch (key) {
-    case 'newWindows':
-      if (jumpUrl)
-        window.open(jumpUrl, '_blank', 'noopener')
-      break
-    case 'openWanUrl':
-      if (currentRightSelectItem.value)
-        openPage(currentRightSelectItem.value?.openMethod, currentRightSelectItem.value?.url, currentRightSelectItem.value?.title)
-      break
-    case 'openLanUrl':
-      if (currentRightSelectItem.value && currentRightSelectItem.value.lanUrl)
-        openPage(currentRightSelectItem.value?.openMethod, currentRightSelectItem.value.lanUrl, currentRightSelectItem.value?.title)
-      break
     case 'edit':
       // Odd behaviour worth marking: without the { ... } spread the parent's value is modified in place
       // 这里有个奇怪的问题，如果不使用{...}的方式 父组件的值会同步修改 标记一下
@@ -291,36 +276,103 @@ function handleSaveSort(itemGroup: ItemGroup) {
   }
 }
 
-function getDropdownMenuOptions() {
-  const dropdownMenuOptions = [
-    {
-      label: t('iconItem.newWindowOpen'),
-      key: 'newWindows',
-    },
+// Open-method labels keyed by openMethod, used for the hover tooltips of the menu
+// 打开方式文案 (按键名索引), 用于菜单的悬浮注释
+function openMethodLabel(openMethod: number): string {
+  switch (openMethod) {
+    case 1:
+      return t('iconItem.currentPageOpen')
+    case 3:
+      return t('iconItem.currentPageLayerOpen')
+    default:
+      return t('iconItem.newWindowOpen')
+  }
+}
 
+function renderMenuIcon(icon: string) {
+  return () => h(SvgIcon, { icon })
+}
+
+/**
+ * One "open address" section of the context menu (aligned with upstream v1.8.1):
+ * a label line (opens with the item's default open method, tooltip shows that method)
+ * above a row of three tiny icon buttons that force a specific open method.
+ *
+ * 右键菜单的一个「打开地址」区块 (对齐上游 v1.8.1):
+ * 标签行 (以项目默认打开方式打开, 悬浮注释展示该方式) + 一排三个 tiny 图标按钮 (强制指定打开方式)。
+ */
+function renderOpenUrlSection(url: string, labelText: string, tooltipText: string): VNode {
+  const item = currentRightSelectItem.value
+
+  function openWith(method: number) {
+    dropdownShow.value = false
+    if (!url)
+      return
+    openPage(method, url, item?.title)
+  }
+
+  const methodButtons = [
+    { title: t('iconItem.newWindowOpen'), icon: 'proicons:open', method: 2 },
+    { title: t('iconItem.currentPageLayerOpen'), icon: 'carbon:popup', method: 3 },
+    { title: t('iconItem.currentPageOpen'), icon: 'uis:link-h', method: 1 },
   ]
 
-  if (currentRightSelectItem.value?.lanUrl && panelState.networkMode === PanelStateNetworkModeEnum.wan) {
+  return h(
+    'div',
+    { class: 'mb-1', style: 'padding: 6px 12px;' },
+    [
+      h('div', {
+        class: 'cursor-pointer font-medium',
+        title: tooltipText,
+        onClick: () => openWith(item?.openMethod ?? 2),
+      }, labelText),
+      h('div', { class: 'flex gap-2' }, methodButtons.map(button =>
+        h(NButton, {
+          size: 'tiny',
+          title: button.title,
+          onClick: () => openWith(button.method),
+        }, { icon: () => h(SvgIcon, { icon: button.icon }) }),
+      )),
+    ],
+  )
+}
+
+function getDropdownMenuOptions(): DropdownMixedOption[] {
+  const target = currentRightSelectItem.value
+  // Same as handleItemClick: fall back step by step when the candidate URL is empty, so window.open(undefined) never happens
+  // 同 handleItemClick: 候选地址为空时逐级回退, 避免 window.open(undefined)
+  const preferLan = panelState.networkMode === PanelStateNetworkModeEnum.lan
+  const jumpUrl = (preferLan ? (target?.lanUrl || target?.url) : (target?.url || target?.lanUrl)) || ''
+
+  const dropdownMenuOptions: DropdownMixedOption[] = [
+    {
+      type: 'render',
+      key: 'openDefaultUrl',
+      render: () => renderOpenUrlSection(jumpUrl, t('common.openDefaultUrlAddress'), openMethodLabel(target?.openMethod ?? 2)),
+    },
+  ]
+
+  // The LAN section only appears in WAN mode: in LAN mode the LAN address already is the default one
+  // 内网区块只在公网模式出现: 局域网模式下内网地址本身就是默认地址
+  if (target?.lanUrl && panelState.networkMode === PanelStateNetworkModeEnum.wan) {
     dropdownMenuOptions.push({
-      label: t('panelHome.openLanUrl'),
+      type: 'render',
       key: 'openLanUrl',
+      render: () => renderOpenUrlSection(target.lanUrl as string, t('panelHome.openLanUrl'), openMethodLabel(target?.openMethod ?? 2)),
     })
   }
 
-  if (currentRightSelectItem.value?.lanUrl && panelState.networkMode === PanelStateNetworkModeEnum.lan) {
-    dropdownMenuOptions.push({
-      label: t('panelHome.openWanUrl'),
-      key: 'openWanUrl',
-    })
-  }
+  dropdownMenuOptions.push({ type: 'divider', key: 'menuDivider' })
 
   if (authStore.visitMode === VisitMode.VISIT_MODE_LOGIN) {
     dropdownMenuOptions.push({
       label: t('common.edit'),
       key: 'edit',
+      icon: renderMenuIcon('basil:edit-solid'),
     }, {
       label: t('common.delete'),
       key: 'delete',
+      icon: renderMenuIcon('material-symbols:delete'),
     })
   }
 
@@ -356,13 +408,10 @@ watch(settingModalShow, (show) => {
     getList()
 })
 
-// Group-level card style: -1 follows the globals
-// 分组级卡片风格: -1 跟随全局
+// Group-level card style (0 = detail icon / 1 = small icon; the group edit page no longer offers "follow global")
+// 分组级卡片风格 (0=详情图标 / 1=小图标, 分组编辑页已不含「跟随全局」)
 function getGroupCardStyle(group: Panel.ItemIconGroup): PanelPanelConfigStyleEnum {
-  const style = group.cardStyle ?? -1
-  if (style === -1)
-    return panelState.panelConfig.iconStyle ?? PanelPanelConfigStyleEnum.icon
-  return style as PanelPanelConfigStyleEnum
+  return (group.cardStyle ?? 0) as PanelPanelConfigStyleEnum
 }
 
 // Group-level text colour: empty = follow the globals
@@ -471,21 +520,25 @@ function handleAddItem(group?: Pick<ItemGroup, 'id' | 'title'>) {
         <!-- Header -->
         <!-- 头 -->
         <div class="mx-[auto] w-[80%]">
-          <div class="flex mx-[auto] items-center justify-center text-white">
-            <div class="logo">
-              <span class="text-2xl md:text-6xl font-bold text-shadow">
-                {{ panelState.panelConfig.logoText }}
-              </span>
-            </div>
-            <div class="divider text-base lg:text-2xl mx-[10px]">
-              |
-            </div>
-            <div class="text-shadow">
+          <div v-if="panelState.panelConfig.logoShow !== false || panelState.panelConfig.clockShow !== false" class="flex mx-[auto] items-center justify-center text-white">
+            <template v-if="panelState.panelConfig.logoShow !== false">
+              <div class="logo">
+                <span class="text-2xl md:text-6xl font-bold text-shadow">
+                  {{ panelState.panelConfig.logoText }}
+                </span>
+              </div>
+              <div v-if="panelState.panelConfig.clockShow !== false" class="divider text-base lg:text-2xl mx-[10px]">
+                |
+              </div>
+            </template>
+            <div v-if="panelState.panelConfig.clockShow !== false" class="text-shadow">
               <Clock :hide-second="!panelState.panelConfig.clockShowSecond" />
             </div>
           </div>
           <div v-if="panelState.panelConfig.searchBoxShow" class="flex mt-[20px] mx-auto sm:w-full lg:w-[80%]">
             <SearchBox
+              :background="panelState.panelConfig.searchBoxBackgroundColor"
+              :text-color="panelState.panelConfig.searchBoxTextColor"
               :border-color="panelState.panelConfig.searchBoxBorderColor"
               :placeholder-color="panelState.panelConfig.searchBoxPlaceholderColor"
               @item-search="itemFrontEndSearch"

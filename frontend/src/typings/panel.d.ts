@@ -22,8 +22,8 @@ declare namespace Panel {
         icon?: string
         title?: string
         sort?:number
-        // -1 follows the globals, 0 = detail icon (bar), 1 = small icon (square)
-        // -1 跟随全局, 0 详情图标(长条形), 1 小图标(正方形)
+        // 0 = detail icon (bar), 1 = small icon (square)
+        // 0 详情图标(长条形), 1 小图标(正方形)
         cardStyle?:number
         // Empty means "follow the globals"
         // 空 = 跟随全局
@@ -31,6 +31,9 @@ declare namespace Panel {
         // 1 = hide the description
         // 1 = 隐藏描述信息
         hideDescription?:number
+        // Group unique identifier (aligned with upstream v1.8.1): English/digits/-/_, usable as an OpenAPI field
+        // 分组唯一标识 (对齐上游 v1.8.1): 英文/数字/-/_, 可用作 OpenAPI 字段
+        onlyName?:string
     }
 
     interface ItemIcon {
@@ -69,12 +72,20 @@ declare namespace Panel {
         iconTextIconHideTitle?:boolean
         logoText?:string
         logoImageSrc?:string
+        // Show/hide toggles of the logo and the clock (aligned with upstream v1.8.1)
+        // LOGO 与时钟的显示开关 (对齐上游 v1.8.1)
+        logoShow?:boolean
+        clockShow?:boolean
         clockShowSecond?:boolean
         clockColor?:string
         searchBoxShow?:boolean
         searchBoxSearchIcon?:boolean
         searchBoxBorderColor?:string
         searchBoxPlaceholderColor?:string
+        // Search-bar colours (aligned with upstream v1.8.1: background / text / border)
+        // 搜索栏颜色 (对齐上游 v1.8.1: 背景/文字/边框)
+        searchBoxBackgroundColor?:string
+        searchBoxTextColor?:string
         marginTop?:number
         marginBottom?:number
         maxWidth?:number

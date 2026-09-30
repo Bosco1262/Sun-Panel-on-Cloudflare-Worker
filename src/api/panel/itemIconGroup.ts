@@ -29,6 +29,7 @@ interface GroupRow {
   card_style: number
   text_color: string
   hide_description: number
+  only_name: string
   created_at: string
   updateTime: string
   updated_at: string
@@ -44,6 +45,25 @@ interface ItemIconGroup {
   cardStyle?: number
   textColor?: string
   hideDescription?: number
+  onlyName?: string
+}
+
+/**
+ * Max length of the group unique identifier (the upstream edit page counts 20 characters); longer input is truncated
+ *
+ * 分组唯一标识的最大长度 (上游编辑页计数为 20 字符), 超长直接截断
+ */
+const GROUP_ONLY_NAME_MAX_LENGTH = 20
+
+/**
+ * Normalises the group unique identifier: trims, keeps [A-Za-z0-9_-] and caps the length (same semantics as the item identifier)
+ *
+ * 归一化分组唯一标识: 去空白、仅保留 [A-Za-z0-9_-] 并限长 (与项目唯一标识同语义)
+ */
+function sanitizeOnlyName(raw: unknown): string {
+  if (typeof raw !== 'string')
+    return ''
+  return raw.trim().replace(/[^A-Za-z0-9_-]/g, '').slice(0, GROUP_ONLY_NAME_MAX_LENGTH)
 }
 
 /**
@@ -78,6 +98,7 @@ async function loadGroups(db: D1Database): Promise<GroupRow[]> {
     card_style: -1,
     text_color: '',
     hide_description: 0,
+    only_name: '',
     created_at: '',
     updated_at: '',
     createTime: '',
@@ -138,18 +159,30 @@ app.post('/itemIconGroup/edit', bodyLimit(REQUEST_BODY_LIMIT.small), authMiddlew
   const cardStyle = typeof body.cardStyle === 'number' ? body.cardStyle : -1
   const textColor = body.textColor ?? ''
   const hideDescription = body.hideDescription === 1 ? 1 : 0
+  const onlyName = sanitizeOnlyName(body.onlyName)
+
+  // Uniqueness check for the identifier (same semantics as the item identifier)
+  // 唯一标识占用校验 (与项目唯一标识同语义)
+  if (onlyName) {
+    const dup = await db
+      .prepare('SELECT id FROM item_icon_group WHERE only_name = ? AND deleted_at IS NULL AND id != ?')
+      .bind(onlyName, body.id ?? 0)
+      .first()
+    if (dup)
+      return errorByCode(c, 1401)
+  }
 
   if (body.id) {
     const sort = body.sort ?? 0
     await db
-      .prepare('UPDATE item_icon_group SET icon = ?, title = ?, description = ?, sort = ?, card_style = ?, text_color = ?, hide_description = ? WHERE id = ? AND deleted_at IS NULL')
-      .bind(icon, title, description, sort, cardStyle, textColor, hideDescription, body.id)
+      .prepare('UPDATE item_icon_group SET icon = ?, title = ?, description = ?, sort = ?, card_style = ?, text_color = ?, hide_description = ?, only_name = ? WHERE id = ? AND deleted_at IS NULL')
+      .bind(icon, title, description, sort, cardStyle, textColor, hideDescription, onlyName, body.id)
       .run()
   }
   else {
     const result = await db
-      .prepare('INSERT INTO item_icon_group (icon, title, description, sort, card_style, text_color, hide_description) VALUES (?, ?, ?, 0, ?, ?, ?)')
-      .bind(icon, title, description, cardStyle, textColor, hideDescription)
+      .prepare('INSERT INTO item_icon_group (icon, title, description, sort, card_style, text_color, hide_description, only_name) VALUES (?, ?, ?, 0, ?, ?, ?, ?)')
+      .bind(icon, title, description, cardStyle, textColor, hideDescription, onlyName)
       .run()
     body.id = Number(result.meta.last_row_id)
   }
@@ -246,6 +279,7 @@ function mapGroup(row: GroupRow) {
     cardStyle: row.card_style ?? -1,
     textColor: row.text_color ?? '',
     hideDescription: row.hide_description ?? 0,
+    onlyName: row.only_name ?? '',
     createTime: row.createTime || row.created_at,
     updateTime: row.updateTime || row.updated_at,
   }

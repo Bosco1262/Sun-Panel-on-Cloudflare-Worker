@@ -21,3 +21,18 @@ body {
 	background-color: #e2e8f0;
 }
 
+/* The color picker trigger's checkerboard layer follows the theme radius (10px ≈ half of the 18px-tall fill,
+   rendering as a capsule) while the color overlay layer is square (0px). With a semi-transparent value the rounded
+   checkerboard shows through and the square overlay edges stick out — producing the "capsule + dark bar" artifact.
+   Clip every layer to a small uniform radius so both states render as the same near-rectangle (upstream look).
+
+   颜色选择器触发器的棋盘格层跟随主题圆角 (10px ≈ 18px 高填充区的一半, 呈胶囊形),
+   而颜色覆盖层是直角 (0px)。半透明值时透出圆角棋盘格、直角覆盖层边缘外露,
+   形成"椭圆 + 竖条"观感。统一裁剪为小圆角, 两种状态均为一致的近似长方形 (对齐上游观感) */
+.n-color-picker .n-color-picker__fill,
+.n-color-picker .n-color-picker-checkboard {
+	overflow: hidden;
+	border-radius: 3px !important;
+}
+
+

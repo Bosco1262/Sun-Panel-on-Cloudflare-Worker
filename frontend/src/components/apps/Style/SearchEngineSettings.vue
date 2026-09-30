@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { NButton, NCheckbox, NInput, useDialog, useMessage } from 'naive-ui'
+import { NButton, NInput, useDialog, useMessage } from 'naive-ui'
 import { VueDraggable } from 'vue-draggable-plus'
 import { storeToRefs } from 'pinia'
 import { RoundCardModal, SearchEngineIcon, SvgIcon } from '@/components/common'
-import { SearchEngineOpenMethodEnum } from '@/enums/panel'
 import { usePanelState } from '@/store'
 import { t } from '@/locales'
 import { reportApiError } from '@/utils/request/apiMessage'
@@ -61,14 +60,6 @@ const engineList = computed({
   set: (value: DeskModule.SearchBox.SearchEngine[]) => {
     if (searchEngine.value)
       searchEngine.value.engineList = value
-  },
-})
-
-const openMethodValue = computed({
-  get: () => searchEngine.value?.openMethod === SearchEngineOpenMethodEnum.newWindow,
-  set: (value: boolean) => {
-    if (searchEngine.value)
-      searchEngine.value.openMethod = value ? SearchEngineOpenMethodEnum.newWindow : SearchEngineOpenMethodEnum.currentPage
   },
 })
 
@@ -292,7 +283,7 @@ function handleSave() {
         <div
           v-for="item in engineList"
           :key="item.id"
-          class="flex items-center rounded-[10px] px-[10px] py-[6px] border transition-colors"
+          class="flex items-center rounded-[3px] px-[10px] py-[6px] border transition-colors"
           :class="[
             sortStatus ? 'cursor-move' : 'cursor-pointer',
             item.id === selectedId
@@ -343,15 +334,8 @@ function handleSave() {
       </VueDraggable>
     </div>
 
-    <div class="flex items-center mt-[12px]">
-      <span class="mr-[10px]">{{ $t('deskModule.searchEngine.openMethod') }}</span>
-      <NCheckbox v-model:checked="openMethodValue">
-        {{ $t('deskModule.searchBox.openWithNewOpen') }}
-      </NCheckbox>
-    </div>
-
-    <!-- The destructive action sits at the bottom on its own, clearly separated from the buttons above -->
-    <!-- 破坏性操作单独放到底部, 与上方按钮拉开距离 -->
+    <!-- The open-method switch lives only in the home page search-box dropdown (engine icon), not here -->
+    <!-- 打开方式开关只保留在首页搜索框（引擎图标）的下拉里, 设置页不再提供 -->
     <div class="mt-[12px] pt-[12px] border-t border-slate-200 dark:border-zinc-700">
       <NButton size="small" quaternary type="error" @click="handleResetAll">
         {{ $t('deskModule.searchEngine.resetAll') }}

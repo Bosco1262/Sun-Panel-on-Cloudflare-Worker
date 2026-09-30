@@ -17,11 +17,19 @@ export function defaultStatePanelConfig(): Panel.panelConfig {
     iconTextIconHideTitle: false,
     logoText: 'Sun-Panel',
     logoImageSrc: '',
+    // Show/hide toggles (aligned with upstream v1.8.1)
+    // 显示开关 (对齐上游 v1.8.1)
+    logoShow: true,
+    clockShow: true,
     clockShowSecond: false,
     searchBoxShow: false,
     searchBoxSearchIcon: false,
     searchBoxBorderColor: '#cccccc',
     searchBoxPlaceholderColor: '#cccccc',
+    // Search-bar colours (aligned with upstream v1.8.1)
+    // 搜索栏颜色 (对齐上游 v1.8.1)
+    searchBoxBackgroundColor: '#2a2a2a6b',
+    searchBoxTextColor: '#ffffff',
     marginBottom: 10,
     marginTop: 10,
     maxWidth: 1200,

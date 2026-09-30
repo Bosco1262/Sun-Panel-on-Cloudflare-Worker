@@ -244,7 +244,7 @@ function handleChangeTheme(value: Theme) {
           {{ $t('common.language') }}
         </div>
         <div class="max-w-[200px]">
-          <NSelect v-model:value="languageValue" :options="languageOptions" @update:value="handleChangeLanuage" />
+          <NSelect v-model:value="languageValue" size="small" :options="languageOptions" @update:value="handleChangeLanuage" />
         </div>
       </div>
 
@@ -253,7 +253,7 @@ function handleChangeTheme(value: Theme) {
           {{ $t('apps.userInfo.theme') }}
         </div>
         <div class="max-w-[200px]">
-          <NSelect v-model:value="themeValue" :options="themeOptions" @update:value="handleChangeTheme" />
+          <NSelect v-model:value="themeValue" size="small" :options="themeOptions" @update:value="handleChangeTheme" />
         </div>
       </div>
 

@@ -54,33 +54,36 @@
       "upstreamTitle": "上游原作者 · 原版 Sun-Panel"
     },
     "baseSettings": {
-      "appName": "风格设置",
-      "bottomMargin": "下边距",
+      "appName": "个性化设置",
+      "bottomMargin": "底部边距",
       "clock": "时钟组件",
       "clockSecondShow": "显示秒",
       "configFailed": "配置保存失败,{message}",
       "configSaved": "配置已保存",
       "contentArea": "内容区域",
       "customFooter": "自定义页脚",
-      "customImageAddress": "展开图片链接输入框",
+      "customImageAddress": "编辑图像地址（支持 API 地址）",
       "detailIcon": "详情图标",
       "hideDescription": "隐藏描述信息",
       "hideTitle": "隐藏标题",
-      "leftRightMargin": "左右边距",
+      "leftRightMargin": "两侧边距",
       "mask": "遮罩",
       "maxWidth": "最大宽度",
-      "netModeChangeButtonShow": "显示网络模式切换按钮",
+      "netModeChangeButtonShow": "网络环境切换组件",
       "resetWarnText": "确定要重置这些样式吗？",
       "searchBar": "搜索栏组件",
-      "searchBarBorderColor": "搜索栏边框颜色",
+      "searchBarBorderColor": "边框颜色",
       "searchBarPlaceholderColor": "搜索栏占位文字颜色",
       "searchBarSearchItem": "允许搜索栏搜索项目",
       "smallIcon": "小图标",
       "textContent": "文本内容",
-      "topMargin": "上边距",
+      "topMargin": "顶部边距",
       "uploadOrDragText": "点击上传替换图片或拖拽到框内",
       "vague": "模糊",
-      "wallpaper": "壁纸"
+      "wallpaper": "壁纸",
+      "selectFromGallery": "从图库中选择",
+      "searchBoxBackgroundColor": "背景颜色",
+      "searchBoxTextColor": "文字颜色"
     },
     "exportImport": {
       "appName": "导出导入",
@@ -107,9 +110,10 @@
       "deleteWarnText": "你确定删除此分组[{name}]，删除后此分组应用图标将丢失？",
       "followGlobal": "跟随全局",
       "getListFail": "分组列表获取失败",
-      "groupCount": "共{count}个分组",
       "groupName": "分组名称",
-      "sortTip": "拖拽卡片调整分组顺序"
+      "onlyName": "唯一标识",
+      "onlyNameTip": "仅限英文、数字、- 和 _，可用作 OpenAPI 字段",
+      "textColorTip": "留空或白色时，按卡片背景明暗自动使用黑/白文字"
     },
     "uploadsFileManager": {
       "alertText": "你可以在这里管理你上传过的壁纸和图标",
@@ -174,6 +178,7 @@
     "loading": "加载中...",
     "networkError": "网络错误，请稍后重试",
     "noData": "暂无数据",
+    "openDefaultUrlAddress": "打开默认地址",
     "refreshPage": "请刷新页面",
     "repeatLater": "请稍后重试",
     "reset": "重置",
@@ -307,8 +312,7 @@
     "getConfigFail": "云端配置获取失败，已使用本地缓存的配置",
     "getListFail": "面板数据获取失败，请刷新重试",
     "goToLogin": "前往登录",
-    "openLanUrl": "打开局域网地址",
-    "openWanUrl": "打开公网地址"
+    "openLanUrl": "打开内网地址"
   },
   "settingUserInfo": {
     "account": "账号",

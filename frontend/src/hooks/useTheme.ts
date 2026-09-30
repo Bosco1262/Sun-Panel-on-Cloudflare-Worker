@@ -19,12 +19,15 @@ export function useTheme() {
     return isDark.value ? darkTheme : undefined
   })
 
-  // Aligned with upstream: dialogs and cards share one border radius (Dialog has no radius by default, so it is set to 1rem here, matching RoundCardModal)
-  // 对齐上游: 弹窗/卡片统一圆角 (Dialog 默认无圆角, 这里统一为 1rem, 与 RoundCardModal 一致)
+  // Aligned with upstream v1.8.1 (measured on the deployed site): every control uses naive-ui's default 3px
+  // radius; only modals carry 1rem (Dialog has no radius by default, so it is set here, matching RoundCardModal)
+  // and settings cards keep naive-ui Card's 10px.
+  // 对齐上游 v1.8.1 (部署站实测): 所有控件用 naive-ui 默认 3px 圆角; 仅弹窗为 1rem
+  // (Dialog 默认无圆角, 这里设置, 与 RoundCardModal 一致), 设置页卡片保持 naive-ui Card 的 10px。
   const themeOverrides = computed<GlobalThemeOverrides>(() => {
     return {
       common: {
-        borderRadius: '10px',
+        borderRadius: '3px',
       },
       Dialog: {
         borderRadius: '1rem',

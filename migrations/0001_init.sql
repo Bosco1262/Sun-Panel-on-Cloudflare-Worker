@@ -73,7 +73,10 @@ CREATE TABLE IF NOT EXISTS item_icon_group (
   text_color TEXT NOT NULL DEFAULT '',
   -- Group-level hide description (formerly 0002): 0=show the description, 1=hide it
   -- 分组级隐藏描述 (原 0002): 0=显示描述, 1=隐藏描述
-  hide_description INTEGER NOT NULL DEFAULT 0
+  hide_description INTEGER NOT NULL DEFAULT 0,
+  -- Group unique identifier (aligned with upstream v1.8.1's group edit page): English/digits/-/_, usable as an OpenAPI field
+  -- 分组唯一标识 (对齐上游 v1.8.1 分组编辑页): 英文/数字/-/_, 可用作 OpenAPI 字段
+  only_name TEXT NOT NULL DEFAULT ''
 );
 
 -- ===================== Panel config (single row) =====================

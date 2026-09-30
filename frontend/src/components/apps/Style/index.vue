@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { UploadFileInfo } from 'naive-ui'
-import { NButton, NCard, NColorPicker, NGrid, NGridItem, NInput, NInputGroup, NInputNumber, NPopconfirm, NSelect, NSlider, NSwitch, NUpload, NUploadDragger, useMessage } from 'naive-ui'
+import { NButton, NCard, NColorPicker, NInput, NInputGroup, NInputNumber, NPopconfirm, NSelect, NSlider, NSwitch, NUpload, NUploadDragger, useMessage } from 'naive-ui'
 import SearchEngineSettings from './SearchEngineSettings.vue'
+import GalleryPicker from '@/views/home/components/EditItem/GalleryPicker.vue'
+import { SvgIcon } from '@/components/common'
 import { useAuthStore, usePanelState } from '@/store'
-import { PanelPanelConfigStyleEnum } from '@/enums/panel'
 import { t } from '@/locales'
 import { apiRespErrMsg, reportApiError } from '@/utils/request/apiMessage'
 
@@ -12,6 +13,7 @@ const authStore = useAuthStore()
 const panelState = usePanelState()
 const ms = useMessage()
 const showWallpaperInput = ref(false)
+const showGallery = ref(false)
 
 // The upload endpoint follows the shared API base (a hardcoded /api breaks on sub-path or standalone-domain deployments)
 // 上传接口跟随统一 API 基址 (硬编码 /api 在子路径/独立域名部署时会失效)
@@ -28,17 +30,6 @@ const isSaveing = ref(false)
 // Set to true when changes happen during a save, so one more save follows it and the last edit is not lost
 // 保存期间又发生改动时置为 true, 保存结束后再补一次, 避免丢失最后一次修改
 let savePending = false
-
-const iconTypeOptions = [
-  {
-    label: t('apps.baseSettings.detailIcon'),
-    value: PanelPanelConfigStyleEnum.info,
-  },
-  {
-    label: t('apps.baseSettings.smallIcon'),
-    value: PanelPanelConfigStyleEnum.icon,
-  },
-]
 
 const maxWidthUnitOption = [
   {
@@ -155,8 +146,8 @@ function scheduleSave() {
 
 watch(panelState.panelConfig, scheduleSave)
 
-// The engine list / order / current selection / open method changed
-// 搜索引擎列表/排序/当前选中项/打开方式变化
+// The engine list / order / current selection changed
+// 搜索引擎列表/排序/当前选中项变化
 watch(() => panelState.searchEngine, scheduleSave, { deep: true })
 
 function handleUploadBackgroundFinish({
@@ -190,6 +181,12 @@ function handleUploadError() {
   ms.error(t('common.uploadFail'))
 }
 
+// A wallpaper picked from the gallery (aligned with upstream v1.8.1's "select from gallery")
+// 从图库中选择的壁纸 (对齐上游 v1.8.1 的「从图库中选择」)
+function handleGallerySelected(file: File.Info) {
+  panelState.panelConfig.backgroundImageSrc = file.src
+}
+
 function uploadCloud() {
   // The panel and the search engine are submitted together, and the backend also preserves unsubmitted fields
   // 面板与搜索引擎一并提交, 后端也会对未提交字段做保留
@@ -213,6 +210,16 @@ function saveNow() {
   uploadCloud()
 }
 
+// Reset the search-bar section to its defaults (the search-engine list is handled by its own reset entry)
+// 将搜索栏区块重置为默认值 (搜索引擎列表由其自己的重置入口处理)
+function resetSearchBarSettings() {
+  panelState.panelConfig.searchBoxShow = false
+  panelState.panelConfig.searchBoxSearchIcon = false
+  panelState.panelConfig.searchBoxBackgroundColor = '#2a2a2a6b'
+  panelState.panelConfig.searchBoxTextColor = '#ffffff'
+  panelState.panelConfig.searchBoxBorderColor = '#cccccc'
+}
+
 function resetPanelConfig() {
   // Resetting replaces panelConfig as a whole and triggers the deep watch below, which performs the debounced save;
   // calling uploadCloud here as well would write to the database twice for one reset
@@ -225,226 +232,253 @@ function resetPanelConfig() {
 
 <template>
   <div class="bg-slate-200 dark:bg-zinc-900 rounded-[10px] p-[8px] overflow-auto">
+    <!-- LOGO (aligned with upstream v1.8.1: title in the card header, rows in a gap-2 column) -->
+    <!-- LOGO (对齐上游 v1.8.1: 标题在卡片 header, 各行放入 gap-2 纵向布局) -->
     <NCard style="border-radius:10px" size="small">
-      <div class="text-slate-500 mb-[5px] font-bold">
-        LOGO
-      </div>
-
-      <div>
-        <div>
-          {{ $t('apps.baseSettings.textContent') }}
+      <template #header>
+        <div class="text-slate-500 font-bold">
+          LOGO
         </div>
-        <div class="flex items-center mt-[5px]">
-          <NInput v-model:value="panelState.panelConfig.logoText" data-hold-save type="text" show-count :maxlength="20" :placeholder="$t('common.inputPlaceholder')" @blur="handleTextInputBlur" />
+      </template>
+
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center">
+          <span class="mr-[10px]">{{ $t('common.show') }}</span>
+          <NSwitch v-model:value="panelState.panelConfig.logoShow" size="small" />
+        </div>
+
+        <div>
+          <div>
+            {{ $t('apps.baseSettings.textContent') }}
+          </div>
+          <div class="flex items-center">
+            <NInput v-model:value="panelState.panelConfig.logoText" data-hold-save type="text" show-count :maxlength="20" :placeholder="$t('common.inputPlaceholder')" @blur="handleTextInputBlur" />
+          </div>
         </div>
       </div>
     </NCard>
 
+    <!-- Clock component (aligned with upstream v1.8.1) -->
+    <!-- 时钟组件 (对齐上游 v1.8.1) -->
     <NCard style="border-radius:10px" class="mt-[10px]" size="small">
-      <div class="text-slate-500 mb-[5px] font-bold">
-        {{ $t('apps.baseSettings.clock') }}
-      </div>
-      <div class="flex items-center mt-[5px]">
-        <span class="mr-[10px]">{{ $t('apps.baseSettings.clockSecondShow') }}</span>
-        <NSwitch v-model:value="panelState.panelConfig.clockShowSecond" />
+      <template #header>
+        <div class="text-slate-500 font-bold">
+          {{ $t('apps.baseSettings.clock') }}
+        </div>
+      </template>
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center">
+          <span class="mr-[10px]">{{ $t('common.show') }}</span>
+          <NSwitch v-model:value="panelState.panelConfig.clockShow" size="small" />
+        </div>
+        <div class="flex items-center">
+          <span class="mr-[10px]">{{ $t('apps.baseSettings.clockSecondShow') }}</span>
+          <NSwitch v-model:value="panelState.panelConfig.clockShowSecond" size="small" />
+        </div>
       </div>
     </NCard>
 
+    <!-- Search bar component (aligned with upstream v1.8.1) -->
+    <!-- 搜索栏组件 (对齐上游 v1.8.1) -->
     <NCard style="border-radius:10px" class="mt-[10px]" size="small">
-      <div class="text-slate-500 mb-[5px] font-bold">
-        {{ $t('apps.baseSettings.searchBar') }}
-      </div>
-      <div class="flex items-center mt-[5px]">
-        <span class="mr-[10px]">{{ $t('common.show') }}</span>
-        <NSwitch v-model:value="panelState.panelConfig.searchBoxShow" />
-      </div>
-      <div v-if="panelState.panelConfig.searchBoxShow" class="flex items-center mt-[5px]">
-        <span class="mr-[10px]">{{ $t('apps.baseSettings.searchBarSearchItem') }}</span>
-        <NSwitch v-model:value="panelState.panelConfig.searchBoxSearchIcon" />
-      </div>
-      <div v-if="panelState.panelConfig.searchBoxShow" class="flex items-center mt-[5px]">
-        <span class="mr-[10px]">{{ $t('apps.baseSettings.searchBarBorderColor') }}</span>
-        <NColorPicker
-          v-model:value="panelState.panelConfig.searchBoxBorderColor"
-          class="max-w-[200px]"
-          :show-alpha="false"
-          size="small"
-          :modes="['hex']"
-          :swatches="['#cccccc', '#000000', '#ffffff', '#2080F0']"
-          @update:show="handleColorPanelShow"
-        />
-      </div>
-      <div v-if="panelState.panelConfig.searchBoxShow" class="flex items-center mt-[5px]">
-        <span class="mr-[10px]">{{ $t('apps.baseSettings.searchBarPlaceholderColor') }}</span>
-        <NColorPicker
-          v-model:value="panelState.panelConfig.searchBoxPlaceholderColor"
-          class="max-w-[200px]"
-          :show-alpha="false"
-          size="small"
-          :modes="['hex']"
-          :swatches="['#cccccc', '#000000', '#ffffff', '#F0A020']"
-          @update:show="handleColorPanelShow"
-        />
-      </div>
-      <div class="mt-[12px] pt-[12px] border-t border-slate-200 dark:border-zinc-700">
-        <SearchEngineSettings />
-      </div>
-    </NCard>
+      <template #header>
+        <div class="text-slate-500 font-bold flex">
+          <span>{{ $t('apps.baseSettings.searchBar') }}</span>
+          <span class="ml-auto">
+            <NPopconfirm @positive-click="resetSearchBarSettings">
+              <template #trigger>
+                <NButton quaternary type="warning" size="tiny">
+                  {{ $t('common.reset') }}
+                </NButton>
+              </template>
+              {{ $t('apps.baseSettings.resetWarnText') }}
+            </NPopconfirm>
+          </span>
+        </div>
+      </template>
 
-    <NCard style="border-radius:10px" class="mt-[10px]" size="small">
-      <div class="text-slate-500 mb-[5px] font-bold">
-        {{ $t('common.icon') }}
-      </div>
-      <div class="mt-[5px]">
-        <div>
-          {{ $t('common.style') }}
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center">
+          <span class="mr-[10px]">{{ $t('common.show') }}</span>
+          <NSwitch v-model:value="panelState.panelConfig.searchBoxShow" size="small" />
         </div>
-        <div class="flex items-center mt-[5px]">
-          <NSelect v-model:value="panelState.panelConfig.iconStyle" :options="iconTypeOptions" />
+        <div v-if="panelState.panelConfig.searchBoxShow" class="flex items-center">
+          <span class="mr-[10px]">{{ $t('apps.baseSettings.searchBarSearchItem') }}</span>
+          <NSwitch v-model:value="panelState.panelConfig.searchBoxSearchIcon" size="small" />
         </div>
-      </div>
-
-      <div v-if="panelState.panelConfig.iconStyle === PanelPanelConfigStyleEnum.info" class="mt-[5px]">
-        <div>
-          {{ $t('apps.baseSettings.hideDescription') }}
-        </div>
-        <div class="flex items-center mt-[5px]">
-          <NSwitch v-model:value="panelState.panelConfig.iconTextInfoHideDescription" />
-        </div>
-      </div>
-
-      <div v-if="panelState.panelConfig.iconStyle === PanelPanelConfigStyleEnum.icon" class="mt-[5px]">
-        <div>
-          {{ $t('apps.baseSettings.hideTitle') }}
-        </div>
-        <div class="flex items-center mt-[5px]">
-          <NSwitch v-model:value="panelState.panelConfig.iconTextIconHideTitle" />
-        </div>
-      </div>
-
-      <div class="mt-[5px]">
-        <div>
-          {{ $t('common.textColor') }}
-        </div>
-        <div class="flex items-center mt-[5px]">
+        <div v-if="panelState.panelConfig.searchBoxShow" class="flex items-center">
+          <span class="mr-[10px]">{{ $t('apps.baseSettings.searchBoxBackgroundColor') }}</span>
           <NColorPicker
-            v-model:value="panelState.panelConfig.iconTextColor"
+            v-model:value="panelState.panelConfig.searchBoxBackgroundColor"
+            class="max-w-[100px]"
             :show-alpha="false"
             size="small"
             :modes="['hex']"
-            :swatches="[
-              '#000000',
-              '#ffffff',
-              '#18A058',
-              '#2080F0',
-              '#F0A020',
-            ]"
+            :swatches="['#2a2a2a6b', '#000000', '#ffffff', '#2080F0']"
             @update:show="handleColorPanelShow"
           />
         </div>
+        <div v-if="panelState.panelConfig.searchBoxShow" class="flex items-center">
+          <span class="mr-[10px]">{{ $t('apps.baseSettings.searchBoxTextColor') }}</span>
+          <NColorPicker
+            v-model:value="panelState.panelConfig.searchBoxTextColor"
+            class="max-w-[100px]"
+            :show-alpha="false"
+            size="small"
+            :modes="['hex']"
+            :swatches="['#ffffff', '#000000', '#18A058', '#2080F0', '#F0A020']"
+            @update:show="handleColorPanelShow"
+          />
+        </div>
+        <div v-if="panelState.panelConfig.searchBoxShow" class="flex items-center">
+          <span class="mr-[10px]">{{ $t('apps.baseSettings.searchBarBorderColor') }}</span>
+          <NColorPicker
+            v-model:value="panelState.panelConfig.searchBoxBorderColor"
+            class="max-w-[100px]"
+            :show-alpha="false"
+            size="small"
+            :modes="['hex']"
+            :swatches="['#cccccc', '#000000', '#ffffff', '#2080F0']"
+            @update:show="handleColorPanelShow"
+          />
+        </div>
+        <div class="pt-[12px] border-t border-slate-200 dark:border-zinc-700">
+          <SearchEngineSettings />
+        </div>
       </div>
     </NCard>
+
+    <!-- Network environment switching component (aligned with upstream v1.8.1; no auto-select) -->
+    <!-- 网络环境切换组件 (对齐上游 v1.8.1; 不含自动选择) -->
     <NCard style="border-radius:10px" class="mt-[10px]" size="small">
-      <div class="text-slate-500 mb-[5px] font-bold">
-        {{ $t('apps.baseSettings.wallpaper') }}
+      <template #header>
+        <div class="text-slate-500 font-bold">
+          {{ $t('apps.baseSettings.netModeChangeButtonShow') }}
+        </div>
+      </template>
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center">
+          <span class="mr-[10px]">{{ $t('common.show') }}</span>
+          <NSwitch v-model:value="panelState.panelConfig.netModeChangeButtonShow" size="small" />
+        </div>
       </div>
-      <NUpload
-        :action="uploadAction"
-        :show-file-list="false"
-        name="imgfile"
-        :headers="authStore.token ? { token: authStore.token } : {}"
-        :directory-dnd="true"
-        @finish="handleUploadBackgroundFinish"
-        @error="handleUploadError"
-      >
-        <NUploadDragger style="width: 100%;">
-          <div
-            class="h-[200px] w-full border bg-slate-100 flex justify-center items-center cursor-pointer rounded-[10px]"
-            :style="backgroundPreviewStyle"
-          >
-            <div class="text-shadow text-white">
-              {{ $t('apps.baseSettings.uploadOrDragText') }}
+    </NCard>
+
+    <!-- Wallpaper (aligned with upstream v1.8.1) -->
+    <!-- 壁纸 (对齐上游 v1.8.1) -->
+    <NCard style="border-radius:10px" class="mt-[10px]" size="small">
+      <template #header>
+        <div class="text-slate-500 font-bold">
+          {{ $t('apps.baseSettings.wallpaper') }}
+        </div>
+      </template>
+
+      <div class="flex flex-col gap-2">
+        <div>
+          <NButton size="small" @click="showGallery = true">
+            <template #icon>
+              <SvgIcon icon="material-symbols:gallery-thumbnail-outline" />
+            </template>
+            {{ $t('apps.baseSettings.selectFromGallery') }}
+          </NButton>
+        </div>
+
+        <NUpload
+          :action="uploadAction"
+          :show-file-list="false"
+          name="imgfile"
+          :headers="authStore.token ? { token: authStore.token } : {}"
+          :directory-dnd="true"
+          @finish="handleUploadBackgroundFinish"
+          @error="handleUploadError"
+        >
+          <NUploadDragger style="width: 100%;">
+            <div
+              class="h-[250px] w-full flex justify-center items-center cursor-pointer"
+              :style="backgroundPreviewStyle"
+            >
+              <div class="text-shadow text-white">
+                {{ $t('apps.baseSettings.uploadOrDragText') }}
+              </div>
             </div>
-          </div>
-        </NUploadDragger>
-      </NUpload>
+          </NUploadDragger>
+        </NUpload>
 
-      <div class="flex items-center mt-[5px]">
-        <span class="mr-[10px]">{{ $t('apps.baseSettings.customImageAddress') }}</span>
-        <NSwitch v-model:value="showWallpaperInput" />
-      </div>
-      <div v-if="showWallpaperInput" class="mt-1">
-        <NInput v-model:value="panelState.panelConfig.backgroundImageSrc" data-hold-save type="text" size="small" clearable @blur="handleTextInputBlur" />
-      </div>
+        <div class="flex items-center">
+          <span class="mr-[10px]">{{ $t('apps.baseSettings.customImageAddress') }}</span>
+          <NSwitch v-model:value="showWallpaperInput" size="small" />
+        </div>
+        <div v-if="showWallpaperInput" class="mt-1">
+          <NInput v-model:value="panelState.panelConfig.backgroundImageSrc" data-hold-save type="text" size="small" clearable @blur="handleTextInputBlur" />
+        </div>
 
-      <div class="flex items-center mt-[10px]">
-        <span class="mr-[10px]">{{ $t('apps.baseSettings.vague') }}</span>
-        <NSlider v-model:value="panelState.panelConfig.backgroundBlur" class="max-w-[200px]" :step="2" :max="20" @dragstart="handleInteractionStart" @dragend="handleInteractionEnd" />
-      </div>
+        <div class="flex items-center">
+          <span class="mr-[10px]">{{ $t('apps.baseSettings.vague') }}</span>
+          <NSlider v-model:value="panelState.panelConfig.backgroundBlur" class="max-w-[200px]" :step="2" :max="20" @dragstart="handleInteractionStart" @dragend="handleInteractionEnd" />
+        </div>
 
-      <div class="flex items-center mt-[10px]">
-        <span class="mr-[10px]">{{ $t('apps.baseSettings.mask') }}</span>
-        <NSlider v-model:value="panelState.panelConfig.backgroundMaskNumber" class="max-w-[200px]" :step="0.1" :max="1" @dragstart="handleInteractionStart" @dragend="handleInteractionEnd" />
+        <div class="flex items-center">
+          <span class="mr-[10px]">{{ $t('apps.baseSettings.mask') }}</span>
+          <NSlider v-model:value="panelState.panelConfig.backgroundMaskNumber" class="max-w-[200px]" :step="0.1" :max="1" @dragstart="handleInteractionStart" @dragend="handleInteractionEnd" />
+        </div>
       </div>
     </NCard>
 
+    <!-- Content area (aligned with upstream v1.8.1) -->
+    <!-- 内容区域 (对齐上游 v1.8.1) -->
     <NCard style="border-radius:10px" class="mt-[10px]" size="small">
-      <div class="text-slate-500 mb-[5px] font-bold">
-        {{ $t('apps.baseSettings.contentArea') }}
+      <template #header>
+        <div class="text-slate-500 font-bold">
+          {{ $t('apps.baseSettings.contentArea') }}
+        </div>
+      </template>
+
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center">
+          <span class="mr-[10px]">{{ $t('apps.baseSettings.maxWidth') }}</span>
+          <div class="flex">
+            <NInputGroup>
+              <NInputNumber v-model:value="panelState.panelConfig.maxWidth" data-hold-save size="small" :style="{ width: '100px' }" placeholder="1200" @blur="handleTextInputBlur" />
+              <NSelect v-model:value="panelState.panelConfig.maxWidthUnit" :style="{ width: '80px' }" :options="maxWidthUnitOption" size="small" />
+            </NInputGroup>
+          </div>
+        </div>
+
+        <div class="flex items-center">
+          <span class="mr-[10px]">{{ $t('apps.baseSettings.leftRightMargin') }} (%)</span>
+          <NSlider v-model:value="panelState.panelConfig.marginX" class="max-w-[200px]" :step="1" :max="100" @dragstart="handleInteractionStart" @dragend="handleInteractionEnd" />
+        </div>
+
+        <div class="flex items-center">
+          <span class="mr-[10px]">{{ $t('apps.baseSettings.topMargin') }} (%)</span>
+          <NSlider v-model:value="panelState.panelConfig.marginTop" class="max-w-[200px]" :step="1" :max="50" @dragstart="handleInteractionStart" @dragend="handleInteractionEnd" />
+        </div>
+
+        <div class="flex items-center">
+          <span class="mr-[10px]">{{ $t('apps.baseSettings.bottomMargin') }} (%)</span>
+          <NSlider v-model:value="panelState.panelConfig.marginBottom" class="max-w-[200px]" :step="1" :max="50" @dragstart="handleInteractionStart" @dragend="handleInteractionEnd" />
+        </div>
       </div>
-
-      <NGrid cols="2">
-        <NGridItem span="12 400:12">
-          <div class="flex items-center mt-[5px]">
-            <span class="mr-[10px]">{{ $t('apps.baseSettings.netModeChangeButtonShow') }}</span>
-            <NSwitch v-model:value="panelState.panelConfig.netModeChangeButtonShow" />
-          </div>
-        </NGridItem>
-
-        <NGridItem span="12 400:12">
-          <div class="flex items-center mt-[10px]">
-            <span class="mr-[10px]">{{ $t('apps.baseSettings.maxWidth') }}</span>
-            <div class="flex">
-              <NInputGroup>
-                <NInputNumber v-model:value="panelState.panelConfig.maxWidth" data-hold-save size="small" :style="{ width: '100px' }" placeholder="1200" @blur="handleTextInputBlur" />
-                <NSelect v-model:value="panelState.panelConfig.maxWidthUnit" :style="{ width: '80px' }" :options="maxWidthUnitOption" size="small" />
-              </NInputGroup>
-            </div>
-          </div>
-        </NGridItem>
-        <NGridItem span="12 400:12">
-          <div class="flex items-center mt-[10px]">
-            <span class="mr-[10px]">{{ $t('apps.baseSettings.leftRightMargin') }}</span>
-            <NSlider v-model:value="panelState.panelConfig.marginX" class="max-w-[200px]" :step="1" :max="100" @dragstart="handleInteractionStart" @dragend="handleInteractionEnd" />
-          </div>
-        </NGridItem>
-        <NGridItem span="12 400:12">
-          <div class="flex items-center mt-[10px]">
-            <span class="mr-[10px]">{{ $t('apps.baseSettings.topMargin') }} (%)</span>
-            <NSlider v-model:value="panelState.panelConfig.marginTop" class="max-w-[200px]" :step="1" :max="50" @dragstart="handleInteractionStart" @dragend="handleInteractionEnd" />
-          </div>
-        </NGridItem>
-        <NGridItem span="12 400:6">
-          <div class="flex items-center mt-[10px]">
-            <span class="mr-[10px]">{{ $t('apps.baseSettings.bottomMargin') }} (%)</span>
-            <NSlider v-model:value="panelState.panelConfig.marginBottom" class="max-w-[200px]" :step="1" :max="50" @dragstart="handleInteractionStart" @dragend="handleInteractionEnd" />
-          </div>
-        </NGridItem>
-      </NGrid>
     </NCard>
 
+    <!-- Custom footer (keeps the existing content) -->
+    <!-- 自定义页脚 (保留原有内容) -->
     <NCard style="border-radius:10px" class="mt-[10px]" size="small">
-      <div class="text-slate-500 mb-[5px] font-bold">
-        {{ $t('apps.baseSettings.customFooter') }}
-      </div>
+      <template #header>
+        <div class="text-slate-500 font-bold">
+          {{ $t('apps.baseSettings.customFooter') }}
+        </div>
+      </template>
 
-      <NInput
-        v-model:value="panelState.panelConfig.footerHtml"
-        data-hold-save
-        type="textarea"
-        clearable
-        @blur="handleTextInputBlur"
-      />
+      <div class="flex flex-col gap-2">
+        <NInput
+          v-model:value="panelState.panelConfig.footerHtml"
+          data-hold-save
+          type="textarea"
+          clearable
+          @blur="handleTextInputBlur"
+        />
+      </div>
     </NCard>
 
     <NCard style="border-radius:10px" class="mt-[10px]" size="small">
@@ -463,6 +497,8 @@ function resetPanelConfig() {
         {{ $t('common.save') }}
       </NButton>
     </NCard>
+
+    <GalleryPicker v-model:visible="showGallery" @selected="handleGallerySelected" />
   </div>
 </template>
 

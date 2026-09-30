@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import type { FormInst, FormRules } from 'naive-ui'
-import { NButton, NCard, NColorPicker, NForm, NFormItem, NInput, NSelect, NSwitch, useDialog, useMessage } from 'naive-ui'
+import { NButton, NCard, NColorPicker, NDivider, NForm, NFormItem, NInput, NPopover, NSelect, NSwitch, useDialog, useMessage } from 'naive-ui'
 import { VueDraggable } from 'vue-draggable-plus'
 import { deletes, edit, getList, saveSort } from '@/api/panel/itemIconGroup'
 import { RoundCardModal, SvgIcon } from '@/components/common'
@@ -27,15 +27,17 @@ const defaultMNodal = {
   sort: 9999,
   // Group-level card style (aligned with upstream: a new group defaults to the detail icon)
   // 分组级卡片样式 (对齐上游: 新分组默认详情图标)
-  cardStyle: 0 as number, // 0=详情图标, 1=小图标, -1=跟随全局
+  cardStyle: 0 as number, // 0=详情图标, 1=小图标
   textColor: '', // 空 = 跟随全局
   hideDescription: 0 as number,
+  onlyName: '' as string,
 }
 
+// Aligned with upstream v1.8.1: only two styles, no "follow global" option
+// 对齐上游 v1.8.1: 仅两种风格, 不含「跟随全局」选项
 const cardStyleOptions = [
   { label: t('apps.itemGroupManage.cardStyleInfo'), value: PanelPanelConfigStyleEnum.info },
   { label: t('apps.itemGroupManage.cardStyleSmall'), value: PanelPanelConfigStyleEnum.icon },
-  { label: t('apps.itemGroupManage.followGlobal'), value: -1 },
 ]
 
 const editModalArg = ref<EditModalArg>({
@@ -62,12 +64,6 @@ const textColorValue = computed<string>({
   },
 })
 
-const textColorFollowGlobal = computed(() => !editModalArg.value.model.textColor)
-
-function handleResetTextColor() {
-  editModalArg.value.model.textColor = ''
-}
-
 const groups = ref<Panel.ItemIconGroup[]>([])
 
 function handleAddGroup() {
@@ -90,7 +86,12 @@ function handleEditGroup(groupInfo: Panel.ItemIconGroup) {
 }
 
 function handleDragSort() {
-  sortStatus.value = true
+  sortStatus.value = !sortStatus.value
+
+  // Leaving sort mode without saving: re-fetch the list and discard the local drag order
+  // 未保存就退出排序: 重新拉取列表, 丢弃本地拖拽顺序
+  if (!sortStatus.value)
+    refreshList()
 }
 
 function handleSaveSort() {
@@ -175,82 +176,93 @@ onMounted(() => {
 
 <template>
   <div class="h-full flex flex-col gap-2 bg-slate-200 dark:bg-zinc-900 p-2">
-    <!-- Toolbar: action buttons on the left, status hints on the right -->
-    <!-- 工具栏: 操作按钮靠左, 状态提示靠右 -->
-    <div class="shrink-0 flex items-center gap-2 px-3 py-2 bg-white dark:bg-zinc-800 rounded-xl">
-      <NButton type="success" size="small" @click="handleAddGroup">
-        <template #icon>
-          <SvgIcon icon="typcn:plus" />
-        </template>
-        {{ $t('common.add') }}
-      </NButton>
+    <!-- Aligned with upstream v1.8.1: the toolbar lives in the card header, the list in the content -->
+    <!-- 对齐上游 v1.8.1: 工具栏在卡片 header 内, 列表在内容区 -->
+    <NCard size="small" class="flex-1 min-h-0 overflow-auto">
+      <template #header>
+        <div class="flex items-center gap-2">
+          <NButton type="success" size="small" @click="handleAddGroup">
+            <template #icon>
+              <SvgIcon icon="mingcute:add-fill" />
+            </template>
+            {{ $t('common.add') }}
+          </NButton>
 
-      <NButton v-if="!sortStatus" size="small" @click="handleDragSort">
-        <template #icon>
-          <SvgIcon icon="ri:drag-drop-line" />
-        </template>
-        {{ $t('common.sort') }}
-      </NButton>
+          <NButton size="small" ghost @click="handleDragSort">
+            <template #icon>
+              <SvgIcon icon="iconoir:sort" />
+            </template>
+            {{ $t('common.sort') }}
+          </NButton>
 
-      <NButton v-else type="warning" size="small" @click="handleSaveSort">
-        <template #icon>
-          <SvgIcon icon="material-symbols:save" />
-        </template>
-        {{ $t('common.saveSort') }}
-      </NButton>
+          <NButton v-if="sortStatus" type="warning" size="small" @click="handleSaveSort">
+            {{ $t('common.saveSort') }}
+          </NButton>
+        </div>
+      </template>
 
-      <span class="ml-auto truncate text-xs text-slate-400 dark:text-slate-500">
-        {{ sortStatus ? $t('apps.itemGroupManage.sortTip') : $t('apps.itemGroupManage.groupCount', { count: groups.length }) }}
-      </span>
-    </div>
+      <!-- Group list -->
+      <!-- 分组列表 -->
+      <div class="w-full pt-[5px]">
+        <VueDraggable
+          v-model="groups"
+          item-key="id" :animation="300"
+          :disabled="!sortStatus"
+        >
+          <div v-for="item in groups" :key="item.id" class="w-full">
+            <NCard size="small" style="border-radius: 10px; margin-bottom: 4px;">
+              <div class="flex items-center">
+                <!-- Drag handle shown only in sort mode -->
+                <!-- 仅排序模式出现的拖拽手柄 -->
+                <span v-if="sortStatus" class="move-element-icon cursor-move mr-5 text-[20px]">
+                  <SvgIcon icon="lets-icons:sort-list-alt" />
+                </span>
 
-    <!-- Group list: flex-1 fills the remaining height and scrolls internally -->
-    <!-- 分组列表: flex-1 自适应剩余高度, 内部滚动 -->
-    <div class="flex-1 min-h-0 overflow-auto">
-      <VueDraggable
-        v-model="groups"
-        item-key="id" :animation="300"
-        :disabled="!sortStatus"
-      >
-        <div v-for="item in groups" :key="item.id" class="w-full">
-          <NCard size="small" class="group-card" :class="sortStatus ? 'cursor-move' : ''">
-            <div class="flex items-center gap-3">
-              <span class="shrink-0 text-[20px]">
-                <SvgIcon icon="material-symbols:ad-group-outline-rounded" />
-                <!-- <SvgIcon :icon="item.icon" /> -->
-              </span>
-              <span class="flex-1 min-w-0 truncate">
-                {{ item.title }}
-              </span>
-              <div class="shrink-0 flex items-center gap-2">
-                <NButton strong secondary type="success" size="small" :title="$t('common.edit')" @click="handleEditGroup(item)">
-                  <template #icon>
-                    <SvgIcon icon="basil:edit-solid" />
-                  </template>
-                </NButton>
-                <NButton strong secondary type="error" size="small" :title="$t('common.delete')" @click="handleDelete(item)">
-                  <template #icon>
-                    <SvgIcon icon="material-symbols:delete" />
-                  </template>
-                </NButton>
+                <div class="flex items-center cursor-pointer" @click="handleEditGroup(item)">
+                  <span class="mr-[10px] text-[20px]">
+                    <SvgIcon icon="material-symbols:ad-group-outline-rounded" />
+                  </span>
+                  <span>{{ item.title }}</span>
+                </div>
+
+                <div class="ml-auto">
+                  <!-- Aligned with upstream v1.8.1: borderless edit/delete buttons with icons -->
+                  <!-- 对齐上游 v1.8.1: 无边框带图标的编辑/删除按钮 -->
+                  <NButton quaternary type="success" size="small" @click="handleEditGroup(item)">
+                    <template #icon>
+                      <SvgIcon icon="basil:edit-solid" />
+                    </template>
+                    {{ $t('common.edit') }}
+                  </NButton>
+                  <NButton quaternary type="error" size="small" class="ml-[10px]" @click="handleDelete(item)">
+                    <template #icon>
+                      <SvgIcon icon="material-symbols:delete" />
+                    </template>
+                    {{ $t('common.delete') }}
+                  </NButton>
+                </div>
               </div>
-            </div>
-          </NCard>
-        </div>
+            </NCard>
+          </div>
 
-        <!-- Empty state -->
-        <!-- 空状态 -->
-        <div v-if="groups.length === 0" class="py-10 text-center text-sm text-slate-400 dark:text-slate-500">
-          {{ $t('common.noData') }}
-        </div>
-      </VueDraggable>
-    </div>
+          <!-- Empty state -->
+          <!-- 空状态 -->
+          <div v-if="groups.length === 0" class="py-10 text-center text-sm text-slate-400 dark:text-slate-500">
+            {{ $t('common.noData') }}
+          </div>
+        </VueDraggable>
+      </div>
+    </NCard>
 
+    <!-- Aligned with upstream v1.8.1's group edit page, minus the "hide in public mode" switch -->
+    <!-- 对齐上游 v1.8.1 的分组编辑页, 去掉「公开模式下隐藏」开关 -->
     <RoundCardModal v-model:show="editModalArg.show" size="small" type="small" :title="editModalArg.editStatus === 1 ? $t('common.add') : $t('common.edit')" style="width: 400px;">
-      <NForm ref="formRef" :model="editModalArg.model" :rules="editModalArg.rules">
+      <NForm ref="formRef" :model="editModalArg.model" :rules="editModalArg.rules" label-placement="top">
         <NFormItem path="title" :label="$t('apps.itemGroupManage.groupName')">
           <NInput v-model:value="editModalArg.model.title" type="text" :maxlength="20" show-count />
         </NFormItem>
+
+        <NDivider style="margin: 4px 0 12px;" />
 
         <!-- Card style -->
         <!-- 卡片风格 -->
@@ -262,41 +274,62 @@ onMounted(() => {
         <!-- 隐藏描述信息 -->
         <NFormItem path="hideDescription" :label="$t('apps.baseSettings.hideDescription')">
           <NSwitch
+            size="small"
             :value="editModalArg.model.hideDescription === 1"
             @update:value="(v: boolean) => editModalArg.model.hideDescription = v ? 1 : 0"
           />
         </NFormItem>
 
+        <NDivider style="margin: 4px 0 12px;" />
+
         <!-- Text colour -->
         <!-- 文字颜色 -->
-        <NFormItem path="textColor" :label="$t('common.textColor')">
-          <div class="w-full flex items-center">
-            <NColorPicker
-              v-model:value="textColorValue"
-              class="flex-1"
-              :show-alpha="false"
-              size="small"
-              :modes="['hex']"
-              :swatches="['#000000', '#ffffff', '#18A058', '#2080F0', '#F0A020']"
-            />
-            <NButton v-if="!textColorFollowGlobal" quaternary type="info" size="small" class="ml-[8px]" @click="handleResetTextColor">
-              {{ $t('apps.itemGroupManage.followGlobal') }}
-            </NButton>
-          </div>
+        <NFormItem path="textColor">
+          <template #label>
+            <span class="inline-flex items-center gap-1">
+              {{ $t('common.textColor') }}
+              <NPopover trigger="hover" placement="top">
+                <template #trigger>
+                  <SvgIcon class="cursor-help text-slate-400" icon="mdi:information-outline" />
+                </template>
+                {{ $t('apps.itemGroupManage.textColorTip') }}
+              </NPopover>
+            </span>
+          </template>
+          <NColorPicker
+            v-model:value="textColorValue"
+            class="w-full"
+            :show-alpha="false"
+            size="small"
+            :modes="['hex']"
+            :swatches="['#000000', '#ffffff', '#18A058', '#2080F0', '#F0A020']"
+          />
+        </NFormItem>
+
+        <NDivider style="margin: 4px 0 12px;" />
+
+        <!-- Unique identifier -->
+        <!-- 唯一标识 -->
+        <NFormItem path="onlyName">
+          <template #label>
+            <span class="inline-flex items-center gap-1">
+              {{ $t('apps.itemGroupManage.onlyName') }}
+              <NPopover trigger="hover" placement="top">
+                <template #trigger>
+                  <SvgIcon class="cursor-help text-slate-400" icon="mdi:information-outline" />
+                </template>
+                {{ $t('apps.itemGroupManage.onlyNameTip') }}
+              </NPopover>
+            </span>
+          </template>
+          <NInput v-model:value="editModalArg.model.onlyName" type="text" :maxlength="20" show-count :placeholder="$t('common.inputPlaceholder')" />
         </NFormItem>
       </NForm>
       <template #footer>
         <NButton type="success" size="small" class="float-right" @click="handleSaveGroup">
-          {{ $t('common.confirm') }}
+          {{ $t('common.save') }}
         </NButton>
       </template>
     </RoundCardModal>
   </div>
 </template>
-
-<style scoped>
-.group-card {
-  border-radius: 10px;
-  margin-bottom: 10px;
-}
-</style>

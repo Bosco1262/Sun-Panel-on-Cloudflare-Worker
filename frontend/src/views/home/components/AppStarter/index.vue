@@ -22,7 +22,9 @@ const collapsed = ref(false)
 const screenWidth = ref(0)
 const isSmallScreen = ref(false)
 const defaultTitle = t('appLauncher.title')
-const height = '500px'
+// Aligned with upstream v1.8.1: the system-app modal content area is 600px tall (modal totals 1000x666)
+// 对齐上游 v1.8.1: 系统应用弹窗内容区高 600px (弹窗整体 1000x666)
+const height = '600px'
 /**
  * Once the user expanded the sidebar manually on a small screen, a resize no longer forces it to collapse
  *
@@ -123,7 +125,7 @@ onUnmounted(() => {
   <div>
     <RoundCardModal
       v-model:show="show"
-      style="max-width: 900px;"
+      style="max-width: 1000px;"
       size="small"
     >
       <template #header>
