@@ -42,5 +42,9 @@ coverage
 # 本地对照参考 (不参与部署)
 /reference/
 
+# Browser verification scratch (Edge user-data dirs + CDP scaffolding, regenerable)
+# 浏览器验证临时目录 (Edge 用户配置 + CDP 脚本, 可再生成)
+/scratch/browser/
+
 # CodeBuddy
 /.codebuddy/

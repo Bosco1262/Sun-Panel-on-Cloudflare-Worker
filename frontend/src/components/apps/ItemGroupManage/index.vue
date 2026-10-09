@@ -81,7 +81,25 @@ function handleEditGroup(groupInfo: Panel.ItemIconGroup) {
   editModalArg.value.show = true
   // Shallow copy: handing the list entry object to the form would show unsaved edits in the list immediately and make cancellation impossible
   // 浅拷贝: 直接把列表项对象交给表单会让未保存的改动即时反映到列表, 且无法取消
-  editModalArg.value.model = { ...groupInfo }
+  editModalArg.value.model = {
+    ...groupInfo,
+    // Legacy rows can still carry cardStyle = -1 (the removed "follow global" option), and the select
+    // only offers 0/1 — without normalising, naive-ui finds no matching option and prints the raw
+    // "-1" to the user.
+    //
+    // This deliberately mirrors how the home page picks the style
+    // (`getGroupCardStyle`: `(cardStyle ?? 0) === info ? detail : small`), so the dialog always shows
+    // what is actually on screen: -1 / missing / any other value renders as the small icon there too.
+    //
+    // 历史数据可能仍带 cardStyle = -1 (已移除的「跟随全局」), 而下拉只有 0/1 —— 不归一化的话
+    // naive-ui 找不到匹配项, 会把裸的 "-1" 直接显示给用户。
+    //
+    // 这里刻意与首页的取风格逻辑保持一致 (getGroupCardStyle: (cardStyle ?? 0) === info ? 详情 : 小图标),
+    // 于是下拉永远显示屏幕上真实的形态: -1 / 缺省 / 其它任何值在首页同样按小图标渲染。
+    cardStyle: (groupInfo.cardStyle ?? PanelPanelConfigStyleEnum.info) === PanelPanelConfigStyleEnum.info
+      ? PanelPanelConfigStyleEnum.info
+      : PanelPanelConfigStyleEnum.icon,
+  }
   editModalArg.value.editStatus = 2
 }
 
